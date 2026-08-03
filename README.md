@@ -47,7 +47,7 @@ La forma más rápida y segura de instalar `bauh` en Arch Linux. Aísla de forma
 
 ```bash
 git clone https://github.com/The-Gekko/Bauh-Fork-The-Gekko.git
-cd Bauh-Fork-The-Gekko.git
+cd Bauh-Fork-The-Gekko
 ./install.sh
 ```
 
@@ -55,14 +55,6 @@ El instalador requiere `pipx` y Python entre 3.8 y 3.12. No instala paquetes
 del sistema automaticamente: en sistemas Arch puedes instalar pipx con
 `sudo pacman -S python-pipx`. Usa `./install.sh --yes` para continuar sin
 confirmaciones, o define `PYTHON_BIN` para elegir el interprete usado por pipx.
-
-### Instalación Manual (AUR)
-
-Puedes usar tu AUR helper favorito, por ejemplo `yay` o `paru`:
-
-```bash
-yay -S bauh
-```
 
 ---
 
