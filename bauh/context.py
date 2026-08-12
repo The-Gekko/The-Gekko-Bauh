@@ -3,7 +3,7 @@ import sys
 from logging import Logger
 from typing import Tuple
 
-from PyQt5.QtCore import QCoreApplication
+from PyQt5.QtCore import QCoreApplication, QFileSystemWatcher
 from PyQt5.QtWidgets import QApplication
 
 from bauh import __app_name__, __version__
@@ -13,6 +13,31 @@ from bauh.view.util.translation import I18n
 
 DEFAULT_I18N_KEY = 'en'
 PROPERTY_HARDCODED_STYLESHEET = 'hcqss'
+_THEME_WATCHER = None
+
+
+def setup_theme_watcher(app: QCoreApplication, logger: Logger, app_config: dict):
+    global _THEME_WATCHER
+    if _THEME_WATCHER is not None:
+        return
+
+    _THEME_WATCHER = QFileSystemWatcher()
+    paths_to_watch = [
+        os.path.expanduser('~/.cache/matugen/colors-gtk.css'),
+        os.path.expanduser('~/.config/gtk-3.0/gtk.css'),
+        os.path.expanduser('~/.config/gtk-4.0/gtk.css'),
+    ]
+    existing = [p for p in paths_to_watch if os.path.exists(p)]
+    if existing:
+        _THEME_WATCHER.addPaths(existing)
+
+        def _on_theme_changed(path: str):
+            if logger:
+                logger.info(f"Detectado cambio dinámico de tema en '{path}'. Recargando interfaz...")
+            theme_key = app_config.get('ui', {}).get('theme') or 'matugen'
+            set_theme(theme_key=theme_key, app=app, logger=logger, app_config=app_config)
+
+        _THEME_WATCHER.fileChanged.connect(_on_theme_changed)
 
 
 def new_qt_application(app_config: dict, logger: Logger, quit_on_last_closed: bool = False, name: str = None) -> QApplication:
@@ -121,5 +146,7 @@ def set_theme(theme_key: str, app: QCoreApplication, logger: Logger, app_config:
                     if processed:
                         app.setStyleSheet(processed[0])
                         logger.info("theme file '{}' loaded".format(theme_file))
+                        if app_config:
+                            setup_theme_watcher(app=app, logger=logger, app_config=app_config)
                     else:
                         logger.warning("theme file '{}' could not be interpreted and processed".format(theme_file))

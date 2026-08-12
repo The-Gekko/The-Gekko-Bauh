@@ -219,6 +219,17 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
         toolbar_bts.append(self.bt_upgrade)
         self.toolbar_filters.layout().addWidget(self.bt_upgrade)
         self.comp_manager.register_component(BT_UPGRADE, self.bt_upgrade)
+
+        bt_matugen = QPushButton()
+        bt_matugen.setObjectName('bt_matugen')
+        bt_matugen.setProperty('root', 'true')
+        bt_matugen.setCursor(QCursor(Qt.PointingHandCursor))
+        bt_matugen.setToolTip('🎨 Sincronizar tema dinámico Matugen con el fondo de pantalla')
+        bt_matugen.setText('🎨 Matugen')
+        bt_matugen.clicked.connect(self._handle_matugen_toggle)
+        bt_matugen.sizePolicy().setRetainSizeWhenHidden(True)
+        toolbar_bts.append(bt_matugen)
+        self.toolbar_filters.layout().addWidget(bt_matugen)
         bt_biggest_size = 0
         for bt in toolbar_bts:
             bt_width = bt.sizeHint().width()
@@ -655,3 +666,12 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
         if self._can_open_urls is None:
             self._can_open_urls = shutil.which('xdg-open')
         return self._can_open_urls
+
+    def _handle_matugen_toggle(self):
+        from bauh.context import set_theme
+        self.config['ui']['theme'] = 'matugen'
+        set_theme(theme_key='matugen', app=QApplication.instance(), logger=self.logger, app_config=self.config)
+        try:
+            self.context.configman.save_config(self.config)
+        except Exception:
+            pass

@@ -1,0 +1,5 @@
+name=GTK 3/4 System
+description=Tema basado en los colores del sistema GTK 3 y GTK 4
+description[es]=Tema basado en los colores del sistema GTK 3 y GTK 4
+version=1.0
+root_theme=aurora

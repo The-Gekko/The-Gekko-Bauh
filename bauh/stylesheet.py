@@ -110,7 +110,46 @@ def read_theme_metada(key: str, file_path: str) -> ThemeMetadata:
 
 
 def read_default_themes() -> Dict[str, str]:
-    return {f.split('/')[-1].split('.')[0].lower(): f for f in glob.glob(resource.get_path('style/**/*.qss'))}
+    themes = {f.split('/')[-1].split('.')[0].lower(): f for f in glob.glob(resource.get_path('style/**/*.qss'))}
+    # Asegurar que los temas dinámicos matugen y gtk estén disponibles
+    if 'aurora' in themes:
+        themes['matugen'] = themes['aurora']
+        themes['gtk'] = themes['aurora']
+    return themes
+
+
+def parse_gtk_matugen_colors() -> dict:
+    """Parsea las variables @define-color de Matugen y GTK 3/4 para mapearlas a Bauh."""
+    colors = {}
+    candidates = [
+        os.path.expanduser('~/.cache/matugen/colors-gtk.css'),
+        os.path.expanduser('~/.config/gtk-3.0/gtk.css'),
+        os.path.expanduser('~/.config/gtk-4.0/gtk.css'),
+        '/etc/gtk-3.0/gtk.css'
+    ]
+
+    re_define_color = re.compile(r'@define-color\s+([\w\-_]+)\s+(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\));')
+
+    for file_path in candidates:
+        if os.path.isfile(file_path):
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+
+                # Si incluye un @import, intentar seguirlo
+                for import_match in re.findall(r'@import\s+(?:url\()?["\']?([^"\'\)\s]+)["\']?\)?;', content):
+                    import_path = import_match.replace('file://', '')
+                    if os.path.isfile(import_path):
+                        with open(import_path, 'r', encoding='utf-8') as imp_f:
+                            for match in re_define_color.finditer(imp_f.read()):
+                                colors[match.group(1)] = match.group(2)
+
+                for match in re_define_color.finditer(content):
+                    colors[match.group(1)] = match.group(2)
+            except Exception:
+                pass
+
+    return colors
 
 
 def read_user_themes() -> Dict[str, str]:
@@ -151,6 +190,45 @@ def process_theme(file_path: str, theme_str: str, metadata: ThemeMetadata,
         var_map = _read_var_file(file_path)
         var_map['images'] = resource.get_path('img')
         var_map['style_dir'] = metadata.file_dir
+
+        # Matugen / GTK Dynamic Theme Mapping
+        current_theme_key = (metadata.key or '').lower()
+        cfg_theme = (app_config.get('ui', {}).get('theme') or '').lower() if app_config else ''
+        
+        if current_theme_key in ('matugen', 'gtk') or cfg_theme in ('matugen', 'gtk'):
+            gtk_colors = parse_gtk_matugen_colors()
+            if gtk_colors:
+                bg = gtk_colors.get('window_bg_color') or gtk_colors.get('theme_bg_color') or '#1a1111'
+                view_bg = gtk_colors.get('view_bg_color') or '#140c0c'
+                fg = gtk_colors.get('window_fg_color') or gtk_colors.get('theme_fg_color') or '#f0dedd'
+                sidebar_bg = gtk_colors.get('sidebar_bg_color') or gtk_colors.get('headerbar_bg_color') or '#231919'
+                accent = gtk_colors.get('accent_color') or gtk_colors.get('accent_bg_color') or '#ffb3b0'
+                card_bg = gtk_colors.get('card_bg_color') or gtk_colors.get('popover_bg_color') or '#3d3232'
+                destr = gtk_colors.get('destructive_color') or '#ffb4ab'
+
+                var_map['color.primary'] = accent
+                var_map['color.primary.dim'] = accent
+                var_map['color.primary.bright'] = accent
+                var_map['color.secondary'] = accent
+                var_map['color.accent'] = accent
+                var_map['color.cyan'] = accent
+                var_map['color.surface.darkest'] = view_bg
+                var_map['color.surface.dark'] = bg
+                var_map['color.surface.medium'] = sidebar_bg
+                var_map['color.surface.light'] = card_bg
+                var_map['color.surface.lighter'] = card_bg
+                var_map['color.surface.hover'] = card_bg
+                var_map['font.color'] = fg
+                var_map['font.color.bright'] = fg
+                var_map['outer_widget.background.color'] = bg
+                var_map['inner_widget.background.color'] = view_bg
+                var_map['pushbutton.background.color'] = sidebar_bg
+                var_map['lineedit.background.color'] = view_bg
+                var_map['focus.border.color'] = accent
+                var_map['tab.font.color'] = accent
+                var_map['tab.underline.color'] = accent
+                var_map['progressbar.fill.color'] = accent
+                var_map['console.background.color'] = view_bg
 
         if var_map:
             var_list = [*var_map.keys()]
