@@ -321,7 +321,7 @@ AboutDialog QLabel {
 }
 
 AboutDialog QLabel#logo {
-    qproperty-pixmap: url("@images/logo.svg");
+    qproperty-pixmap: url("@images/gekko-bauh.png");
     qproperty-scaledContents: true;
     min-height: 55px;
     max-height: 55px;

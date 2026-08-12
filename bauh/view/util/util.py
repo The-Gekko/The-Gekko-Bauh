@@ -26,12 +26,15 @@ def notify_user(msg: str, icon_path: str = None):
 
 
 def get_default_icon(system: bool = True) -> Tuple[str, QIcon]:
+    path = resource.get_path('img/gekko-bauh.png')
+    if os.path.exists(path):
+        return path, QIcon(path)
+
     if system:
         system_icon = QIcon.fromTheme(__app_name__)
         if not system_icon.isNull():
             return system_icon.name(), system_icon
 
-    path = resource.get_path('img/logo.svg')
     return path, QIcon(path)
 
 

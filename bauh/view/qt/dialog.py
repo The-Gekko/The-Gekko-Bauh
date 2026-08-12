@@ -17,7 +17,7 @@ MSG_TYPE_MAP = {
 }
 
 
-def show_message(title: str, body: str, type_: MessageType, icon: QIcon = QIcon(resource.get_path('img/logo.svg'))):
+def show_message(title: str, body: str, type_: MessageType, icon: QIcon = QIcon(resource.get_path('img/gekko-bauh.png'))):
     popup = QMessageBox()
     popup.setWindowTitle(title)
     popup.setText(body)
@@ -31,7 +31,7 @@ def show_message(title: str, body: str, type_: MessageType, icon: QIcon = QIcon(
 
 class ConfirmationDialog(QDialog):
 
-    def __init__(self, title: str, body: Optional[str], i18n: I18n, icon: QIcon = QIcon(resource.get_path('img/logo.svg')),
+    def __init__(self, title: str, body: Optional[str], i18n: I18n, icon: QIcon = QIcon(resource.get_path('img/gekko-bauh.png')),
                  widgets: Optional[List[QWidget]] = None, confirmation_button: bool = True, deny_button: bool = True,
                  window_cancel: bool = False, confirmation_label: Optional[str] = None, deny_label: Optional[str] = None,
                  confirmation_icon: bool = True, min_width: Optional[int] = None,
@@ -131,7 +131,7 @@ class ConfirmationDialog(QDialog):
         return self.confirmed
 
 
-def ask_confirmation(title: str, body: str, i18n: I18n, icon: QIcon = QIcon(resource.get_path('img/logo.svg')),
+def ask_confirmation(title: str, body: str, i18n: I18n, icon: QIcon = QIcon(resource.get_path('img/gekko-bauh.png')),
                      widgets: List[QWidget] = None) -> bool:
     popup = ConfirmationDialog(title=title, body=body, i18n=i18n, icon=icon, widgets=widgets)
     popup.exec_()

@@ -747,7 +747,7 @@ AboutDialog QLabel#app_version {
 }
 
 AboutDialog QLabel#logo {
-    qproperty-pixmap: url("@style_dir/img/logo.svg");
+    qproperty-pixmap: url("@images/gekko-bauh.png");
 }
 
 /* ── Context Menu Actions ────────────────────────────────────────────────── */

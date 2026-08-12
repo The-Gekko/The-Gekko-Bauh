@@ -133,7 +133,11 @@ if [[ -z "$pipx_bin_dir" ]]; then
 fi
 
 info "Installing bauh with $PYTHON_BIN (Python $python_version)..."
-pipx install --force --python "$PYTHON_BIN" "$SCRIPT_DIR"
+extra_flags=()
+if ! command -v uv >/dev/null 2>&1; then
+    extra_flags+=(--backend pip)
+fi
+pipx install --force "${extra_flags[@]}" "$SCRIPT_DIR"
 
 bauh_bin="$pipx_bin_dir/bauh"
 if [[ ! -x "$bauh_bin" ]]; then
@@ -141,18 +145,26 @@ if [[ ! -x "$bauh_bin" ]]; then
     exit 1
 fi
 
-icon_source="$SCRIPT_DIR/bauh/view/resources/img/logo.svg"
-if [[ ! -f "$icon_source" ]]; then
-    error "Application icon was not found: $icon_source"
+icon_source_png="$SCRIPT_DIR/pictures/gekko-bauh.png"
+
+if [[ ! -f "$icon_source_png" ]]; then
+    icon_source_png="$SCRIPT_DIR/bauh/view/resources/img/gekko-bauh.png"
+fi
+
+if [[ ! -f "$icon_source_png" ]]; then
+    error "Application icon was not found: $icon_source_png"
     exit 1
 fi
 
-icon_dir="$HOME/.local/share/icons/hicolor/scalable/apps"
 applications_dir="$HOME/.local/share/applications"
 desktop_file="$applications_dir/bauh.desktop"
 
 info 'Installing icon and desktop entry...'
-install -Dm644 "$icon_source" "$icon_dir/bauh.svg"
+for size in 48x48 64x64 128x128 256x256 512x512; do
+    icon_dir="$HOME/.local/share/icons/hicolor/$size/apps"
+    mkdir -p "$icon_dir"
+    install -Dm644 "$icon_source_png" "$icon_dir/bauh.png"
+done
 mkdir -p "$applications_dir"
 
 cat > "$desktop_file" <<EOF

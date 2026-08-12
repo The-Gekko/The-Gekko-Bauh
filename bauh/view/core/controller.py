@@ -81,7 +81,7 @@ class GenericSoftwareManager(SoftwareManager, SettingsController):
                                                       i18n_status_key='action.reset.status',
                                                       i18n_description_key='action.reset.desc',
                                                       manager_method='reset',
-                                                      icon_path=resource.get_path('img/logo.svg'),
+                                                      icon_path=resource.get_path('img/gekko-bauh.png'),
                                                       requires_root=False,
                                                       manager=self,
                                                       refresh=False)
@@ -427,7 +427,7 @@ class GenericSoftwareManager(SoftwareManager, SettingsController):
         taskman = task_manager if task_manager else TaskManager()  # empty task manager to prevent null pointers
 
         create_config = CreateConfigFile(taskman=taskman, configman=self.configman, i18n=self.i18n,
-                                         task_icon_path=get_path('img/logo.svg'), logger=self.logger)
+                                         task_icon_path=get_path('img/gekko-bauh.png'), logger=self.logger)
         create_config.start()
 
         if self.managers:
