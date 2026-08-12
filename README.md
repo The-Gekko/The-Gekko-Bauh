@@ -46,44 +46,76 @@
 
 ## 📥 Instalación
 
-### La Vía Oficial (Release Firmado + pipx)
+### La Vía Rápida (curl, recomendada)
 
-Cada versión publicada en [GitHub Releases](https://github.com/The-Gekko/Bauh-Fork-The-Gekko/releases)
-incluye el archivo fuente (`bauh-fork-the-gekko-<versión>.tar.zst`) y un
-**manifiesto de verificación** (`bauh-fork-the-gekko-<target>.manifest.json`)
-con el SHA-256 de cada archivo. La instalación aísla las dependencias en un
-entorno virtual de **pipx** y crea el acceso directo del escritorio.
-
-> [!IMPORTANT]
-> Requisito: `python-pipx` (`sudo pacman -S python-pipx`). El paquete requiere
-> Python 3.8 o superior.
-
-**Desde GekkoApp (recomendado):** la opción *Tienda Bauh* de [GekkoApp](https://github.com/The-Gekko/GekkoApp)
-descarga el release más reciente, verifica el manifiesto SHA-256 y ejecuta
-`pipx install --force` automáticamente. Nunca clona el repositorio ni ejecuta
-scripts sin verificar.
-
-**Manual con pipx:**
+Instala la versión actual de **master** con un solo comando. No necesitas
+clonar el repositorio ni guardar ningún script en tu equipo:
 
 ```bash
-# Descarga el último release y verifica su SHA-256 contra el manifiesto
-pipx install --force <directorio-extraído-del-archivo-fuente>
+curl -fsSL https://raw.githubusercontent.com/The-Gekko/Bauh-Fork-The-Gekko/master/install.sh | bash
 ```
 
-### La Vía Clásica (Instalador Automatizado)
+El instalador descarga el código fuente, lo instala aislado en un entorno de
+**pipx**, crea el icono y el acceso directo del escritorio, y refresca las
+cachés del sistema.
 
-Alternativa para instalaciones locales desde el checkout:
+- **Actualizar**: vuelve a ejecutar el mismo comando. Si ya tienes la versión
+  actual instalada, **omite la reconstrucción** del entorno para que sea rápido.
+- **Forzar reinstalación** (p. ej. si cambió el código sin subir la versión):
+
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/The-Gekko/Bauh-Fork-The-Gekko/master/install.sh | bash -s -- --force
+  ```
+
+- **Sin confirmaciones** (scripts/automatización): añade `--yes`:
+  `curl -fsSL https://raw.githubusercontent.com/The-Gekko/Bauh-Fork-The-Gekko/master/install.sh | bash -s -- --yes`
+
+> [!IMPORTANT]
+> Requiere **pipx** y Python entre **3.8 y 3.14**. Instala pipx según tu
+> distribución (el instalador detecta la tuya y puede instalarlo por ti):
+>
+> - **Arch / Garuda**: `sudo pacman -S python-pipx`
+> - **Solus**: `sudo eopkg install -y pipx`
+
+### Desde GekkoApp
+
+La opción *Tienda Bauh* de [GekkoApp](https://github.com/The-Gekko/GekkoApp)
+instala bauh automáticamente. Nunca clona el repositorio ni ejecuta scripts sin
+verificar.
+
+### Instalación Manual con pipx (avanzado)
+
+```bash
+# Aislado en un entorno virtual propio
+python3 -m venv bauh_env
+bauh_env/bin/pip install bauh
+bauh_env/bin/bauh
+```
+
+### Para Contribuidores (desde el checkout)
 
 ```bash
 git clone https://github.com/The-Gekko/Bauh-Fork-The-Gekko.git
 cd Bauh-Fork-The-Gekko
-./install.sh
+./install.sh          # instala desde el checkout local (usa ./install.sh --yes para automatizar)
 ```
 
-El instalador requiere `pipx` y Python entre 3.8 y 3.12. No instala paquetes
-del sistema automáticamente: en sistemas Arch puedes instalar pipx con
-`sudo pacman -S python-pipx`. Usa `./install.sh --yes` para continuar sin
-confirmaciones, o define `PYTHON_BIN` para elegir el intérprete usado por pipx.
+## 🗑️ Desinstalación
+
+Igual de simple que la instalación, también por curl:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/The-Gekko/Bauh-Fork-The-Gekko/master/install.sh | bash -s -- uninstall
+```
+
+Elimina la aplicación (entorno pipx, icono y acceso directo del escritorio) y
+refresca las cachés del sistema.
+
+Para borrar **también** la configuración de usuario (no se toca por defecto):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/The-Gekko/Bauh-Fork-The-Gekko/master/install.sh | bash -s -- uninstall --purge
+```
 
 ## 📖 Características Detalladas (Arch/AUR)
 
