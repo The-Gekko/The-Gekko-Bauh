@@ -5,7 +5,7 @@ from typing import Tuple, Optional
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QCursor
 from PyQt5.QtWidgets import QLineEdit, QApplication, QDialog, QPushButton, QVBoxLayout, \
-    QSizePolicy, QToolBar, QLabel
+    QSizePolicy, QToolBar, QLabel, QWidget
 
 from bauh.api.abstract.context import ApplicationContext
 from bauh.commons.system import new_subprocess
@@ -38,16 +38,17 @@ class ValidatePassword(QThread):
 
 class RootDialog(QDialog):
 
-    def __init__(self, i18n: I18n, max_tries: int = 3):
-        super(RootDialog, self).__init__(flags=Qt.CustomizeWindowHint | Qt.WindowTitleHint)
+    def __init__(self, i18n: I18n, max_tries: int = 3, parent: Optional[QWidget] = None):
+        super(RootDialog, self).__init__(parent=parent, flags=Qt.Dialog | Qt.CustomizeWindowHint | Qt.WindowTitleHint | Qt.WindowStaysOnTopHint)
         self.i18n = i18n
         self.max_tries = max_tries
         self.tries = 0
+        self.setWindowModality(Qt.ApplicationModal)
         self.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Preferred)
         self.setWindowIcon(util.get_default_icon()[1])
         self.setWindowTitle(i18n['popup.root.title'])
         self.setLayout(QVBoxLayout())
-        self.setMinimumWidth(300)
+        self.setMinimumWidth(340)
 
         self.label_msg = QLabel(i18n['popup.root.msg'])
         self.label_msg.setObjectName('message')
@@ -55,6 +56,8 @@ class RootDialog(QDialog):
 
         self.input_password = QLineEdit()
         self.input_password.setObjectName('password')
+        self.input_password.setEchoMode(QLineEdit.Password)
+        self.input_password.returnPressed.connect(self._validate_password)
         self.layout().addWidget(self.input_password)
 
         self.label_error = QLabel()
@@ -89,6 +92,12 @@ class RootDialog(QDialog):
         self.password = None
         self.validate_password = ValidatePassword()
         self.validate_password.signal_valid.connect(self._handle_password_validated)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.input_password.setFocus()
+        self.raise_()
+        self.activateWindow()
 
     def _validate_password(self):
         password = self.input_password.text()
@@ -129,7 +138,8 @@ class RootDialog(QDialog):
 
     @staticmethod
     def ask_password(context: ApplicationContext, i18n: I18n, app_config: Optional[dict] = None,
-                     comp_manager: Optional[QtComponentsManager] = None, tries: int = 3) -> Tuple[bool, Optional[str]]:
+                     comp_manager: Optional[QtComponentsManager] = None, tries: int = 3,
+                     parent: Optional[QWidget] = None) -> Tuple[bool, Optional[str]]:
 
         current_config = CoreConfigManager().get_config() if not app_config else app_config
 
@@ -142,7 +152,15 @@ class RootDialog(QDialog):
             comp_manager.save_states(state_id=ACTION_ASK_ROOT, only_visible=True)
             comp_manager.disable_visible()
 
-        diag = RootDialog(i18n=i18n, max_tries=tries)
+        target_parent = parent
+        if not target_parent:
+            target_parent = QApplication.activeWindow()
+
+        diag = RootDialog(i18n=i18n, max_tries=tries, parent=target_parent)
+        if target_parent:
+            from bauh.view.qt.qt_utils import centralize
+            centralize(diag)
+
         diag.exec()
         password = diag.password
 

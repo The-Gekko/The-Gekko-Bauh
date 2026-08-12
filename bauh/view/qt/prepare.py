@@ -269,7 +269,7 @@ class PreparePanel(QWidget, TaskManager):
             self.bt_bar.setVisible(True)
 
     def ask_root_password(self):
-        valid, root_pwd = RootDialog.ask_password(self.context, self.i18n)
+        valid, root_pwd = RootDialog.ask_password(self.context, self.i18n, parent=self)
         self.signal_password_response.emit(valid, root_pwd)
 
     def _enable_skip_button(self):

@@ -59,7 +59,7 @@ class WindowActionsMixin:
 
     def _pause_and_ask_root_password(self):
         self.thread_animate_progress.pause()
-        valid, password = RootDialog.ask_password(self.context, i18n=self.i18n, comp_manager=self.comp_manager)
+        valid, password = RootDialog.ask_password(self.context, i18n=self.i18n, comp_manager=self.comp_manager, parent=self)
         self.thread_animate_progress.animate()
         self.signal_root_password.emit(valid, password)
 
@@ -444,7 +444,7 @@ class WindowActionsMixin:
                 util.notify_user('{}: {}'.format(res['pkg'].model.name, self.i18n['notification.install.failed']))
 
     def begin_execute_custom_action(self, pkg: Optional[PackageView], action: CustomSoftwareAction):
-        if pkg is None and action.requires_confirmation and (not ConfirmationDialog(title=self.i18n['confirmation'].capitalize(), body='<p>{}</p>'.format(self.i18n['custom_action.proceed_with'].capitalize().format(bold(self.i18n[action.i18n_label_key]))), icon=QIcon(action.icon_path) if action.icon_path else QIcon(resource.get_path('img/logo.svg')), i18n=self.i18n).ask()):
+        if pkg is None and action.requires_confirmation and (not ConfirmationDialog(title=self.i18n['confirmation'].capitalize(), body='<p>{}</p>'.format(self.i18n['custom_action.proceed_with'].capitalize().format(bold(self.i18n[action.i18n_label_key]))), icon=QIcon(action.icon_path) if action.icon_path else QIcon(resource.get_path('img/gekko-bauh.png')), i18n=self.i18n).ask()):
             return False
         pwd = None
         if not user.is_root() and action.requires_root:
