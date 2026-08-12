@@ -134,7 +134,11 @@ fi
 
 info "Installing bauh with $PYTHON_BIN (Python $python_version)..."
 extra_flags=()
-if ! command -v uv >/dev/null 2>&1; then
+if command -v uv >/dev/null 2>&1; then
+    # The uv backend refuses to overwrite a venv it did not create this session;
+    # force it to clear the existing venv so --force truly reinstalls bauh.
+    export UV_VENV_CLEAR=1
+else
     extra_flags+=(--backend pip)
 fi
 pipx install --force "${extra_flags[@]}" "$SCRIPT_DIR"
@@ -183,7 +187,7 @@ if command -v update-desktop-database >/dev/null 2>&1; then
 fi
 
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then
-    gtk-update-icon-cache -f -t "$HOME/.local/share/icons" || warning 'Could not update the icon cache.'
+    gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" || warning 'Could not update the icon cache.'
 fi
 
 printf '%b\n' "${green}${bold}bauh was installed successfully.${reset}"

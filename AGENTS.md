@@ -6,7 +6,7 @@ Fork de `vinifmor/bauh` (PyQt5, Python 3.8–3.14) orientado a **Arch Linux / Ga
 
 - Los backends son **gems** en `bauh/gems/<nombre>/`. `bauh/view/core/gems.py` importa el `controller.py` de cada subdirectorio y registra toda clase que herede directamente de `SoftwareManager`. Backend nuevo = crear subdir con `controller.py` + `model.py` + `resources/` (icono + locales).
 - Las gems **nunca importan widgets Qt**: comunican vía contratos de `bauh/api/abstract/`. Operaciones lentas → workers de `bauh/view/qt/threads/`.
-- `build/`, `bauh.egg-info/`, `__pycache__/` son generados; no editar.
+- `build/`, `bauh.egg-info/`, `__pycache__/` son generados; no editar. **Gotcha**: un `build/lib/` obsoleto con archivos ya borrados del árbol se cuela en el wheel que instala `install.sh` (pip no limpia `build/`). Antes de reinstalar: `rm -rf build bauh.egg-info` y limpiar el caché de pip/uv.
 
 ## Objetivos de distro (verifica la wiki correspondiente antes de tocar)
 
