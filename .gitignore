@@ -18,3 +18,4 @@ linux_dist/appimage/*.gz
 linux_dist/appimage/*.gz.*
 linux_dist/appimage/bauh-*
 AGENTS.md
+graphify-out/

@@ -8,7 +8,7 @@ formatos y fuentes. El código utiliza una arquitectura de gestores de paquetes
 intercambiables, llamados **gems**. Cada gem adapta una fuente o tecnología a
 los contratos comunes definidos en `bauh/api/abstract/`.
 
-La versión declarada en el código es `0.10.7`. El punto de entrada principal es
+La versión declarada en el código es `0.10.8`. El punto de entrada principal es
 `bauh.app:main`; también existen una aplicación para la bandeja del sistema y
 una interfaz de línea de comandos limitada a la consulta de actualizaciones.
 
@@ -372,5 +372,5 @@ Chaotic AUR habilitado para el escenario Arch previsto.
   operaciones de gestión están integradas en la GUI.
 - La selección efectiva de gestores depende de `can_work()`, la configuración
   `gems`, el archivo `/etc/bauh/gems.forbidden` y las herramientas instaladas.
-- La versión del código (`0.10.7`) coincide con la versión destacada en el
-  historial consultado.
+- La versión del código (`0.10.8`) coincide con la versión destacada en el
+  README.

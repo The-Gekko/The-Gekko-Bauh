@@ -59,9 +59,16 @@ El instalador descarga el código fuente, lo instala aislado en un entorno de
 **pipx**, crea el icono y el acceso directo del escritorio, y refresca las
 cachés del sistema.
 
-- **Actualizar**: vuelve a ejecutar el mismo comando. Si ya tienes la versión
-  actual instalada, **omite la reconstrucción** del entorno para que sea rápido.
-- **Forzar reinstalación** (p. ej. si cambió el código sin subir la versión):
+Durante la instalación puede hacerte un par de preguntas en la terminal (si
+detecta el `bauh` original instalado, o si te falta Chaotic AUR o pipx). Se leen
+directamente del terminal, así que funcionan aunque el script llegue por
+tubería. Si lo ejecutas sin terminal (CI, cron, systemd), añade `--yes`.
+
+- **Actualizar**: vuelve a ejecutar el mismo comando. El instalador compara el
+  **commit actual de `master`** con el que tienes instalado y sólo reconstruye el
+  entorno si hay cambios, así que actualizar es rápido y nunca se queda corto
+  aunque el número de versión no haya subido.
+- **Forzar reinstalación** (reconstruye el entorno pase lo que pase):
 
   ```bash
   curl -fsSL https://raw.githubusercontent.com/The-Gekko/Bauh-Fork-The-Gekko/master/install.sh | bash -s -- --force
@@ -83,14 +90,26 @@ La opción *Tienda Bauh* de [GekkoApp](https://github.com/The-Gekko/GekkoApp)
 instala bauh automáticamente. Nunca clona el repositorio ni ejecuta scripts sin
 verificar.
 
-### Instalación Manual con pipx (avanzado)
+### Instalación Manual en un Entorno Virtual (avanzado)
+
+Si prefieres no usar el script, instala **este fork** directamente desde el
+código de `master`:
 
 ```bash
-# Aislado en un entorno virtual propio
 python3 -m venv bauh_env
-bauh_env/bin/pip install bauh
+bauh_env/bin/pip install "https://github.com/The-Gekko/Bauh-Fork-The-Gekko/archive/refs/heads/master.zip"
 bauh_env/bin/bauh
 ```
+
+O con pipx, que es lo que hace el instalador por debajo:
+
+```bash
+pipx install --force "https://github.com/The-Gekko/Bauh-Fork-The-Gekko/archive/refs/heads/master.zip"
+```
+
+> [!WARNING]
+> `pip install bauh` **no** instala este fork: descarga el `bauh` original de
+> PyPI, sin el tema Aurora, el icono de Gekko ni los ajustes para Chaotic AUR.
 
 ### Para Contribuidores (desde el checkout)
 
@@ -123,16 +142,6 @@ curl -fsSL https://raw.githubusercontent.com/The-Gekko/Bauh-Fork-The-Gekko/maste
 - **Soporte Completo para Chaotic AUR**: Bauh detecta y prioriza los paquetes binarios precompilados si tienes habilitado el repositorio Chaotic AUR en tu `/etc/pacman.conf`, ahorrándote horas de compilación (ej. con kernels o navegadores web pesados).
 - Actualización rápida de todo el sistema y de AUR con un solo clic.
 - Integración con `rebuild-detector` para saber si un paquete necesita ser compilado de nuevo tras la actualización de una librería compartida en el sistema.
-
-### Instalación Aislada (Entorno Virtual)
-
-Si prefieres realizar una instalación aislada manual (sin usar el script):
-
-```bash
-python3 -m venv bauh_env
-bauh_env/bin/pip install bauh
-bauh_env/bin/bauh
-```
 
 ## 🙏 Créditos
 
