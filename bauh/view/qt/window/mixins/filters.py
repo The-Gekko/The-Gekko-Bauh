@@ -1,46 +1,24 @@
-import logging
-import operator
-import os.path
-import shutil
-import time
-from pathlib import Path
-from typing import List, Type, Set, Tuple, Optional, Dict, Any
-from PyQt5.QtCore import QEvent, Qt, pyqtSignal, QRect
-from PyQt5.QtGui import QIcon, QWindowStateChangeEvent, QCursor, QCloseEvent, QShowEvent
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QCheckBox, QHeaderView, QToolBar, QLabel, QPlainTextEdit, QProgressBar, QPushButton, QComboBox, QApplication, QListView, QSizePolicy, QMenu, QHBoxLayout, QFrame
-from bauh.api import user
-from bauh.api.abstract.cache import MemoryCache
-from bauh.api.abstract.context import ApplicationContext
-from bauh.api.abstract.controller import SoftwareManager, SoftwareAction
-from bauh.api.abstract.model import SoftwarePackage
-from bauh.api.abstract.view import MessageType
-from bauh.api.http import HttpClient
-from bauh.api.paths import LOGS_DIR
-from bauh.commons.html import bold
-from bauh.context import set_theme
-from bauh.view.qt.window.constants import *
-from bauh.stylesheet import read_all_themes_metadata, ThemeMetadata
-from bauh.view.core.config import CoreConfigManager
-from bauh.view.core.tray_client import notify_tray
-from bauh.view.qt import dialog, commons, qt_utils
-from bauh.view.qt.about import AboutDialog
-from bauh.view.qt.apps_table import PackagesTable, UpgradeToggleButton
-from bauh.view.qt.commons import sum_updates_displayed, PackageFilters
-from bauh.view.qt.components import new_spacer, IconButton, QtComponentsManager, to_widget, QSearchBar, QCustomMenuAction, QCustomToolbar
-from bauh.view.qt.dialog import ConfirmationDialog
-from bauh.view.qt.history import HistoryDialog
-from bauh.view.qt.info import InfoDialog
-from bauh.view.qt.qt_utils import get_current_screen_geometry
-from bauh.view.qt.root import RootDialog
-from bauh.view.qt.screenshots import ScreenshotsDialog
-from bauh.view.qt.settings import SettingsWindow
-from bauh.view.qt.thread import UpgradeSelected, RefreshApps, UninstallPackage, DowngradePackage, ShowPackageInfo, ShowPackageHistory, SearchPackages, InstallPackage, AnimateProgress, NotifyPackagesReady, FindSuggestions, ListWarnings, AsyncAction, LaunchPackage, ApplyFilters, CustomSoftwareAction, ShowScreenshots, CustomAction, NotifyInstalledLoaded, IgnorePackageUpdates, SaveTheme, StartAsyncAction
-from bauh.view.qt.view_index import add_to_index, new_package_index
-from bauh.view.qt.view_model import PackageView, PackageViewStatus
-from bauh.view.util import util, resource
-from bauh.view.util.translation import I18n
+from typing import Set, Optional
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QIcon
+from bauh.view.qt.window.constants import ACTION_APPLY_FILTERS, CHECK_INSTALLED, CHECK_VERIFIED, COMBO_TYPES, \
+    COMBO_CATEGORIES, INP_NAME, GROUP_FILTERS, GROUP_UPPER_BAR, GROUP_LOWER_BTS
+from bauh.view.qt import commons
+from bauh.view.qt.commons import PackageFilters
 
 class WindowFiltersMixin:
+    """Filtros de la tabla de paquetes de la ventana principal.
+
+    Contrato con la clase anfitriona (ManageWindow), que debe definir:
+      - atributos de estado: 'i18n', 'display_limit', 'pkgs', 'pkgs_available', 'pkgs_installed',
+        'pkg_idx', 'searched_term', 'search_performed', 'filter_updates', 'filter_installed',
+        'filter_only_apps', 'filter_only_verified', 'category_filter', 'type_filter',
+        'any_category_filter', 'any_type_filter', 'cache_type_filter_icons'
+      - widgets: 'check_installed', 'check_verified', 'combo_categories', 'combo_filter_type', 'input_name'
+      - colaboradores: 'comp_manager' (QtComponentsManager), 'thread_apply_filters' (ApplyFilters)
+      - metodos: '_begin_action', '_finish_action', '_change_checkbox', '_resize', 'update_bt_upgrade',
+        'stop_notifying_package_states'
+    """
 
     def begin_apply_filters(self):
         self.stop_notifying_package_states()
@@ -174,7 +152,7 @@ class WindowFiltersMixin:
                 cat_list = list(categories)
                 cat_list.sort()
                 for idx, c in enumerate(cat_list):
-                    self.__add_category(c)
+                    self._add_category(c)
                     if keeping_selected and c == self.category_filter:
                         selected_cat = idx + 1
                 self.combo_categories.blockSignals(True)
@@ -184,7 +162,7 @@ class WindowFiltersMixin:
             else:
                 self.comp_manager.set_component_visible(COMBO_CATEGORIES, False)
 
-    def __add_category(self, category: str):
+    def _add_category(self, category: str):
         i18n_cat = self.i18n.get('category.{}'.format(category), self.i18n.get(category, category))
         self.combo_categories.addItem(i18n_cat.capitalize(), category)
 

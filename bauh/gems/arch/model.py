@@ -13,6 +13,7 @@ class ArchPackage(SoftwarePackage):
     __action_disable_pkgbuild_edition: Optional[CustomSoftwareAction] = None
     __action_reinstall: Optional[CustomSoftwareAction] = None
     __action_ignore_rebuild_check: Optional[CustomSoftwareAction] = None
+    __action_switch_to_repository: Optional[CustomSoftwareAction] = None
     __cached_attrs: Optional[Tuple[str, ...]] = None
     __dynamic_categories: Optional[Tuple[str, ...]] = None
 
@@ -82,6 +83,23 @@ class ArchPackage(SoftwarePackage):
         return cls.__action_ignore_rebuild_check
 
     @classmethod
+    def action_switch_to_repository(cls) -> CustomSoftwareAction:
+        """
+        Accion que reinstala desde un repositorio binario un paquete compilado desde el AUR.
+        Solo se ofrece cuando el paquete tiene 'repo_available'.
+        """
+        if not cls.__action_switch_to_repository:
+            cls.__action_switch_to_repository = CustomSoftwareAction(i18n_label_key='arch.action.switch_to_repo',
+                                                                     i18n_status_key='arch.action.switch_to_repo.status',
+                                                                     i18n_confirm_key='arch.action.switch_to_repo.confirm',
+                                                                     i18n_description_key='arch.action.switch_to_repo.desc',
+                                                                     requires_root=True,
+                                                                     manager_method='switch_to_repository',
+                                                                     icon_path=resource.get_path('img/repo.svg', ROOT_DIR))
+
+        return cls.__action_switch_to_repository
+
+    @classmethod
     def cached_attrs(cls) -> Tuple[str, ...]:
         if cls.__cached_attrs is None:
             cls.__cached_attrs = ('command', 'icon_path', 'repository', 'maintainer', 'desktop_entry', 'categories',
@@ -104,7 +122,7 @@ class ArchPackage(SoftwarePackage):
                  categories: List[str] = None, i18n: I18n = None, update_ignored: bool = False, arch: str = None,
                  pkgbuild_editable: bool = None, install_date: Optional[int] = None, commit: Optional[str] = None,
                  require_rebuild: bool = False, allow_rebuild: Optional[bool] = None, aur_update: bool = False,
-                 out_of_date: Optional[bool] = None):
+                 out_of_date: Optional[bool] = None, repo_available: Optional[str] = None):
 
         super(ArchPackage, self).__init__(name=name, version=version, latest_version=latest_version, description=description,
                                           installed=installed, categories=categories)
@@ -133,6 +151,10 @@ class ArchPackage(SoftwarePackage):
         self.allow_rebuild = allow_rebuild
         self.aur_update = aur_update
         self.out_of_date = out_of_date
+        # repositorio binario donde tambien esta disponible un paquete instalado desde el AUR
+        # (chaotic-aur o cualquier otro repositorio de pacman habilitado). No se cachea en disco
+        # porque depende de los repositorios activos en cada momento.
+        self.repo_available = repo_available
 
     @staticmethod
     def disk_cache_path(pkgname: str):
@@ -229,7 +251,12 @@ class ArchPackage(SoftwarePackage):
         return False
 
     def get_name_tooltip(self) -> str:
-        return '{} ( {}: {} )'.format(self.name, self.i18n['repository'], self.repository)
+        tooltip = '{} ( {}: {} )'.format(self.name, self.i18n['repository'], self.repository)
+
+        if self.repo_available:
+            tooltip += ' [{}: {}]'.format(self.i18n['arch.package.repo_available'], self.repo_available)
+
+        return tooltip
 
     def supports_backup(self) -> bool:
         return True
@@ -259,6 +286,9 @@ class ArchPackage(SoftwarePackage):
     def get_custom_actions(self) -> Optional[Iterable[CustomSoftwareAction]]:
         if self.installed and self.repository == 'aur':
             actions = [self.action_reinstall()]
+
+            if self.repo_available:
+                actions.append(self.action_switch_to_repository())
 
             if self.pkgbuild_editable is not None:
                 actions.append(self.action_disable_pkgbuild_edition() if self.pkgbuild_editable else self.action_enable_pkgbuild_edition())

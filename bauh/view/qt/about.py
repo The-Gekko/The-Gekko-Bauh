@@ -3,20 +3,35 @@ from glob import glob
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QVBoxLayout, QDialog, QLabel, QWidget, QHBoxLayout, QSizePolicy, QApplication
 
-from bauh import __version__, __app_name__, ROOT_DIR
+from bauh import __version__, ROOT_DIR
 from bauh.context import generate_i18n
 from bauh.view.util import resource
 
-PROJECT_URL = 'https://github.com/vinifmor/' + __app_name__
-LICENSE_URL = 'https://raw.githubusercontent.com/vinifmor/{}/master/LICENSE'.format(__app_name__)
+# repositorio de este fork
+PROJECT_URL = 'https://github.com/The-Gekko/Bauh-Fork-The-Gekko'
+# repositorio original del que deriva el fork
+UPSTREAM_URL = 'https://github.com/vinifmor/bauh'
+UPSTREAM_LABEL = 'vinifmor/bauh'
+LICENSE_URL = 'https://raw.githubusercontent.com/The-Gekko/Bauh-Fork-The-Gekko/master/LICENSE'
+
+
+def get_display_name() -> str:
+    """Devuelve el nombre visible del fork.
+
+    El import es diferido porque 'bauh.view.qt.window' expone ManageWindow, que a su vez
+    depende de este modulo: importarlo arriba crearia un ciclo.
+    """
+    from bauh.view.qt.window.constants import DISPLAY_NAME
+    return DISPLAY_NAME
 
 
 class AboutDialog(QDialog):
 
     def __init__(self, app_config: dict):
         super(AboutDialog, self).__init__()
+        display_name = get_display_name()
         i18n = generate_i18n(app_config, resource.get_path('locale/about'))
-        self.setWindowTitle('{} ({})'.format(i18n['about.title'].capitalize(), __app_name__))
+        self.setWindowTitle('{} ({})'.format(i18n['about.title'].capitalize(), display_name))
         layout = QVBoxLayout()
         self.setLayout(layout)
 
@@ -31,7 +46,7 @@ class AboutDialog(QDialog):
         logo_container.layout().addWidget(label_logo)
         layout.addWidget(logo_container)
 
-        label_name = QLabel(__app_name__)
+        label_name = QLabel(display_name)
         label_name.setObjectName('app_name')
         layout.addWidget(label_name)
 
@@ -67,6 +82,13 @@ class AboutDialog(QDialog):
 
         layout.addWidget(gems_widget)
         layout.addWidget(QLabel(''))
+
+        # la licencia zlib exige marcar claramente las versiones alteradas: se indica el origen del fork
+        label_fork = QLabel()
+        label_fork.setObjectName('app_fork')
+        label_fork.setText(i18n['about.info.fork'].format(f"<a href='{UPSTREAM_URL}'>{UPSTREAM_LABEL}</a>"))
+        label_fork.setOpenExternalLinks(True)
+        layout.addWidget(label_fork)
 
         label_more_info = QLabel()
         label_more_info.setObjectName('app_more_information')

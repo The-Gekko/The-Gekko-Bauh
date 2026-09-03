@@ -1,30 +1,69 @@
-import json
+import glob
 import os
-import re
+import shlex
 import shutil
 import subprocess
+import time
 import traceback
 from pathlib import Path
-from typing import Set, Type, List, Tuple, Optional, Generator
+from typing import Dict, Generator, List, Optional, Set, Tuple, Type
 
 from bauh.api.abstract.context import ApplicationContext
-from bauh.api.abstract.controller import SoftwareManager, SearchResult, TransactionResult, \
-    SoftwareAction, SettingsView, SettingsController, UpgradeRequirements, UpgradeRequirement
+from bauh.api.abstract.controller import (
+    SearchResult,
+    SettingsController,
+    SettingsView,
+    SoftwareAction,
+    SoftwareManager,
+    TransactionResult,
+    UpgradeRequirements,
+)
 from bauh.api.abstract.disk import DiskCacheLoader
 from bauh.api.abstract.handler import ProcessWatcher, TaskManager
-from bauh.api.abstract.model import SoftwarePackage, PackageHistory, PackageUpdate, PackageSuggestion, \
-    CustomSoftwareAction
-from bauh.api.abstract.view import MessageType, FormComponent, SingleSelectComponent, \
-    TextInputComponent, PanelComponent, FileChooserComponent
-from bauh.commons import resource
+from bauh.api.abstract.model import PackageHistory, PackageUpdate, SoftwarePackage
+from bauh.api.abstract.view import (
+    FileChooserComponent,
+    FormComponent,
+    MessageType,
+    PanelComponent,
+    SingleSelectComponent,
+    TextInputComponent,
+)
 from bauh.commons.html import bold
-from bauh.commons.system import SystemProcess, new_subprocess, ProcessHandler, SimpleProcess
-from bauh.gems.github import ROOT_DIR, DEFAULT_REPOS_DIR, get_icon_path
-from bauh.gems.github.build_detector import detect_build_method, BuildMethod, requires_root as build_requires_root
-from bauh.gems.github.config import GitHubConfigManager
+from bauh.commons.system import ProcessHandler, SimpleProcess
+from bauh.commons.view_utils import new_select
+from bauh.gems.github import (
+    DEFAULT_REPOS_DIR,
+    GITHUB_CACHE_DIR,
+    LEGACY_REPOS_DIR,
+    get_icon_path,
+    gitrepo,
+    paths,
+    registry,
+)
+from bauh.gems.github.build_detector import (
+    BuildMethod,
+    detect_build_method,
+    get_required_binary,
+    is_supported,
+    method_from_value,
+    uninstall_command,
+    uninstall_requires_root,
+)
+from bauh.gems.github.build_detector import requires_root as build_requires_root
+from bauh.gems.github.config import (
+    DEFAULT_CACHE_EXPIRATION,
+    DEFAULT_SEARCH_LIMIT,
+    GitHubConfigManager,
+)
 from bauh.gems.github.model import GitHubPackage
 
-RE_GITHUB_URL = re.compile(r'https?://github\.com/([^/]+)/([^/\s#?]+)/?.*')
+API_BASE = 'https://api.github.com'
+
+# prefijo explícito para forzar una búsqueda en la API aunque 'search_enabled' esté a False
+SEARCH_PREFIX = 'gh:'
+
+GIT_TIMEOUT = 60
 
 
 class GitHubManager(SoftwareManager, SettingsController):
@@ -36,306 +75,618 @@ class GitHubManager(SoftwareManager, SettingsController):
         self.logger = context.logger
         self.enabled = True
         self.configman = GitHubConfigManager()
+        self.registry = registry.InstallationRegistry(logger=context.logger)
+        # caché en memoria de las respuestas de la API: url -> (instante, datos)
+        self._api_cache: Dict[str, Tuple[float, object]] = {}
+        # clave i18n de la última advertencia de la API (límite de peticiones, token, ...)
+        self._api_warning: Optional[str] = None
+
+    # ------------------------------------------------------------------ configuración
+
+    def _get_config(self) -> dict:
+        try:
+            return self.configman.get_config()
+        except Exception:
+            self.logger.error("No se pudo leer la configuración de la gem GitHub")
+            self.logger.error(traceback.format_exc())
+            return self.configman.get_default_config()
 
     def _get_repos_dir(self) -> str:
-        config = self.configman.get_config()
-        repos_dir = config.get('repos_dir', DEFAULT_REPOS_DIR)
-        return os.path.expanduser(repos_dir)
+        repos_dir = self._get_config().get('repos_dir') or DEFAULT_REPOS_DIR
+        return os.path.expanduser(str(repos_dir))
 
     def _is_clone_only(self) -> bool:
-        config = self.configman.get_config()
-        return bool(config.get('clone_only', False))
+        return bool(self._get_config().get('clone_only', True))
 
-    def _parse_github_url(self, url: str) -> Optional[Tuple[str, str]]:
-        """Parses a GitHub URL and returns (owner, repo_name) or None."""
-        match = RE_GITHUB_URL.match(url.strip())
-        if match:
-            owner = match.group(1)
-            repo = match.group(2)
-            # Remove .git suffix if present
-            if repo.endswith('.git'):
-                repo = repo[:-4]
-            return owner, repo
+    def _get_int_config(self, key: str, default: int) -> int:
+        try:
+            value = int(self._get_config().get(key, default))
+        except (TypeError, ValueError):
+            return default
+
+        return value if value > 0 else default
+
+    # ------------------------------------------------------------------ API de GitHub
+
+    def _api_headers(self) -> dict:
+        headers = {'Accept': 'application/vnd.github+json',
+                   'X-GitHub-Api-Version': '2022-11-28'}
+
+        token = self._get_config().get('github_token')
+
+        if token:
+            headers['Authorization'] = f'Bearer {str(token).strip()}'
+
+        return headers
+
+    def _cache_key(self, url: str, params: Optional[dict]) -> str:
+        if not params:
+            return url
+
+        return f"{url}?{'&'.join(f'{k}={v}' for k, v in sorted(params.items()))}"
+
+    def _get_json(self, url: str, params: Optional[dict] = None):
+        """Llama a la API de GitHub con caché en memoria y advertencias en lugar de silencio."""
+        key = self._cache_key(url, params)
+        cached = self._api_cache.get(key)
+        expiration = self._get_int_config('cache_expiration', DEFAULT_CACHE_EXPIRATION)
+
+        if cached and (time.time() - cached[0]) < expiration:
+            return cached[1]
+
+        try:
+            resp = self.http_client.get(url, params=params, headers=self._api_headers(),
+                                        single_call=True)
+        except Exception:
+            self.logger.error(f"Falló la petición a la API de GitHub: {url}")
+            self.logger.error(traceback.format_exc())
+            self._api_warning = 'github.warning.unreachable'
+            return None
+
+        if resp is None:
+            self._api_warning = 'github.warning.unreachable'
+            return None
+
+        if resp.status_code == 200:
+            self._api_warning = None
+
+            try:
+                data = resp.json()
+            except Exception:
+                self.logger.error(f"Respuesta no interpretable de la API de GitHub: {url}")
+                return None
+
+            self._api_cache[key] = (time.time(), data)
+            return data
+
+        if resp.status_code == 404:
+            return None
+
+        if resp.status_code in (403, 429):
+            self._api_warning = 'github.warning.rate_limited'
+        elif resp.status_code == 401:
+            self._api_warning = 'github.warning.bad_token'
+        else:
+            self._api_warning = 'github.warning.api_error'
+
+        self.logger.warning(f"La API de GitHub respondió {resp.status_code} para {url}")
         return None
 
     def _fetch_repo_info(self, owner: str, repo_name: str) -> Optional[dict]:
-        """Fetches repository info from the GitHub API."""
-        try:
-            url = f'https://api.github.com/repos/{owner}/{repo_name}'
-            resp = self.http_client.get(url)
-            if resp and resp.status_code == 200:
-                return resp.json()
-        except Exception:
-            self.logger.error(f"Failed to fetch GitHub repo info for {owner}/{repo_name}")
-            import logging; logging.error("Exception occurred", exc_info=True)
-        return None
+        if not paths.is_valid_repo_component(owner) or \
+                not paths.is_valid_repo_component(repo_name):
+            return None
 
-    def _search_github_api(self, query: str, limit: int = 20) -> List[dict]:
-        """Searches the GitHub API for repositories matching a query."""
-        try:
-            url = f'https://api.github.com/search/repositories?q={query}&sort=stars&order=desc&per_page={limit}'
-            resp = self.http_client.get(url)
-            if resp and resp.status_code == 200:
-                data = resp.json()
-                return data.get('items', [])
-        except Exception:
-            self.logger.error(f"GitHub API search failed for query: {query}")
-            import logging; logging.error("Exception occurred", exc_info=True)
-        return []
+        data = self._get_json(f'{API_BASE}/repos/{owner}/{repo_name}')
+        return data if isinstance(data, dict) else None
 
-    def _api_to_package(self, api_data: dict, installed: bool = False, clone_path: str = None) -> GitHubPackage:
-        """Converts a GitHub API response dict into a GitHubPackage."""
-        owner = api_data.get('owner', {}).get('login', '')
-        repo_name = api_data.get('name', '')
-        return GitHubPackage(
+    def _search_github_api(self, query: str, limit: int) -> List[dict]:
+        data = self._get_json(f'{API_BASE}/search/repositories',
+                              params={'q': query, 'sort': 'stars', 'order': 'desc',
+                                      'per_page': limit})
+
+        if not isinstance(data, dict):
+            return []
+
+        items = data.get('items')
+        return items if isinstance(items, list) else []
+
+    # ------------------------------------------------------------------ conversiones
+
+    def _api_to_package(self, api_data: dict) -> Optional[GitHubPackage]:
+        owner = (api_data.get('owner') or {}).get('login') or ''
+        repo_name = api_data.get('name') or ''
+
+        if not paths.is_valid_repo_component(owner) or \
+                not paths.is_valid_repo_component(repo_name):
+            self.logger.warning(f"Se descarta el repositorio '{owner}/{repo_name}': "
+                                f"el nombre no es válido como ruta local")
+            return None
+
+        clone_path = paths.build_clone_path(self._get_repos_dir(), owner, repo_name)
+        is_cloned = bool(clone_path) and os.path.isdir(clone_path)
+        branch = api_data.get('default_branch') or 'main'
+        license_data = api_data.get('license') or {}
+
+        pkg = GitHubPackage(
             name=repo_name,
-            description=api_data.get('description') or self.i18n.get('github.no_description', 'Sin descripción'),
-            version=api_data.get('default_branch', 'main'),
-            repo_url=api_data.get('html_url', f'https://github.com/{owner}/{repo_name}'),
+            description=api_data.get('description') or self.i18n['github.no_description'],
+            version=branch,
+            repo_url=api_data.get('html_url') or f'https://github.com/{owner}/{repo_name}',
             owner=owner,
             repo_name=repo_name,
-            stars=api_data.get('stargazers_count', 0),
+            stars=api_data.get('stargazers_count') or 0,
             clone_path=clone_path,
-            cloned=installed,
-            installed=installed,
-            license=api_data.get('license', {}).get('spdx_id') if api_data.get('license') else None,
-            default_branch=api_data.get('default_branch', 'main'),
+            cloned=is_cloned,
+            installed=is_cloned,
+            license=license_data.get('spdx_id'),
+            default_branch=branch,
             language=api_data.get('language'),
         )
 
+        if is_cloned:
+            self._fill_local_data(pkg, clone_path)
+
+        return pkg
+
+    def _fill_local_data(self, pkg: GitHubPackage, clone_path: str):
+        method, _ = detect_build_method(clone_path)
+        record = self.registry.get(registry.InstallationRegistry.key_for(pkg.owner,
+                                                                        pkg.repo_name)) or {}
+        pkg.build_method = record.get('build_method') or method.value
+        pkg.installed_artifacts = record.get('artifacts') or []
+        pkg.built = bool(pkg.installed_artifacts)
+        pkg.version = gitrepo.read_current_branch(clone_path) or pkg.version
+
+    # ------------------------------------------------------------------ contrato
+
     def search(self, words: str, disk_loader: Optional[DiskCacheLoader] = None,
                limit: int = -1, is_url: bool = False) -> SearchResult:
-        self.logger.info(f"GitHub gem searching for: {words}")
+        query = (words or '').strip()
+        forced = query.lower().startswith(SEARCH_PREFIX)
 
-        installed_pkgs = []
-        new_pkgs = []
+        if forced:
+            query = query[len(SEARCH_PREFIX):].strip()
 
-        # Check if the search is a GitHub URL
-        parsed = self._parse_github_url(words)
+        if not query:
+            return SearchResult.empty()
+
+        parsed = gitrepo.parse_github_url(query)
+
         if parsed:
-            owner, repo_name = parsed
-            api_data = self._fetch_repo_info(owner, repo_name)
+            api_data = self._fetch_repo_info(*parsed)
+            pkg = self._api_to_package(api_data) if api_data else None
 
-            if api_data:
-                repos_dir = self._get_repos_dir()
-                clone_path = f'{repos_dir}/{repo_name}'
-                is_cloned = os.path.isdir(clone_path)
+            if not pkg:
+                return SearchResult.empty()
 
-                pkg = self._api_to_package(api_data, installed=is_cloned, clone_path=clone_path)
+            return SearchResult(installed=[pkg] if pkg.installed else [],
+                                new=[] if pkg.installed else [pkg],
+                                total=1)
 
-                if is_cloned:
-                    method, _ = detect_build_method(clone_path)
-                    pkg.build_method = method.value
-                    installed_pkgs.append(pkg)
-                else:
-                    new_pkgs.append(pkg)
+        if not forced and not self._get_config().get('search_enabled', False):
+            # sin esto cada pulsación en la barra de búsqueda golpearía la API pública
+            return SearchResult.empty()
 
-            return SearchResult(installed=installed_pkgs, new=new_pkgs, total=len(installed_pkgs) + len(new_pkgs))
+        max_results = limit if limit > 0 else self._get_int_config('search_limit',
+                                                                  DEFAULT_SEARCH_LIMIT)
+        installed, new = [], []
 
-        # Regular text search via GitHub API
-        search_limit = limit if limit > 0 else 20
-        api_results = self._search_github_api(words, search_limit)
+        for item in self._search_github_api(query, max_results):
+            pkg = self._api_to_package(item)
 
-        repos_dir = self._get_repos_dir()
-        for item in api_results:
-            repo_name = item.get('name', '')
-            clone_path = f'{repos_dir}/{repo_name}'
-            is_cloned = os.path.isdir(clone_path)
-            pkg = self._api_to_package(item, installed=is_cloned, clone_path=clone_path)
+            if not pkg:
+                continue
 
-            if is_cloned:
-                method, _ = detect_build_method(clone_path)
-                pkg.build_method = method.value
-                installed_pkgs.append(pkg)
-            else:
-                new_pkgs.append(pkg)
+            (installed if pkg.installed else new).append(pkg)
 
-        return SearchResult(installed=installed_pkgs, new=new_pkgs, total=len(installed_pkgs) + len(new_pkgs))
+        return SearchResult(installed=installed, new=new, total=len(installed) + len(new))
+
+    def _iter_clone_dirs(self, repos_dir: str) -> Generator[str, None, None]:
+        """Recorre ``<repos_dir>/<owner>/<repo>`` y también el formato plano heredado."""
+        if not os.path.isdir(repos_dir):
+            return
+
+        try:
+            first_level = sorted(os.scandir(repos_dir), key=lambda e: e.name)
+        except OSError:
+            return
+
+        for entry in first_level:
+            if not entry.is_dir() or entry.name.startswith('.'):
+                continue
+
+            if os.path.exists(os.path.join(entry.path, '.git')):
+                # formato plano de versiones anteriores: <repos_dir>/<repo>
+                yield entry.path
+                continue
+
+            try:
+                second_level = sorted(os.scandir(entry.path), key=lambda e: e.name)
+            except OSError:
+                continue
+
+            for sub in second_level:
+                if sub.is_dir() and not sub.name.startswith('.') and \
+                        os.path.exists(os.path.join(sub.path, '.git')):
+                    yield sub.path
 
     def read_installed(self, disk_loader: Optional[DiskCacheLoader] = None, limit: int = -1,
                        only_apps: bool = False, pkg_types: Optional[Set[Type[SoftwarePackage]]] = None,
                        internet_available: bool = True) -> SearchResult:
-        """Scans the repos directory for cloned repositories."""
-        installed = []
         repos_dir = self._get_repos_dir()
+        check_updates = bool(self._get_config().get('check_updates', True))
+        installed = []
 
-        if os.path.isdir(repos_dir):
-            for entry in os.scandir(repos_dir):
-                if entry.is_dir() and not entry.name.startswith('.'):
-                    # Check if it's actually a git repository
-                    git_dir = os.path.join(entry.path, '.git')
-                    if os.path.isdir(git_dir):
-                        # Try to read the remote URL
-                        repo_url = self._get_remote_url(entry.path)
-                        owner, repo_name = '', entry.name
-                        if repo_url:
-                            parsed = self._parse_github_url(repo_url)
-                            if parsed:
-                                owner, repo_name = parsed
+        for clone_path in self._iter_clone_dirs(repos_dir):
+            repo_url = gitrepo.read_remote_url(clone_path)
+            parsed = gitrepo.parse_github_url(repo_url) if repo_url else None
 
-                        method, _ = detect_build_method(entry.path)
+            if parsed:
+                owner, repo_name = parsed
+            else:
+                owner, repo_name = os.path.basename(os.path.dirname(clone_path)), \
+                    os.path.basename(clone_path)
 
-                        pkg = GitHubPackage(
-                            name=repo_name,
-                            description=f'Repositorio clonado: {owner}/{repo_name}',
-                            version=self._get_current_branch(entry.path),
-                            repo_url=repo_url or f'https://github.com/{owner}/{repo_name}',
-                            owner=owner,
-                            repo_name=repo_name,
-                            clone_path=entry.path,
-                            cloned=True,
-                            installed=True,
-                            build_method=method.value,
-                        )
-                        installed.append(pkg)
+            pkg = GitHubPackage(
+                name=repo_name,
+                description=self.i18n['github.cloned_repository'].format(f'{owner}/{repo_name}'),
+                version=gitrepo.read_current_branch(clone_path) or 'HEAD',
+                repo_url=repo_url or f'https://github.com/{owner}/{repo_name}',
+                owner=owner,
+                repo_name=repo_name,
+                clone_path=clone_path,
+                cloned=True,
+                installed=True,
+            )
+            self._fill_local_data(pkg, clone_path)
+
+            # 'git rev-list' es local y barato; el 'git fetch' se hace en list_updates
+            if check_updates and self._count_commits_behind(clone_path) > 0:
+                pkg.update = True
+
+            installed.append(pkg)
 
         return SearchResult(installed=installed, new=None, total=len(installed))
 
-    def _get_remote_url(self, repo_path: str) -> Optional[str]:
-        """Gets the remote origin URL from a git repo."""
+    # ------------------------------------------------------------------ git
+
+    def _run_git(self, args: List[str], cwd: str) -> Tuple[bool, str]:
         try:
-            result = subprocess.run(
-                ['git', 'config', '--get', 'remote.origin.url'],
-                cwd=repo_path, capture_output=True, text=True, timeout=5
-            )
-            if result.returncode == 0:
-                url = result.stdout.strip()
-                # Convert SSH URLs to HTTPS
-                if url.startswith('git@github.com:'):
-                    url = url.replace('git@github.com:', 'https://github.com/')
-                    if url.endswith('.git'):
-                        url = url[:-4]
-                return url
+            result = subprocess.run(['git', *args], cwd=cwd, capture_output=True, text=True,
+                                    timeout=GIT_TIMEOUT, check=False)
         except Exception:
-            pass
+            self.logger.warning(f"No se pudo ejecutar 'git {' '.join(args)}' en {cwd}")
+            return False, ''
+
+        return result.returncode == 0, result.stdout.strip()
+
+    def _count_commits_behind(self, clone_path: str) -> int:
+        """Commits que el remoto lleva de ventaja según las referencias ya descargadas."""
+        success, output = self._run_git(['rev-list', 'HEAD..@{u}', '--count'], clone_path)
+
+        if not success or not output.isdigit():
+            return 0
+
+        return int(output)
+
+    # ------------------------------------------------------------------ instalación
+
+    def _method_label(self, method: BuildMethod) -> str:
+        if method == BuildMethod.UNKNOWN:
+            return self.i18n['github.build_method.unknown']
+
+        return method.value
+
+    @staticmethod
+    def _clone_url(pkg: GitHubPackage) -> Optional[str]:
+        """URL de clonado derivada del propietario y el repositorio ya validados.
+
+        No se usa directamente la URL que devuelve la API para que 'git clone' nunca reciba
+        como argumento una cadena arbitraria (por ejemplo una que empiece por '-').
+        """
+        if paths.is_valid_repo_component(pkg.owner) and \
+                paths.is_valid_repo_component(pkg.repo_name):
+            return f'https://github.com/{pkg.owner}/{pkg.repo_name}.git'
+
         return None
 
-    def _get_current_branch(self, repo_path: str) -> str:
-        """Gets the current branch of a git repo."""
-        try:
-            result = subprocess.run(
-                ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
-                cwd=repo_path, capture_output=True, text=True, timeout=5
-            )
-            if result.returncode == 0:
-                return result.stdout.strip()
-        except Exception:
-            pass
-        return 'unknown'
+    def _resolve_clone_path(self, pkg: GitHubPackage) -> Optional[str]:
+        repos_dir = self._get_repos_dir()
+        clone_path = paths.build_clone_path(repos_dir, pkg.owner, pkg.repo_name or pkg.name)
+
+        if clone_path and paths.is_inside(repos_dir, clone_path):
+            return clone_path
+
+        return None
 
     def install(self, pkg: GitHubPackage, root_password: Optional[str],
                 disk_loader: Optional[DiskCacheLoader], watcher: ProcessWatcher) -> TransactionResult:
         handler = ProcessHandler(watcher)
-        repos_dir = self._get_repos_dir()
-        Path(repos_dir).mkdir(parents=True, exist_ok=True)
+        clone_path = self._resolve_clone_path(pkg)
 
-        clone_path = f'{repos_dir}/{pkg.repo_name}'
+        if not clone_path:
+            watcher.show_message(title=self.i18n['error'],
+                                 body=self.i18n['github.invalid_repo'].format(
+                                     bold(f'{pkg.owner}/{pkg.repo_name}')),
+                                 type_=MessageType.ERROR)
+            return TransactionResult.fail()
+
         pkg.clone_path = clone_path
 
-        # Step 1: Clone the repository
-        watcher.change_substatus(self.i18n.get('github.cloning', 'Clonando repositorio: {}').format(bold(pkg.repo_url)))
-
-        if os.path.isdir(clone_path):
-            # Already cloned, pull updates instead
-            self.logger.info(f"Repository already exists at {clone_path}, pulling updates")
-            success, output = handler.handle_simple(
-                SimpleProcess(['git', 'pull'], cwd=clone_path)
-            )
-        else:
-            success, output = handler.handle_simple(
-                SimpleProcess(['git', 'clone', pkg.repo_url, clone_path])
-            )
-
-        if not success:
-            watcher.show_message(
-                title=self.i18n.get('github.clone_error', 'Error al clonar'),
-                body=self.i18n.get('github.clone_error.body',
-                                    'No se pudo clonar el repositorio {}. Verifica la URL y tu conexión a internet.').format(
-                    bold(pkg.repo_url)),
-                type_=MessageType.ERROR
-            )
+        if not self._clone_or_update(pkg, clone_path, handler, watcher):
             return TransactionResult.fail()
 
         pkg.cloned = True
+        pkg.installed = True
+        pkg.version = gitrepo.read_current_branch(clone_path) or pkg.version
 
-        # Step 2: Detect build method
         method, build_cmd = detect_build_method(clone_path)
         pkg.build_method = method.value
+        watcher.change_substatus(self.i18n['github.build_detected'].format(
+            bold(self._method_label(method))))
 
-        watcher.change_substatus(
-            self.i18n.get('github.build_detected', 'Método de build detectado: {}').format(bold(method.value))
-        )
-
-        # Step 3: If clone_only mode, stop here
         if self._is_clone_only():
-            self.logger.info(f"Clone-only mode: skipping build for {pkg.repo_name}")
-            watcher.change_substatus(
-                self.i18n.get('github.clone_only_done', 'Repositorio clonado exitosamente (modo solo clonar)')
-            )
+            watcher.show_message(title=self.i18n['github.clone_only'],
+                                 body=self.i18n['github.clone_only.body'].format(
+                                     bold(clone_path)),
+                                 type_=MessageType.INFO)
             return TransactionResult(success=True, installed=[pkg], removed=[])
 
-        from bauh.gems.github.build_detector import SAFE_METHODS
-
-        # Step 4: Build and install if a method was detected
-        if method == BuildMethod.UNKNOWN or method not in SAFE_METHODS:
-            watcher.show_message(
-                title=self.i18n.get('github.unsafe_build', 'Instalación manual requerida'),
-                body=self.i18n.get('github.unsafe_build.body',
-                                    'El repositorio usa {}. Por seguridad, Bauh solo instala automáticamente repositorios con PKGBUILD, Python o Cargo. '
-                                    'El repositorio ha sido clonado en {}. '
-                                    'Por favor, instala las dependencias manualmente y compílalo bajo tu propio riesgo.').format(
-                    bold(method.value), bold(clone_path)),
-                type_=MessageType.WARNING
-            )
+        if not is_supported(method):
+            watcher.show_message(title=self.i18n['github.unsupported_build'],
+                                 body=self.i18n['github.unsupported_build.body'].format(
+                                     bold(self._method_label(method)), bold(clone_path)),
+                                 type_=MessageType.WARNING)
             return TransactionResult(success=True, installed=[pkg], removed=[])
 
-        watcher.change_substatus(
-            self.i18n.get('github.building', 'Construyendo {} con {}...').format(
-                bold(pkg.repo_name), bold(method.value))
-        )
+        return self._build_and_install(pkg, clone_path, method, build_cmd, root_password,
+                                       handler, watcher)
 
-        # Execute the build command
+    def _clone_or_update(self, pkg: GitHubPackage, clone_path: str, handler: ProcessHandler,
+                         watcher: ProcessWatcher) -> bool:
+        if os.path.exists(clone_path):
+            existing_url = gitrepo.read_remote_url(clone_path)
+
+            if existing_url and pkg.repo_url and \
+                    not gitrepo.same_repository(existing_url, pkg.repo_url):
+                watcher.show_message(title=self.i18n['error'],
+                                     body=self.i18n['github.path_conflict'].format(
+                                         bold(clone_path), bold(existing_url)),
+                                     type_=MessageType.ERROR)
+                return False
+
+            watcher.change_substatus(self.i18n['github.pulling'].format(bold(pkg.repo_name)))
+            success, _ = handler.handle_simple(SimpleProcess(['git', 'pull', '--ff-only'],
+                                                             cwd=clone_path))
+        else:
+            clone_url = self._clone_url(pkg)
+
+            if not clone_url:
+                watcher.show_message(title=self.i18n['error'],
+                                     body=self.i18n['github.invalid_repo'].format(
+                                         bold(f'{pkg.owner}/{pkg.repo_name}')),
+                                     type_=MessageType.ERROR)
+                return False
+
+            watcher.change_substatus(self.i18n['github.cloning'].format(bold(clone_url)))
+            # el directorio del propietario se crea aquí, nunca en prepare()
+            Path(os.path.dirname(clone_path)).mkdir(parents=True, exist_ok=True)
+            success, _ = handler.handle_simple(SimpleProcess(['git', 'clone', '--',
+                                                              clone_url, clone_path]))
+
+        if not success:
+            watcher.show_message(title=self.i18n['github.clone_error'],
+                                 body=self.i18n['github.clone_error.body'].format(
+                                     bold(pkg.repo_url or clone_path)),
+                                 type_=MessageType.ERROR)
+
+        return success
+
+    def _confirm_build(self, pkg: GitHubPackage, clone_path: str, method: BuildMethod,
+                       commands: List[str], watcher: ProcessWatcher) -> bool:
+        body = '<br/>'.join((
+            self.i18n['github.confirm_build.repo'].format(bold(pkg.repo_url or pkg.name)),
+            self.i18n['github.confirm_build.path'].format(bold(clone_path)),
+            self.i18n['github.confirm_build.method'].format(bold(self._method_label(method))),
+            self.i18n['github.confirm_build.commands'].format(
+                bold(' &amp;&amp; '.join(commands))),
+            '',
+            self.i18n['github.confirm_build.warning'],
+        ))
+
+        return watcher.request_confirmation(title=self.i18n['github.confirm_build'],
+                                            body=body,
+                                            confirmation_label=self.i18n['continue'].capitalize(),
+                                            deny_label=self.i18n['cancel'].capitalize())
+
+    def _build_and_install(self, pkg: GitHubPackage, clone_path: str, method: BuildMethod,
+                           build_cmd: Optional[str], root_password: Optional[str],
+                           handler: ProcessHandler,
+                           watcher: ProcessWatcher) -> TransactionResult:
+        binary = get_required_binary(method)
+
+        if binary and not shutil.which(binary):
+            if method == BuildMethod.PYTHON_SETUP:
+                # PEP 668: el intérprete del sistema está gestionado externamente y bauh
+                # nunca usará '--break-system-packages' para saltárselo
+                body = self.i18n['github.missing_pipx.body']
+            else:
+                body = self.i18n['github.missing_tool.body']
+
+            watcher.show_message(title=self.i18n['github.missing_tool'],
+                                 body=body.format(bold(binary), bold(clone_path)),
+                                 type_=MessageType.WARNING)
+            return TransactionResult(success=True, installed=[pkg], removed=[])
+
+        if not build_cmd:
+            return TransactionResult(success=True, installed=[pkg], removed=[])
+
+        build_args = shlex.split(build_cmd)
+        displayed = [build_cmd]
+
+        if method == BuildMethod.PKGBUILD:
+            displayed.append('sudo pacman -U <*.pkg.tar.zst>')
+
+        if not self._confirm_build(pkg, clone_path, method, displayed, watcher):
+            self.logger.info(f"El usuario canceló la construcción de {pkg.repo_url}")
+            return TransactionResult(success=True, installed=[pkg], removed=[])
+
+        watcher.change_substatus(self.i18n['github.building'].format(
+            bold(pkg.repo_name), bold(self._method_label(method))))
+
+        # la construcción JAMÁS recibe root_password: makepkg se niega a correr como root y
+        # el resto de métodos instalan en el HOME del usuario
         build_success, build_output = handler.handle_simple(
-            SimpleProcess(['bash', '-c', build_cmd], cwd=clone_path, root_password=root_password)
-        )
+            SimpleProcess(build_args, cwd=clone_path))
 
         if not build_success:
-            watcher.show_message(
-                title=self.i18n.get('github.build_error', 'Error de construcción'),
-                body=self.i18n.get('github.build_error.body',
-                                    'Falló la construcción de {}. El repositorio sigue clonado en {}.\n\n'
-                                    'Detalles del error:\n{}').format(
-                    bold(pkg.repo_name), bold(clone_path), build_output),
-                type_=MessageType.ERROR
-            )
-            return TransactionResult(success=True, installed=[pkg], removed=[])
+            watcher.show_message(title=self.i18n['github.build_error'],
+                                 body=self.i18n['github.build_error.body'].format(
+                                     bold(pkg.repo_name), bold(clone_path)),
+                                 type_=MessageType.ERROR)
+            # el clon se conserva, pero la transacción NO se reporta como instalada
+            return TransactionResult.fail()
+
+        artifacts = self._install_artifacts(pkg, clone_path, method, build_output,
+                                            root_password, handler, watcher)
+
+        if artifacts is None:
+            return TransactionResult.fail()
 
         pkg.built = True
-        self.logger.info(f"Successfully built and installed {pkg.repo_name}")
+        pkg.installed_artifacts = artifacts
+        self.registry.record(registry.InstallationRegistry.key_for(pkg.owner, pkg.repo_name),
+                             method.value, artifacts, clone_path, pkg.repo_url)
 
         return TransactionResult(success=True, installed=[pkg], removed=[])
+
+    def _install_artifacts(self, pkg: GitHubPackage, clone_path: str, method: BuildMethod,
+                           build_output: str, root_password: Optional[str],
+                           handler: ProcessHandler,
+                           watcher: ProcessWatcher) -> Optional[List[str]]:
+        """Ejecuta el paso de instalación y devuelve los artefactos registrados.
+
+        Devuelve ``None`` si el paso falla.
+        """
+        if method == BuildMethod.PKGBUILD:
+            built_files = sorted(f for f in glob.glob(os.path.join(clone_path, '*.pkg.tar*'))
+                                 if not f.endswith('.sig'))
+
+            if not built_files:
+                watcher.show_message(title=self.i18n['github.build_error'],
+                                     body=self.i18n['github.no_package_file'].format(
+                                         bold(clone_path)),
+                                     type_=MessageType.ERROR)
+                return None
+
+            watcher.change_substatus(self.i18n['github.installing_package'].format(
+                bold(pkg.repo_name)))
+
+            success, _ = handler.handle_simple(
+                SimpleProcess(['pacman', '-U', '--noconfirm', *built_files],
+                              root_password=root_password))
+
+            if not success:
+                watcher.show_message(title=self.i18n['error'],
+                                     body=self.i18n['github.install_error'].format(
+                                         bold(pkg.repo_name)),
+                                     type_=MessageType.ERROR)
+                return None
+
+            return registry.parse_pacman_package_names(built_files)
+
+        if method == BuildMethod.PYTHON_SETUP:
+            return registry.parse_pipx_installed_names(build_output) or [pkg.repo_name]
+
+        if method == BuildMethod.CARGO:
+            names = registry.parse_cargo_installed_names(build_output)
+
+            if not names:
+                cargo_toml = os.path.join(clone_path, 'Cargo.toml')
+
+                try:
+                    with open(cargo_toml, encoding='utf-8', errors='replace') as file:
+                        name = registry.read_cargo_package_name(file.read())
+                except OSError:
+                    name = None
+
+                names = [name] if name else [pkg.repo_name]
+
+            return names
+
+        return []
+
+    # ------------------------------------------------------------------ desinstalación
 
     def uninstall(self, pkg: GitHubPackage, root_password: Optional[str],
                   watcher: ProcessWatcher, disk_loader: Optional[DiskCacheLoader] = None) -> TransactionResult:
         handler = ProcessHandler(watcher)
+        repos_dir = self._get_repos_dir()
+        key = registry.InstallationRegistry.key_for(pkg.owner, pkg.repo_name)
+        record = self.registry.get(key) or {}
 
-        if pkg.clone_path and os.path.isdir(pkg.clone_path):
-            watcher.change_substatus(
-                self.i18n.get('github.removing', 'Eliminando repositorio: {}').format(bold(pkg.repo_name or pkg.name))
-            )
-            try:
-                shutil.rmtree(pkg.clone_path)
-                self.logger.info(f"Removed cloned repository: {pkg.clone_path}")
-            except Exception:
-                watcher.show_message(
-                    title=self.i18n.get('error', 'Error'),
-                    body=self.i18n.get('github.remove_error',
-                                        'No se pudo eliminar la carpeta {}').format(bold(pkg.clone_path)),
-                    type_=MessageType.ERROR
-                )
+        method = method_from_value(record.get('build_method') or pkg.build_method)
+        artifacts = record.get('artifacts') or pkg.installed_artifacts
+        command = uninstall_command(method, artifacts)
+
+        if command:
+            watcher.change_substatus(self.i18n['github.uninstalling'].format(
+                bold(', '.join(artifacts))))
+            password = root_password if uninstall_requires_root(method) else None
+            success, _ = handler.handle_simple(SimpleProcess(command, root_password=password))
+
+            if not success:
+                watcher.show_message(title=self.i18n['error'],
+                                     body=self.i18n['github.uninstall_error'].format(
+                                         bold(' '.join(command))),
+                                     type_=MessageType.ERROR)
                 return TransactionResult.fail()
 
+        clone_path = pkg.clone_path
+
+        if clone_path and os.path.isdir(clone_path):
+            if not paths.is_safe_clone_path(repos_dir, clone_path):
+                self.logger.error(f"Se rechaza borrar '{clone_path}': queda fuera de "
+                                  f"'{repos_dir}' o no es un clon de git")
+                watcher.show_message(title=self.i18n['error'],
+                                     body=self.i18n['github.unsafe_path'].format(
+                                         bold(clone_path)),
+                                     type_=MessageType.ERROR)
+                return TransactionResult.fail()
+
+            watcher.change_substatus(self.i18n['github.removing'].format(
+                bold(pkg.repo_name or pkg.name)))
+
+            try:
+                shutil.rmtree(clone_path)
+                self._prune_owner_dir(repos_dir, clone_path)
+            except Exception:
+                self.logger.error(f"No se pudo eliminar el directorio {clone_path}")
+                self.logger.error(traceback.format_exc())
+                watcher.show_message(title=self.i18n['error'],
+                                     body=self.i18n['github.remove_error'].format(
+                                         bold(clone_path)),
+                                     type_=MessageType.ERROR)
+                return TransactionResult.fail()
+
+        self.registry.remove(key)
+        pkg.installed, pkg.cloned, pkg.built = False, False, False
+
         return TransactionResult(success=True, installed=[], removed=[pkg])
+
+    def _prune_owner_dir(self, repos_dir: str, clone_path: str):
+        """Elimina el directorio del propietario si se ha quedado vacío."""
+        owner_dir = os.path.dirname(clone_path)
+
+        if not paths.is_inside(repos_dir, owner_dir):
+            return
+
+        try:
+            if not os.listdir(owner_dir):
+                os.rmdir(owner_dir)
+        except OSError:
+            pass
 
     def downgrade(self, pkg: SoftwarePackage, root_password: Optional[str],
                   handler: ProcessWatcher) -> bool:
@@ -343,34 +694,58 @@ class GitHubManager(SoftwareManager, SettingsController):
 
     def upgrade(self, requirements: UpgradeRequirements, root_password: Optional[str],
                 watcher: ProcessWatcher) -> bool:
-        """Pulls latest changes for each repo."""
+        """Actualiza los clones con ``git pull``.
+
+        No se reconstruye automáticamente: volver a compilar ejecuta código de terceros y
+        exige la confirmación explícita del usuario, así que se le indica que reinstale.
+        """
         handler = ProcessHandler(watcher)
+        success = True
+
         for req in (requirements.to_upgrade or []):
             pkg = req.pkg
-            if isinstance(pkg, GitHubPackage) and pkg.clone_path and os.path.isdir(pkg.clone_path):
-                watcher.change_substatus(
-                    self.i18n.get('github.pulling', 'Actualizando {}...').format(bold(pkg.repo_name))
-                )
-                handler.handle_simple(SimpleProcess(['git', 'pull'], cwd=pkg.clone_path))
-        return True
+
+            if not isinstance(pkg, GitHubPackage) or not pkg.clone_path \
+                    or not os.path.isdir(pkg.clone_path):
+                continue
+
+            watcher.change_substatus(self.i18n['github.pulling'].format(bold(pkg.repo_name)))
+            pulled, _ = handler.handle_simple(SimpleProcess(['git', 'pull', '--ff-only'],
+                                                            cwd=pkg.clone_path))
+
+            if not pulled:
+                success = False
+                continue
+
+            if pkg.built:
+                watcher.print(self.i18n['github.rebuild_needed'].format(pkg.repo_name))
+
+        return success
 
     def get_managed_types(self) -> Set[Type[SoftwarePackage]]:
         return {GitHubPackage}
 
     def get_info(self, pkg: GitHubPackage) -> dict:
+        method = method_from_value(pkg.build_method)
+        yes, no = self.i18n['yes'].capitalize(), self.i18n['no'].capitalize()
+
         info = {
-            self.i18n.get('github.info.name', 'Nombre'): pkg.name,
-            self.i18n.get('github.info.owner', 'Propietario'): pkg.owner or '—',
-            self.i18n.get('github.info.url', 'URL'): pkg.repo_url or '—',
-            self.i18n.get('github.info.stars', 'Estrellas'): str(pkg.stars) if pkg.stars else '—',
-            self.i18n.get('github.info.language', 'Lenguaje'): pkg.language or '—',
-            self.i18n.get('github.info.license', 'Licencia'): pkg.license or '—',
-            self.i18n.get('github.info.branch', 'Rama'): pkg.version or pkg.default_branch or '—',
-            self.i18n.get('github.info.build', 'Método de Build'): pkg.build_method or '—',
-            self.i18n.get('github.info.cloned', 'Clonado'): self.i18n.get('yes', 'Sí') if pkg.cloned else self.i18n.get('no', 'No'),
-            self.i18n.get('github.info.built', 'Construido'): self.i18n.get('yes', 'Sí') if pkg.built else self.i18n.get('no', 'No'),
-            self.i18n.get('github.info.path', 'Ruta Local'): pkg.clone_path or '—',
+            self.i18n['github.info.name']: pkg.name,
+            self.i18n['github.info.owner']: pkg.owner or '-',
+            self.i18n['github.info.url']: pkg.repo_url or '-',
+            self.i18n['github.info.stars']: str(pkg.stars) if pkg.stars else '-',
+            self.i18n['github.info.language']: pkg.language or '-',
+            self.i18n['github.info.license']: pkg.license or '-',
+            self.i18n['github.info.branch']: pkg.version or pkg.default_branch or '-',
+            self.i18n['github.info.build']: self._method_label(method),
+            self.i18n['github.info.cloned']: yes if pkg.cloned else no,
+            self.i18n['github.info.built']: yes if pkg.built else no,
+            self.i18n['github.info.path']: pkg.clone_path or '-',
         }
+
+        if pkg.installed_artifacts:
+            info[self.i18n['github.info.artifacts']] = ', '.join(pkg.installed_artifacts)
+
         return info
 
     def get_history(self, pkg: SoftwarePackage) -> PackageHistory:
@@ -384,46 +759,193 @@ class GitHubManager(SoftwareManager, SettingsController):
 
     def can_work(self) -> Tuple[bool, Optional[str]]:
         if not shutil.which('git'):
-            return False, self.i18n.get('github.requires_git',
-                                         'Se requiere git para utilizar este módulo. Instálalo con: sudo pacman -S git')
+            return False, self.i18n['github.requires_git']
+
         return True, None
 
     def requires_root(self, action: SoftwareAction, pkg: Optional[SoftwarePackage] = None) -> bool:
-        if action == SoftwareAction.INSTALL and isinstance(pkg, GitHubPackage):
+        if not isinstance(pkg, GitHubPackage):
+            return False
+
+        if action == SoftwareAction.INSTALL:
+            if self._is_clone_only():
+                return False
+
             if pkg.clone_path and os.path.isdir(pkg.clone_path):
                 method, _ = detect_build_method(pkg.clone_path)
                 return build_requires_root(method)
+
+            # el repositorio aún no está clonado: no se sabe el método, así que se pide la
+            # contraseña por si hiciera falta un 'pacman -U' al final (F03)
+            return True
+
+        if action == SoftwareAction.UNINSTALL:
+            record = self.registry.get(
+                registry.InstallationRegistry.key_for(pkg.owner, pkg.repo_name)) or {}
+            method = method_from_value(record.get('build_method') or pkg.build_method)
+            return uninstall_requires_root(method) and bool(record.get('artifacts')
+                                                            or pkg.installed_artifacts)
+
         return False
 
     def prepare(self, task_manager: Optional[TaskManager], root_password: Optional[str],
                 internet_available: Optional[bool]):
-        repos_dir = self._get_repos_dir()
-        Path(repos_dir).mkdir(parents=True, exist_ok=True)
-
-        # Check if gh CLI is available (optional, for enhanced features)
-        if shutil.which('gh'):
-            self.logger.info("GitHub CLI (gh) detected. Enhanced GitHub features available.")
-        else:
-            self.logger.info("GitHub CLI (gh) not found. Using basic git for cloning.")
+        # el directorio de repositorios se crea perezosamente al instalar: crearlo aquí
+        # sembraba una carpeta en el HOME de todo el mundo aunque la gem no se usara
+        pass
 
     def list_updates(self, internet_available: bool) -> List[PackageUpdate]:
-        return []
+        if not internet_available or not self._get_config().get('check_updates', True):
+            return []
+
+        updates = []
+
+        for clone_path in self._iter_clone_dirs(self._get_repos_dir()):
+            self._run_git(['fetch', '--quiet'], clone_path)
+            behind = self._count_commits_behind(clone_path)
+
+            if behind <= 0:
+                continue
+
+            repo_url = gitrepo.read_remote_url(clone_path)
+            parsed = gitrepo.parse_github_url(repo_url) if repo_url else None
+            name = parsed[1] if parsed else os.path.basename(clone_path)
+
+            updates.append(PackageUpdate(pkg_id=repo_url or clone_path,
+                                         version=str(behind),
+                                         pkg_type='GitHub',
+                                         name=name))
+
+        return updates
 
     def list_warnings(self, internet_available: bool) -> Optional[List[str]]:
+        warnings = []
+
         if not internet_available:
-            return [self.i18n.get('github.no_internet', 'Se requiere internet para buscar repositorios en GitHub')]
-        return None
+            warnings.append(self.i18n['github.no_internet'])
+        elif self._api_warning:
+            warnings.append(self.i18n[self._api_warning])
+
+        return warnings if warnings else None
 
     def is_default_enabled(self) -> bool:
-        return True
+        # la gem no forma parte del alcance oficial del fork: es opt-in
+        return False
 
     def launch(self, pkg: SoftwarePackage):
-        # Open the clone directory in the file manager
         if isinstance(pkg, GitHubPackage) and pkg.clone_path and os.path.isdir(pkg.clone_path):
-            subprocess.Popen(['xdg-open', pkg.clone_path])
+            try:
+                subprocess.Popen(['xdg-open', pkg.clone_path])
+            except Exception:
+                self.logger.error(f"No se pudo abrir el directorio {pkg.clone_path}")
+                self.logger.error(traceback.format_exc())
 
     def get_screenshots(self, pkg: SoftwarePackage) -> Generator[str, None, None]:
         yield from ()
 
+    def clear_data(self, logs: bool = True):
+        """Elimina la caché y el registro de la gem.
+
+        Los clones NO se borran: son código fuente del usuario, no datos de bauh, y
+        eliminarlos sin confirmación podría destruir trabajo local.
+        """
+        self._api_cache.clear()
+
+        if os.path.exists(GITHUB_CACHE_DIR):
+            try:
+                shutil.rmtree(GITHUB_CACHE_DIR)
+
+                if logs:
+                    self.logger.info(f"Directorio de caché eliminado: {GITHUB_CACHE_DIR}")
+            except Exception:
+                if logs:
+                    self.logger.error(f"No se pudo eliminar el directorio {GITHUB_CACHE_DIR}")
+                    self.logger.error(traceback.format_exc())
+
+        if logs:
+            self.logger.info(f"Los repositorios clonados en '{self._get_repos_dir()}' se "
+                             f"conservan: contienen código fuente del usuario")
+
+    # ------------------------------------------------------------------ ajustes
+
     def get_settings(self) -> Optional[Generator[SettingsView, None, None]]:
+        config = self._get_config()
+        yes_label, no_label = self.i18n['yes'].capitalize(), self.i18n['no'].capitalize()
+
+        repos_dir = config.get('repos_dir') or DEFAULT_REPOS_DIR
+
+        fields = [
+            FileChooserComponent(label=self.i18n['github.config.repos_dir'],
+                                 tooltip=self.i18n['github.config.repos_dir.tip'],
+                                 file_path=os.path.expanduser(str(repos_dir)),
+                                 search_path=os.path.expanduser(str(repos_dir)),
+                                 directory=True,
+                                 id_='repos_dir'),
+            new_select(label=self.i18n['github.config.clone_only'],
+                       tip=self.i18n['github.config.clone_only.tip'],
+                       id_='clone_only',
+                       opts=((yes_label, True, None), (no_label, False, None)),
+                       value=bool(config.get('clone_only', True))),
+            new_select(label=self.i18n['github.config.search_enabled'],
+                       tip=self.i18n['github.config.search_enabled.tip'],
+                       id_='search_enabled',
+                       opts=((yes_label, True, None), (no_label, False, None)),
+                       value=bool(config.get('search_enabled', False))),
+            TextInputComponent(label=self.i18n['github.config.search_limit'],
+                               tooltip=self.i18n['github.config.search_limit.tip'],
+                               value=str(config.get('search_limit', DEFAULT_SEARCH_LIMIT)),
+                               only_int=True,
+                               id_='search_limit'),
+            new_select(label=self.i18n['github.config.check_updates'],
+                       tip=self.i18n['github.config.check_updates.tip'],
+                       id_='check_updates',
+                       opts=((yes_label, True, None), (no_label, False, None)),
+                       value=bool(config.get('check_updates', True))),
+            TextInputComponent(label=self.i18n['github.config.token'],
+                               tooltip=self.i18n['github.config.token.tip'],
+                               value=str(config.get('github_token') or ''),
+                               id_='github_token'),
+        ]
+
+        yield SettingsView(self, PanelComponent([FormComponent(fields, self.i18n['github.config'])]),
+                           icon_path=get_icon_path())
+
+    def save_settings(self, component: PanelComponent) -> Tuple[bool, Optional[List[str]]]:
+        config = self._get_config()
+        form = component.get_component_by_idx(0, FormComponent)
+
+        repos_dir = form.get_component('repos_dir', FileChooserComponent).file_path
+        config['repos_dir'] = repos_dir if repos_dir else DEFAULT_REPOS_DIR
+
+        for key in ('clone_only', 'search_enabled', 'check_updates'):
+            config[key] = bool(form.get_component(key, SingleSelectComponent).get_selected())
+
+        try:
+            search_limit = int(form.get_component('search_limit',
+                                                  TextInputComponent).get_value())
+        except (TypeError, ValueError):
+            search_limit = DEFAULT_SEARCH_LIMIT
+
+        config['search_limit'] = search_limit if search_limit > 0 else DEFAULT_SEARCH_LIMIT
+
+        token = form.get_component('github_token', TextInputComponent).get_value().strip()
+        config['github_token'] = token if token else None
+
+        try:
+            self.configman.save_config(config)
+            self._api_cache.clear()
+            return True, None
+        except Exception:
+            return False, [traceback.format_exc()]
+
+    # ------------------------------------------------------------------ compatibilidad
+
+    def migrate_legacy_repos_dir(self) -> Optional[str]:
+        """Devuelve el directorio heredado ``~/BauhRepos`` si aún contiene clones.
+
+        No se mueve nada automáticamente; el valor sirve para avisar al usuario.
+        """
+        if os.path.isdir(LEGACY_REPOS_DIR) and os.listdir(LEGACY_REPOS_DIR):
+            return LEGACY_REPOS_DIR
+
         return None

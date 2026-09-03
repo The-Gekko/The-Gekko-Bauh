@@ -1,1 +1,4 @@
 /* Matugen Dynamic Wallpaper Theme */
+/* Hereda de Aurora (root_theme=aurora en matugen.meta): sus variables se
+   sustituyen en bauh/stylesheet.py con los colores de la cache de Matugen
+   antes de resolver las variables derivadas. */

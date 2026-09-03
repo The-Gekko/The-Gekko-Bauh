@@ -1,1 +1,4 @@
 /* GTK 3/4 System Theme */
+/* Hereda de Aurora (root_theme=aurora en gtk.meta): sus variables se
+   sustituyen en bauh/stylesheet.py con los colores declarados en
+   gtk-3.0/gtk.css y gtk-4.0/gtk.css antes de resolver las derivadas. */

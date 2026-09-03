@@ -1,5 +1,11 @@
-pyqt5>=5.12
-requests>=2.18
-colorama>=0.3.8
-pyyaml>=3.13
-python-dateutil>=2.7
+# Dependencias de ejecución de bauh Gekko Edition.
+#
+# Las cotas mínimas son las primeras versiones que se distribuyen como wheel para
+# todo el rango soportado (Python 3.8–3.14); el techo de major evita que una
+# ruptura de compatibilidad entre en una instalación sin revisión previa.
+# Deben mantenerse sincronizadas con [project].dependencies de pyproject.toml.
+pyqt5>=5.15,<6
+requests>=2.28,<3
+pyyaml>=6.0,<7
+colorama>=0.4,<1
+python-dateutil>=2.8,<3

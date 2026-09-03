@@ -1,5 +1,6 @@
 about.title=Über
 about.info.desc=Grafisches Interface, um ihre Linux-Anwendungen zu verwalten
+about.info.fork=Modifizierte Version (Fork) von {}
 about.info.link=Mehr Informationen unter
 about.info.license=Freie Lizenz
 about.info.rate.question=Gefällt ihnen diese Anwendung?

@@ -627,9 +627,18 @@ class PackagesTable(QTableWidget):
         self.file_downloader.signal_downloaded.connect(self._update_pkg_icon)
         self.file_downloader.start()
 
+    # tiempo maximo que el hilo de la interfaz espera al descargador de iconos al cerrar
+    FILE_DOWNLOADER_WAIT_TIMEOUT = 2000
+
     def stop_file_downloader(self, wait: bool = False) -> None:
         if self.file_downloader:
             self.file_downloader.stop()
 
             if wait:
-                self.file_downloader.wait()
+                # esperar sin limite congela la interfaz mientras haya descargas remotas en curso
+                if not self.file_downloader.wait(self.FILE_DOWNLOADER_WAIT_TIMEOUT):
+                    self.file_downloader.requestInterruption()
+
+                    if not self.file_downloader.wait(self.FILE_DOWNLOADER_WAIT_TIMEOUT):
+                        self.logger.warning('The icon downloader thread did not stop within '
+                                            f'{2 * self.FILE_DOWNLOADER_WAIT_TIMEOUT} milliseconds')

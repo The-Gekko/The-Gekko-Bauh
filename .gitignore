@@ -6,9 +6,14 @@ venv
 .idea
 __pycache__
 *.orig
-dist
+dist/
+build/
 *.egg-info
-build
+*.egg-info/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
 *.db
 linux_dist/appimage/AppDir
 linux_dist/appimage/appimage-builder-cache

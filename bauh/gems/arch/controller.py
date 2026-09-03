@@ -385,6 +385,11 @@ class ArchManager(SoftwareManager, SettingsController):
         for t in search_threads:
             t.join()
 
+        discarded = self.prefer_repository_results(search_output)
+
+        if discarded:
+            self.logger.info(f"{len(discarded)} AUR search results discarded in favor of the repository binaries")
+
         for name in {*search_output['repositories'].keys(), *search_output['aur'].keys()}:
             if name in search_output['installed']:
                 search_output['installed_matches'].add(name)
@@ -403,6 +408,11 @@ class ArchManager(SoftwareManager, SettingsController):
                     if pkg.name in search_output['aur']:
                         del search_output['aur'][pkg.name]
 
+                    if pkg.name in search_output['repositories']:
+                        # ya se muestra como instalado desde el AUR: la accion "cambiar al
+                        # binario del repositorio" se ofrece desde esa misma fila
+                        del search_output['repositories'][pkg.name]
+
         if search_output['repositories']:
             for pkgname, data in search_output['repositories'].items():
                 res.new.append(ArchPackage(name=pkgname, i18n=self.i18n, **data))
@@ -413,6 +423,60 @@ class ArchManager(SoftwareManager, SettingsController):
 
         res.update_total()
         return res
+
+    @staticmethod
+    def prefer_repository_results(search_output: Dict[str, dict]) -> Set[str]:
+        """
+        Cuando un mismo nombre aparece en los resultados de repositorio y en los del AUR,
+        conserva solo la entrada del repositorio para no ofrecer compilar algo que ya existe
+        compilado. Funciona con cualquier repositorio de pacman habilitado (chaotic-aur,
+        repositorios propios, extra...), no solo con Chaotic AUR.
+
+        Devuelve los nombres descartados de los resultados del AUR.
+        """
+        repository_results, aur_results = search_output.get('repositories'), search_output.get('aur')
+
+        if not repository_results or not aur_results:
+            return set()
+
+        discarded = {name for name in aur_results if name in repository_results}
+
+        for name in discarded:
+            del aur_results[name]
+
+        return discarded
+
+    @staticmethod
+    def fill_repository_availability(pkgs: Iterable[ArchPackage], repository_map: Dict[str, str]):
+        """
+        Anota en cada paquete instalado desde el AUR el repositorio binario donde tambien esta
+        disponible ('repo_available'), lo que habilita la accion de cambio al binario.
+        """
+        if not repository_map:
+            return
+
+        for pkg in pkgs:
+            if pkg.installed and pkg.repository == 'aur':
+                repository = repository_map.get(pkg.name)
+
+                if repository and repository != 'aur':
+                    pkg.repo_available = repository
+
+    def _fill_repository_availability(self, pkgs: List[ArchPackage]):
+        """Consulta a pacman que paquetes instalados desde el AUR existen en un repositorio."""
+        aur_names = {p.name for p in pkgs if p.name and p.installed and p.repository == 'aur'}
+
+        if not aur_names:
+            return
+
+        try:
+            repository_map = pacman.map_available_repositories(aur_names)
+        except Exception:
+            self.logger.error("Could not determine which AUR packages are available on the enabled repositories")
+            import logging; logging.error("Exception occurred", exc_info=True)
+            return
+
+        self.fill_repository_availability(pkgs, repository_map)
 
     def _fill_aur_pkgs_offline(self, aur_pkgs: dict, arch_config: dict, output: List[ArchPackage], disk_loader: Optional[DiskCacheLoader]):
         self.logger.info("Reading cached data from installed AUR packages")
@@ -633,6 +697,9 @@ class ArchManager(SoftwareManager, SettingsController):
                 t.join()
 
         if pkgs:
+            if repos_supported and aur_supported:
+                self._fill_repository_availability(pkgs)
+
             ignored = self._fill_ignored_updates(set())
 
             if ignored:
@@ -837,6 +904,19 @@ class ArchManager(SoftwareManager, SettingsController):
     def _is_database_locked(self, handler: ProcessHandler, root_password: Optional[str]) -> bool:
         if os.path.exists('/var/lib/pacman/db.lck'):
             handler.watcher.print('pacman database is locked')
+
+            running_pids = pacman.list_running_pacman_pids()
+
+            if running_pids:
+                # con una transaccion de pacman viva, borrar el bloqueo permitiria dos
+                # transacciones simultaneas y corromper /var/lib/pacman/local
+                pids = ', '.join(str(pid) for pid in sorted(running_pids))
+                self.logger.warning(f"pacman is running (PIDs: {pids}). The database lock will not be removed")
+                handler.watcher.show_message(title=self.i18n['arch.action.db_locked.title'].capitalize(),
+                                             body=self.i18n['arch.action.db_locked.running'].format(bold(pids)),
+                                             type_=MessageType.WARNING)
+                return True
+
             msg = '<p>{}</p><p>{}</p><br/>'.format(self.i18n['arch.action.db_locked.body.l1'],
                                                    self.i18n['arch.action.db_locked.body.l2'])
             if handler.watcher.request_confirmation(title=self.i18n['arch.action.db_locked.title'].capitalize(),
@@ -845,7 +925,9 @@ class ArchManager(SoftwareManager, SettingsController):
                                                     deny_label=self.i18n['cancel'].capitalize()):
 
                 try:
-                    if not handler.handle_simple(SimpleProcess(['rm', '-rf', '/var/lib/pacman/db.lck'], root_password=root_password)):
+                    lock_removed, _ = handler.handle_simple(SimpleProcess(['rm', '-f', '/var/lib/pacman/db.lck'],
+                                                                          root_password=root_password))
+                    if not lock_removed:
                         handler.watcher.show_message(title=self.i18n['error'].capitalize(),
                                                      body=self.i18n['arch.action.db_locked.error'],
                                                      type_=MessageType.ERROR)
@@ -934,7 +1016,8 @@ class ArchManager(SoftwareManager, SettingsController):
     def _upgrade_repo_pkgs(self, to_upgrade: List[str], to_remove: Optional[Set[str]], handler: ProcessHandler, root_password: Optional[str],
                            multithread_download: bool, pkgs_data: Dict[str, dict], overwrite_files: bool = False,
                            status_handler: TransactionStatusHandler = None, sizes: Dict[str, int] = None, download: bool = True,
-                           check_syncfirst: bool = True, skip_dependency_checks: bool = False) -> bool:
+                           check_syncfirst: bool = True, skip_dependency_checks: bool = False,
+                           conflicting_files: Optional[Collection[str]] = None) -> bool:
         self.logger.info("Total packages to upgrade: {}".format(len(to_upgrade)))
 
         to_sync_first = None
@@ -992,6 +1075,7 @@ class ArchManager(SoftwareManager, SettingsController):
             success, upgrade_output = handler.handle_simple(pacman.upgrade_several(pkgnames=to_upgrade_remaining,
                                                                                    root_password=root_password,
                                                                                    overwrite_conflicting_files=overwrite_files,
+                                                                                   conflicting_files=conflicting_files,
                                                                                    skip_dependency_checks=skip_dependency_checks),
                                                             output_handler=output_handler.handle)
             handler.watcher.change_substatus('')
@@ -1024,6 +1108,7 @@ class ArchManager(SoftwareManager, SettingsController):
                                                    handler=handler,
                                                    root_password=root_password,
                                                    overwrite_files=True,
+                                                   conflicting_files=pacman.list_conflicting_files(upgrade_output),
                                                    status_handler=output_handler,
                                                    multithread_download=multithread_download,
                                                    download=False,
@@ -1219,7 +1304,7 @@ class ArchManager(SoftwareManager, SettingsController):
                                                                  root_password=root_password,
                                                                  error_phrases={'error: failed to prepare transaction',
                                                                                 'error: failed to commit transaction'},
-                                                                 shell=True),
+                                                                 shell=False),
                                                    output_handler=status_handler.handle)
         status_handler.stop_working()
         status_handler.join()
@@ -1639,6 +1724,10 @@ class ArchManager(SoftwareManager, SettingsController):
             info = self._map_info_aur_uninstalled(pkg, fill_pkgbuild)
 
         info["00_url"] = f"https://aur.archlinux.org/packages/{pkg.get_base_name()}"
+
+        if pkg.repo_available:
+            info['07_repo_available'] = pkg.repo_available
+
         return info
 
     def _parse_dates_string_from_info(self, pkgname: str, info: dict):
@@ -2590,12 +2679,15 @@ class ArchManager(SoftwareManager, SettingsController):
 
         return installed
 
-    def _call_pacman_install(self, context: TransactionContext, to_install: List[str], overwrite_files: bool, status_handler: Optional[object] = None) -> Tuple[bool, str]:
+    def _call_pacman_install(self, context: TransactionContext, to_install: List[str], overwrite_files: bool,
+                             status_handler: Optional[object] = None,
+                             conflicting_files: Optional[Collection[str]] = None) -> Tuple[bool, str]:
         return context.handler.handle_simple(pacman.install_as_process(pkgpaths=to_install,
                                                                        root_password=context.root_password,
                                                                        file=context.has_install_files(),
                                                                        pkgdir=context.project_dir,
                                                                        overwrite_conflicting_files=overwrite_files,
+                                                                       conflicting_files=conflicting_files,
                                                                        as_deps=context.dependency),
                                              output_handler=status_handler.handle if status_handler else None)
 
@@ -2609,8 +2701,10 @@ class ArchManager(SoftwareManager, SettingsController):
                                                                 deny_label=self.i18n['arch.install.error.conflicting_files.proceed'],
                                                                 confirmation_label=self.i18n['arch.install.error.conflicting_files.stop'],
                                                                 components=self._map_conflicting_file(output)):
+                # solo se sobrescriben los ficheros concretos que pacman ha reportado
                 installed, output = self._call_pacman_install(context=context, to_install=to_install,
-                                                              overwrite_files=True, status_handler=status_handler)
+                                                              overwrite_files=True, status_handler=status_handler,
+                                                              conflicting_files=pacman.list_conflicting_files(output))
 
         return installed
 
@@ -3686,6 +3780,45 @@ class ArchManager(SoftwareManager, SettingsController):
                             context=context,
                             disk_loader=self.context.disk_loader_factory.new()).success
 
+    def switch_to_repository(self, pkg: ArchPackage, root_password: Optional[str], watcher: ProcessWatcher) -> bool:
+        """
+        Reinstala desde un repositorio binario un paquete que se habia compilado desde el AUR.
+
+        Solo se ofrece cuando 'read_installed' detecto el mismo nombre en un repositorio
+        habilitado. Sirve para cualquier repositorio de pacman (chaotic-aur, repositorios
+        propios, extra...), no solo para Chaotic AUR.
+        """
+        if pkg.repository != 'aur' or not pkg.repo_available:
+            self.logger.warning(f"No repository binary available for '{pkg.name}'")
+            return False
+
+        repository = pkg.repo_available
+        self.logger.info(f"Switching '{pkg.name}' from AUR to the repository '{repository}'")
+
+        repo_pkg = ArchPackage(name=pkg.name,
+                               version=pkg.version,
+                               latest_version=pkg.version,
+                               description=pkg.description,
+                               repository=repository,
+                               i18n=self.i18n)
+
+        installed = self.install(pkg=repo_pkg,
+                                 root_password=root_password,
+                                 watcher=watcher,
+                                 disk_loader=self.context.disk_loader_factory.new()).success
+
+        if installed:
+            pkg.repository = repository
+            pkg.maintainer = repository
+            pkg.repo_available = None
+            pkg.pkgbuild_editable = None
+            pkg.allow_rebuild = None
+            pkg.require_rebuild = False
+            pkg.aur_update = False
+            pkg.update = False
+
+        return installed
+
     def set_rebuild_check(self, pkg: ArchPackage, root_password: Optional[str], watcher: ProcessWatcher) -> bool:
         if pkg.repository != 'aur':
             return False
@@ -3735,7 +3868,7 @@ class ArchManager(SoftwareManager, SettingsController):
             except KeyError:
                 self.logger.warning(f"Package builder user '{self.pkgbuilder_user}' does not exist")
                 self.logger.info(f"Adding the package builder user '{self.pkgbuilder_user}'")
-                added, output = handler.handle_simple(SimpleProcess(cmd=['useradd', self.pkgbuilder_user], shell=True))
+                added, output = handler.handle_simple(SimpleProcess(cmd=['useradd', self.pkgbuilder_user], shell=False))
 
                 if not added:
                     output_log = "Command output: {}".format(output.replace('\n', ' ') if output else '(no output)')

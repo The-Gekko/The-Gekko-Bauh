@@ -1,24 +1,30 @@
-from typing import Optional, Iterable
+from typing import Iterable, Optional
 
-from bauh.api.abstract.model import SoftwarePackage, CustomSoftwareAction
+from bauh.api.abstract.model import CustomSoftwareAction, SoftwarePackage
 from bauh.gems.eopkg import get_icon_path
 
 
 class EopkgPackage(SoftwarePackage):
-    """Represents a Solus OS package managed by eopkg."""
+    """Representa un paquete de Solus OS gestionado por eopkg."""
 
     def __init__(self, name: str, version: str = None, description: str = None,
-                 installed: bool = False, update: bool = False):
+                 installed: bool = False, update: bool = False,
+                 latest_version: str = None, release: str = None,
+                 component: str = None):
         super(EopkgPackage, self).__init__(
             id=name,
             name=name,
             version=version,
-            latest_version=version,
+            # cuando no se conoce la versión disponible se asume la instalada,
+            # de modo que la columna «última versión» nunca quede vacía
+            latest_version=latest_version if latest_version else version,
             icon_url=None,
             description=description,
             installed=installed,
             update=update
         )
+        self.release = release
+        self.component = component
 
     def __repr__(self):
         return f"EopkgPackage(name={self.name}, version={self.version})"
@@ -42,8 +48,8 @@ class EopkgPackage(SoftwarePackage):
         return get_icon_path()
 
     def is_application(self):
-        # We don't have a reliable way to distinguish apps from libs purely via eopkg CLI
-        # without inspecting .desktop files, so we default to True to let it show up
+        # no hay forma fiable de distinguir aplicaciones de bibliotecas usando sólo la CLI de
+        # eopkg sin inspeccionar los .desktop instalados, así que se muestran todas
         return True
 
     def get_data_to_cache(self) -> dict:

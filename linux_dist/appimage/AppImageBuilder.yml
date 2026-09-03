@@ -1,3 +1,15 @@
+# ATENCIÓN: receta NO soportada en bauh Gekko Edition.
+#
+# Descarga el tarball de vinifmor/bauh (línea `wget`, más abajo), así que
+# empaqueta el proyecto ORIGINAL y no este fork; además `update-information`
+# apunta a las releases del upstream, de modo que el AppImage se
+# auto-actualizaría sustituyendo el fork por el bauh oficial. El paso
+# `rm setup.cfg setup.py requirements.txt` tampoco aplica ya: los metadatos
+# viven en la tabla [project] de pyproject.toml.
+#
+# Se conserva solo como referencia histórica. Ver linux_dist/README.md.
+# El canal soportado es install.sh + pipx.
+
 version: 1
 script:
   - rm -rf AppDir appimage-builder-cache *.AppImage *.zsync |true

@@ -1,5 +1,13 @@
 name=Matugen (Dynamic Wallpaper)
-description=Tema dinámico sincronizado en tiempo real con Matugen y el fondo de pantalla
+description=Dynamic theme synchronised in real time with Matugen and the wallpaper
 description[es]=Tema dinámico sincronizado en tiempo real con Matugen y el fondo de pantalla
+description[pt]=Tema dinâmico sincronizado em tempo real com o Matugen e o papel de parede
+description[de]=Dynamisches Theme, das in Echtzeit mit Matugen und dem Hintergrundbild synchronisiert wird
+description[fr]=Thème dynamique synchronisé en temps réel avec Matugen et le fond d'écran
+description[it]=Tema dinamico sincronizzato in tempo reale con Matugen e lo sfondo
+description[ru]=Динамическая тема, синхронизируемая в реальном времени с Matugen и обоями
+description[tr]=Matugen ve duvar kağıdıyla gerçek zamanlı eşitlenen dinamik tema
+description[zh]=与 Matugen 和壁纸实时同步的动态主题
+description[ca]=Tema dinàmic sincronitzat en temps real amb Matugen i el fons de pantalla
 version=1.0
 root_theme=aurora

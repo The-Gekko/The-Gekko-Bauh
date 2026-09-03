@@ -6,6 +6,19 @@ FILE_PATH = f'{CONFIG_DIR}/config.yml'
 BACKUP_DEFAULT_REMOVE_METHOD = 'self'
 BACKUP_REMOVE_METHODS = {BACKUP_DEFAULT_REMOVE_METHOD, 'all'}
 
+# tema por defecto del fork
+DEFAULT_THEME = 'aurora'
+
+# única fuente de verdad del esquema de 'custom_theme' (defaults y restablecimiento)
+DEFAULT_CUSTOM_THEME = {
+    'enabled': False,
+    'background_color': '#161B22',
+    'text_color': '#FFFFFF',
+    'accent_color': '#FF4500',
+    'opacity': 100,
+    'background_image': None
+}
+
 
 class CoreConfigManager(YAMLConfigManager):
 
@@ -56,16 +69,10 @@ class CoreConfigManager(YAMLConfigManager):
                 'hdpi': True,
                 "auto_scale": False,
                 "scale_factor": 1.0,
-                'theme': 'light',
+                'theme': DEFAULT_THEME,
                 'system_theme': False
             },
-            'custom_theme': {
-                'background_color': '#161B22',
-                'text_color': '#FFFFFF',
-                'accent_color': '#FF4500',
-                'opacity': 100,
-                'background_image': None
-            },
+            'custom_theme': dict(DEFAULT_CUSTOM_THEME),
             'download': {
                 'multithreaded': False,
                 'multithreaded_client': None,

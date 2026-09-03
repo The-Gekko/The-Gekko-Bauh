@@ -1,46 +1,32 @@
-import logging
-import operator
-import os.path
-import shutil
-import time
-from pathlib import Path
-from typing import List, Type, Set, Tuple, Optional, Dict, Any
-from PyQt5.QtCore import QEvent, Qt, pyqtSignal, QRect
-from PyQt5.QtGui import QIcon, QWindowStateChangeEvent, QCursor, QCloseEvent, QShowEvent
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QCheckBox, QHeaderView, QToolBar, QLabel, QPlainTextEdit, QProgressBar, QPushButton, QComboBox, QApplication, QListView, QSizePolicy, QMenu, QHBoxLayout, QFrame
-from bauh.api import user
-from bauh.api.abstract.cache import MemoryCache
-from bauh.api.abstract.context import ApplicationContext
-from bauh.api.abstract.controller import SoftwareManager, SoftwareAction
-from bauh.api.abstract.model import SoftwarePackage
+from typing import List
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QIcon, QCursor
+from PyQt5.QtWidgets import QWidget, QCheckBox, QHeaderView, QApplication, QMenu
 from bauh.api.abstract.view import MessageType
-from bauh.api.http import HttpClient
-from bauh.api.paths import LOGS_DIR
-from bauh.commons.html import bold
 from bauh.context import set_theme
-from bauh.view.qt.window.constants import *
+from bauh.view.qt.window.constants import CHECK_DETAILS, BT_CUSTOM_ACTIONS, GROUP_LOWER_BTS
 from bauh.stylesheet import read_all_themes_metadata, ThemeMetadata
 from bauh.view.core.config import CoreConfigManager
-from bauh.view.core.tray_client import notify_tray
-from bauh.view.qt import dialog, commons, qt_utils
+from bauh.view.qt import dialog
 from bauh.view.qt.about import AboutDialog
-from bauh.view.qt.apps_table import PackagesTable, UpgradeToggleButton
-from bauh.view.qt.commons import sum_updates_displayed, PackageFilters
-from bauh.view.qt.components import new_spacer, IconButton, QtComponentsManager, to_widget, QSearchBar, QCustomMenuAction, QCustomToolbar
+from bauh.view.qt.components import to_widget, QCustomMenuAction
 from bauh.view.qt.dialog import ConfirmationDialog
-from bauh.view.qt.history import HistoryDialog
-from bauh.view.qt.info import InfoDialog
 from bauh.view.qt.qt_utils import get_current_screen_geometry
-from bauh.view.qt.root import RootDialog
-from bauh.view.qt.screenshots import ScreenshotsDialog
 from bauh.view.qt.settings import SettingsWindow
-from bauh.view.qt.thread import UpgradeSelected, RefreshApps, UninstallPackage, DowngradePackage, ShowPackageInfo, ShowPackageHistory, SearchPackages, InstallPackage, AnimateProgress, NotifyPackagesReady, FindSuggestions, ListWarnings, AsyncAction, LaunchPackage, ApplyFilters, CustomSoftwareAction, ShowScreenshots, CustomAction, NotifyInstalledLoaded, IgnorePackageUpdates, SaveTheme, StartAsyncAction
-from bauh.view.qt.view_index import add_to_index, new_package_index
-from bauh.view.qt.view_model import PackageView, PackageViewStatus
-from bauh.view.util import util, resource
-from bauh.view.util.translation import I18n
+from bauh.api.abstract.model import CustomSoftwareAction
 
 class WindowUIMixin:
+    """Presentacion y dialogos secundarios de la ventana principal.
+
+    Contrato con la clase anfitriona (ManageWindow), que debe definir:
+      - atributos de estado: 'i18n', 'config', 'context', 'manager', 'custom_actions', 'dialog_about',
+        'settings_window', 'progress_controll_enabled', '_maximized', 'pkgs'
+      - widgets: 'icon_status', 'label_status', 'label_substatus', 'toolbar_substatus', 'toolbar_filters',
+        'toolbar_status', 'table_apps', 'table_container', 'textarea_details', 'check_details', 'progress_bar'
+      - colaboradores: 'comp_manager' (QtComponentsManager), 'thread_animate_progress', 'thread_save_theme'
+      - senales: 'signal_user_res'
+      - metodos: 'begin_execute_custom_action'
+    """
 
     def _update_process_progress(self, val: int):
         if self.progress_controll_enabled:
@@ -128,7 +114,7 @@ class WindowUIMixin:
         toolbar_width = self.toolbar_filters.sizeHint().width()
         topbar_width = self.toolbar_status.sizeHint().width()
         new_width = max(table_width, toolbar_width, topbar_width)
-        new_width *= 1.05
+        new_width *= 1.05  # this extra size is not because of the toolbar button, but the table upgrade buttons
         new_width = int(new_width)
         if new_width >= self.maximumWidth():
             new_width = self.maximumWidth()
@@ -192,7 +178,11 @@ class WindowUIMixin:
     def _map_theme_action(self, theme: ThemeMetadata, menu: QMenu) -> QCustomMenuAction:
 
         def _change_theme():
-            set_theme(theme_key=theme.key, app=QApplication.instance(), logger=self.context.logger)
+            # el config en memoria debe reflejar el tema elegido: si no, el watcher de gtk.css
+            # vuelve a aplicar el tema anterior y se pierden los overrides de 'custom_theme'
+            self.config['ui']['theme'] = theme.key
+            set_theme(theme_key=theme.key, app=QApplication.instance(), logger=self.context.logger,
+                      app_config=self.config)
             self.thread_save_theme.theme_key = theme.key
             self.thread_save_theme.start()
         return QCustomMenuAction(label=theme.get_i18n_name(self.i18n), action=_change_theme, parent=menu, tooltip=theme.get_i18n_description(self.i18n))

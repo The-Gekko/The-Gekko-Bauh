@@ -1,44 +1,30 @@
 import logging
-import operator
-import os.path
 import shutil
-import time
-from pathlib import Path
-from typing import List, Type, Set, Tuple, Optional, Dict, Any
+from typing import List, Set, Optional, Dict, Any
 from PyQt5.QtCore import QEvent, Qt, pyqtSignal, QRect
 from PyQt5.QtGui import QIcon, QWindowStateChangeEvent, QCursor, QCloseEvent, QShowEvent
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QCheckBox, QHeaderView, QToolBar, QLabel, QPlainTextEdit, QProgressBar, QPushButton, QComboBox, QApplication, QListView, QSizePolicy, QMenu, QHBoxLayout, QFrame
-from bauh.api import user
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QCheckBox, QHeaderView, QToolBar, QLabel, QPlainTextEdit, QProgressBar, QPushButton, QComboBox, QApplication, QListView, QSizePolicy, QHBoxLayout, QFrame
 from bauh.api.abstract.cache import MemoryCache
 from bauh.api.abstract.context import ApplicationContext
-from bauh.api.abstract.controller import SoftwareManager, SoftwareAction
+from bauh.api.abstract.controller import SoftwareManager
 from bauh.api.abstract.model import SoftwarePackage
 from bauh.api.abstract.view import MessageType
 from bauh.api.http import HttpClient
-from bauh.api.paths import LOGS_DIR
-from bauh.commons.html import bold
 from bauh.context import set_theme
-from bauh.stylesheet import read_all_themes_metadata, ThemeMetadata
-from bauh.view.core.config import CoreConfigManager
-from bauh.view.core.tray_client import notify_tray
-from bauh.view.qt import dialog, commons, qt_utils
-from bauh.view.qt.about import AboutDialog
-from bauh.view.qt.apps_table import PackagesTable, UpgradeToggleButton
-from bauh.view.qt.commons import sum_updates_displayed, PackageFilters
-from bauh.view.qt.components import new_spacer, IconButton, QtComponentsManager, to_widget, QSearchBar, QCustomMenuAction, QCustomToolbar
+from bauh.view.qt import commons, qt_utils
+from bauh.view.qt.apps_table import PackagesTable
+from bauh.view.qt.commons import sum_updates_displayed
+from bauh.view.qt.components import new_spacer, IconButton, QtComponentsManager, QSearchBar, QCustomToolbar
 from bauh.view.qt.dialog import ConfirmationDialog
-from bauh.view.qt.history import HistoryDialog
-from bauh.view.qt.info import InfoDialog
 from bauh.view.qt.qt_utils import get_current_screen_geometry
-from bauh.view.qt.root import RootDialog
-from bauh.view.qt.screenshots import ScreenshotsDialog
-from bauh.view.qt.settings import SettingsWindow
-from bauh.view.qt.thread import UpgradeSelected, RefreshApps, UninstallPackage, DowngradePackage, ShowPackageInfo, ShowPackageHistory, SearchPackages, InstallPackage, AnimateProgress, NotifyPackagesReady, FindSuggestions, ListWarnings, AsyncAction, LaunchPackage, ApplyFilters, CustomSoftwareAction, ShowScreenshots, CustomAction, NotifyInstalledLoaded, IgnorePackageUpdates, SaveTheme, StartAsyncAction
+from bauh.view.qt.thread import UpgradeSelected, RefreshApps, UninstallPackage, DowngradePackage, ShowPackageInfo, ShowPackageHistory, SearchPackages, InstallPackage, AnimateProgress, NotifyPackagesReady, FindSuggestions, ListWarnings, AsyncAction, LaunchPackage, ApplyFilters, ShowScreenshots, CustomAction, NotifyInstalledLoaded, IgnorePackageUpdates, SaveTheme, StartAsyncAction
 from bauh.view.qt.view_index import add_to_index, new_package_index
 from bauh.view.qt.view_model import PackageView, PackageViewStatus
-from bauh.view.util import util, resource
 from bauh.view.util.translation import I18n
-from bauh.view.qt.window.constants import *
+from bauh.view.qt.window.constants import DISPLAY_NAME, BLOCKING_ACTIONS, SEARCH_BAR, BT_INSTALLED, BT_REFRESH, \
+    BT_SUGGESTIONS, BT_UPGRADE, BT_MATUGEN, CHECK_INSTALLED, CHECK_UPDATES, CHECK_APPS, COMBO_TYPES, CHECK_VERIFIED, \
+    COMBO_CATEGORIES, INP_NAME, CHECK_DETAILS, BT_SETTINGS, BT_CUSTOM_ACTIONS, BT_ABOUT, BT_THEMES, GROUP_FILTERS, \
+    GROUP_VIEW_INSTALLED, GROUP_VIEW_SEARCH, GROUP_UPPER_BAR, GROUP_LOWER_BTS
 
 from bauh.view.qt.window.mixins.actions import WindowActionsMixin
 from bauh.view.qt.window.mixins.filters import WindowFiltersMixin
@@ -57,12 +43,12 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
         self.i18n = i18n
         self.logger = logger
         self.manager = manager
-        self.working = False
-        self.installed_loaded = False
-        self.pkgs = []
-        self.pkgs_available = []
-        self.pkgs_installed = []
-        self.pkg_idx: Optional[Dict[str, Any]] = None
+        self.working = False  # restrict the number of threaded actions
+        self.installed_loaded = False  # used to control the state when the interface is set to not load the apps on startup
+        self.pkgs = []  # packages current loaded in the table
+        self.pkgs_available = []  # all packages loaded in memory
+        self.pkgs_installed = []  # cached installed packages
+        self.pkg_idx: Optional[Dict[str, Any]] = None  # all packages available indexed by the available filters
         self.display_limit = config['ui']['table']['max_displayed']
         self.icon_cache = icon_cache
         self.config = config
@@ -70,7 +56,7 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
         self.http_client = http_client
         self.icon_app = icon
         self.setWindowIcon(self.icon_app)
-        self.setWindowTitle('Bauh Fork The-Gekko')
+        self.setWindowTitle(DISPLAY_NAME)
         
         custom_theme_config = self.config.get('custom_theme') or {}
         opacity = custom_theme_config.get('opacity', 100)
@@ -220,16 +206,23 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
         self.toolbar_filters.layout().addWidget(self.bt_upgrade)
         self.comp_manager.register_component(BT_UPGRADE, self.bt_upgrade)
 
-        bt_matugen = QPushButton()
-        bt_matugen.setObjectName('bt_matugen')
-        bt_matugen.setProperty('root', 'true')
-        bt_matugen.setCursor(QCursor(Qt.PointingHandCursor))
-        bt_matugen.setToolTip('🎨 Sincronizar tema dinámico Matugen con el fondo de pantalla')
-        bt_matugen.setText('🎨 Matugen')
-        bt_matugen.clicked.connect(self._handle_matugen_toggle)
-        bt_matugen.sizePolicy().setRetainSizeWhenHidden(True)
-        toolbar_bts.append(bt_matugen)
-        self.toolbar_filters.layout().addWidget(bt_matugen)
+        self.bt_matugen = QPushButton()
+        self.bt_matugen.setObjectName('bt_matugen')
+        self.bt_matugen.setProperty('root', 'true')
+        self.bt_matugen.setCursor(QCursor(Qt.PointingHandCursor))
+        self.bt_matugen.setToolTip(self.i18n.get('manage_window.bt.matugen.tip',
+                                                 'Sync the dynamic Matugen theme with the current wallpaper'))
+        self.bt_matugen.setText(self.i18n.get('manage_window.bt.matugen.text', 'Matugen'))
+        # se usa un icono del tema del sistema (nunca un emoji) para no alterar el ancho calculado de la barra
+        matugen_icon = QIcon.fromTheme('preferences-desktop-theme')
+        if not matugen_icon.isNull():
+            self.bt_matugen.setIcon(matugen_icon)
+        self.bt_matugen.clicked.connect(self._handle_matugen_toggle)
+        self.bt_matugen.sizePolicy().setRetainSizeWhenHidden(True)
+        toolbar_bts.append(self.bt_matugen)
+        self.toolbar_filters.layout().addWidget(self.bt_matugen)
+        self.comp_manager.register_component(BT_MATUGEN, self.bt_matugen)
+        # setting all buttons to the same size:
         bt_biggest_size = 0
         for bt in toolbar_bts:
             bt_width = bt.sizeHint().width()
@@ -381,16 +374,20 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
         self.thread_load_installed.signal_loaded.connect(self._finish_loading_installed)
         self._register_groups()
         self._screen_geometry: Optional[QRect] = None
-        self.searched_term: Optional[str] = None
-        self._can_open_urls: Optional[bool] = None
+        self.searched_term: Optional[str] = None  # last searched term
+        self._can_open_urls: Optional[bool] = None  # whether URLs can be opened in the browser
+        self.current_action_id: Optional[int] = None  # accion en curso (None cuando no hay ninguna)
         qt_utils.centralize(self)
 
     def _register_groups(self):
         common_filters = (CHECK_APPS, CHECK_VERIFIED, CHECK_UPDATES, COMBO_CATEGORIES, COMBO_TYPES, INP_NAME)
         self.comp_manager.register_group(GROUP_FILTERS, False, CHECK_INSTALLED, *common_filters)
-        self.comp_manager.register_group(GROUP_VIEW_SEARCH, False, CHECK_INSTALLED, CHECK_VERIFIED, COMBO_CATEGORIES, COMBO_TYPES, INP_NAME, BT_INSTALLED, BT_SUGGESTIONS)
-        self.comp_manager.register_group(GROUP_VIEW_INSTALLED, False, BT_REFRESH, BT_UPGRADE, *common_filters)
-        self.comp_manager.register_group(GROUP_UPPER_BAR, False, CHECK_APPS, CHECK_VERIFIED, CHECK_UPDATES, CHECK_INSTALLED, COMBO_CATEGORIES, COMBO_TYPES, INP_NAME, BT_INSTALLED, BT_SUGGESTIONS, BT_REFRESH, BT_UPGRADE)
+        self.comp_manager.register_group(GROUP_VIEW_SEARCH, False, CHECK_INSTALLED, CHECK_VERIFIED, COMBO_CATEGORIES, COMBO_TYPES, INP_NAME, BT_INSTALLED, BT_SUGGESTIONS, BT_MATUGEN)
+        self.comp_manager.register_group(GROUP_VIEW_INSTALLED, False, BT_REFRESH, BT_UPGRADE, BT_MATUGEN, *common_filters)
+        self.comp_manager.register_group(GROUP_UPPER_BAR, False,
+                                         CHECK_APPS, CHECK_VERIFIED, CHECK_UPDATES, CHECK_INSTALLED,  # checkboxes
+                                         COMBO_CATEGORIES, COMBO_TYPES, INP_NAME,  # filters
+                                         BT_INSTALLED, BT_SUGGESTIONS, BT_REFRESH, BT_UPGRADE, BT_MATUGEN)  # buttons
         self.comp_manager.register_group(GROUP_LOWER_BTS, False, BT_SUGGESTIONS, BT_THEMES, BT_CUSTOM_ACTIONS, BT_SETTINGS, BT_ABOUT)
 
     def update_custom_actions(self):
@@ -402,6 +399,8 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
             self.thread_notify_pkgs_ready.wait(1000)
 
     def _update_table_and_upgrades(self, packages_displayed: List[PackageView]):
+        # generating a mocked info to keep compatibility with '_update_table' inputs.
+        # 'not_installed' is only used for a quick check and does not require an exact number (only 0 or 1)
         info = {'pkgs_displayed': packages_displayed, 'not_installed': 1 if len(self.pkgs_installed) != len(self.pkgs_available) else 0}
         self._update_table(pkgs_info=info, signal=True)
         if self.pkgs:
@@ -491,9 +490,9 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
 
     def event(self, e: QEvent) -> bool:
         res = super(ManageWindow, self).event(e)
-        if self.isVisible() and e.type() == 216:
+        if self.isVisible() and e.type() == 216:  # drop event
             current_geometry = get_current_screen_geometry()
-            if current_geometry != self._screen_geometry:
+            if current_geometry != self._screen_geometry:  # only if the display device has changed
                 self._screen_geometry = current_geometry
                 self._update_size_limits()
                 self._reorganize()
@@ -502,7 +501,7 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
 
     def _update_table_indexes(self):
         if self.pkgs:
-            for new_idx, pkgv in enumerate(self.pkgs):
+            for new_idx, pkgv in enumerate(self.pkgs):  # updating the package indexes
                 pkgv.table_index = new_idx
 
     def _update_index(self):
@@ -645,7 +644,7 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
                         categories_to_add = {c for c in pkg_categories if c and c not in current_categories}
                         if categories_to_add:
                             for cat in categories_to_add:
-                                self.__add_category(cat)
+                                self._add_category(cat)
                 else:
                     self._update_categories(pkg_categories)
 
@@ -658,8 +657,47 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
         self.types_changed = True
         self.begin_refresh_packages()
 
+    def _blocking_threads(self) -> List[AsyncAction]:
+        """Devuelve los hilos de accion (instalar/desinstalar/actualizar/...) que siguen vivos."""
+        threads = (self.thread_update, self.thread_install, self.thread_uninstall, self.thread_downgrade,
+                   self.thread_custom_action)
+        return [t for t in threads if t is not None and t.isRunning()]
+
+    def is_transaction_running(self) -> bool:
+        """Indica si hay una transaccion de paquetes en curso (proceso privilegiado en marcha)."""
+        return self.current_action_id in BLOCKING_ACTIONS or bool(self._blocking_threads())
+
+    def _stop_action_threads(self, timeout: int = 5000) -> None:
+        """Pide la parada de los hilos de accion vivos y los espera con un limite de tiempo."""
+        running = self._blocking_threads()
+
+        for thread in running:
+            thread.stop = True
+            thread.wait_confirmation = False
+            thread.requestInterruption()
+
+        for thread in running:
+            if not thread.wait(timeout):
+                self.logger.warning(f"The action thread '{thread.__class__.__name__}' did not stop within "
+                                    f"{timeout} milliseconds")
+
     def closeEvent(self, event: QCloseEvent) -> None:
+        if self.is_transaction_running():
+            confirmed = ConfirmationDialog(title=self.i18n['manage_window.close.transaction.title'],
+                                           body=f"<p>{self.i18n['manage_window.close.transaction.body']}</p>",
+                                           i18n=self.i18n,
+                                           confirmation_icon_type=MessageType.WARNING).ask()
+
+            if not confirmed:
+                event.ignore()
+                return
+
+            self._stop_action_threads()
+
+        # needs to be stopped to avoid a Qt exception/crash
         self.table_apps.stop_file_downloader(wait=True)
+        self.stop_notifying_package_states()
+        event.accept()
 
     @property
     def can_open_urls(self) -> bool:
@@ -668,10 +706,15 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
         return self._can_open_urls
 
     def _handle_matugen_toggle(self):
-        from bauh.context import set_theme
-        self.config['ui']['theme'] = 'matugen'
-        set_theme(theme_key='matugen', app=QApplication.instance(), logger=self.logger, app_config=self.config)
+        """Aplica el tema dinamico Matugen y lo persiste con el mismo mecanismo que el menu de temas."""
+        theme_key = 'matugen'
+
         try:
-            self.context.configman.save_config(self.config)
+            set_theme(theme_key=theme_key, app=QApplication.instance(), logger=self.logger, app_config=self.config)
         except Exception:
-            pass
+            self.logger.warning(f"Could not apply the '{theme_key}' theme", exc_info=True)
+            return
+
+        self.config['ui']['theme'] = theme_key
+        self.thread_save_theme.theme_key = theme_key
+        self.thread_save_theme.start()

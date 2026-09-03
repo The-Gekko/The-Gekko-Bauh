@@ -1,5 +1,6 @@
 about.title=О программе
 about.info.desc=Графический интерфейс для управления приложениями Linux
+about.info.fork=Изменённая версия (форк) {}
 about.info.link=Ещё информация на
 about.info.license=Свободная лицензия
 about.info.rate.question=Понравилось это приложеие ?

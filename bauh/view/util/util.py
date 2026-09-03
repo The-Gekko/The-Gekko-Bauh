@@ -1,8 +1,9 @@
+import logging
 import os
 import shutil
 import subprocess
 import sys
-import traceback
+from functools import lru_cache
 from typing import List, Tuple
 
 from PyQt5.QtCore import QCoreApplication
@@ -25,25 +26,34 @@ def notify_user(msg: str, icon_path: str = None):
     os.system("notify-send -a {} {} '{}'".format(__app_name__, "-i {}".format(icon_id) if icon_id else '', msg))
 
 
-def get_default_icon(system: bool = True) -> Tuple[str, QIcon]:
-    path = resource.get_path('img/gekko-bauh.png')
-    if os.path.exists(path):
-        return path, QIcon(path)
+@lru_cache(maxsize=8)
+def _cached_icon(path: str) -> QIcon:
+    """Cachea el QIcon por ruta: decodificar el PNG en cada dialogo es caro."""
+    return QIcon(path)
 
+
+def get_default_icon(system: bool = True) -> Tuple[str, QIcon]:
+    # el icono instalado en el tema del sistema tiene prioridad cuando se solicita ('Icon=bauh' de los .desktop)
     if system:
         system_icon = QIcon.fromTheme(__app_name__)
         if not system_icon.isNull():
             return system_icon.name(), system_icon
 
-    return path, QIcon(path)
+    path = resource.get_path('img/gekko-bauh.png')
+    return path, _cached_icon(path)
 
 
 def restart_app():
     appimage_path = os.getenv('APPIMAGE')
 
-    restart_cmd = [appimage_path] if appimage_path else [sys.executable, *sys.argv]
+    if appimage_path:
+        restart_cmd = [appimage_path]
+    else:
+        # se relanza como modulo para que el paquete 'bauh' se resuelva sin depender del directorio actual
+        restart_cmd = [sys.executable, '-m', 'bauh.app', *sys.argv[1:]]
 
-    subprocess.Popen(restart_cmd)
+    # start_new_session desliga el proceso nuevo del grupo de procesos que esta muriendo
+    subprocess.Popen(restart_cmd, start_new_session=True)
     QCoreApplication.exit()
 
 
@@ -81,7 +91,7 @@ def clean_app_files(managers: List[SoftwareManager], logs: bool = True):
             except Exception:
                 if logs:
                     print('{}[bauh] An exception has happened when deleting {}{}'.format(Fore.RED, path, Fore.RESET))
-                    import logging; logging.error("Exception occurred", exc_info=True)
+                    logging.error("Exception occurred", exc_info=True)
 
     if managers:
         for m in managers:

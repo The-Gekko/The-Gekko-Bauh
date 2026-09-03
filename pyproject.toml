@@ -1,3 +1,160 @@
 [build-system]
-requires = ["setuptools>=42", "wheel"]
+requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
+
+[project]
+# Nombre de distribución propio del fork para no colisionar con el paquete
+# «bauh» de PyPI/AUR; el paquete importable y los binarios siguen llamándose
+# «bauh» (ver [tool.setuptools] y [project.scripts]).
+name = "bauh-gekko"
+description = "Interfaz gráfica para gestionar aplicaciones en Linux (Arch/AUR, Chaotic AUR, Flatpak y Solus/eopkg)"
+readme = "README.md"
+requires-python = ">=3.8"
+# Licencia zlib (SPDX: Zlib), la misma del proyecto original. Se declara con la
+# forma clasica (clasificador + license-files) en vez de la cadena SPDX de PEP 639
+# para que el paquete tambien se pueda construir con el setuptools disponible en
+# Python 3.8, que aun no la entiende.
+
+# La versión vive en bauh/__init__.py (primera línea, literal) para que tanto el
+# build como install.sh y el diálogo «Acerca de» lean siempre el mismo valor.
+dynamic = ["version"]
+
+# Autoría original del proyecto del que deriva este fork.
+authors = [
+    { name = "Vinicius Moreira", email = "vinicius_fmoreira@hotmail.com" },
+]
+
+# Quien mantiene este fork.
+maintainers = [
+    { name = "The-Gekko" },
+]
+
+keywords = [
+    "arch",
+    "aur",
+    "chaotic-aur",
+    "eopkg",
+    "flatpak",
+    "package-manager",
+    "solus",
+]
+
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: X11 Applications :: Qt",
+    "License :: OSI Approved :: zlib/libpng License",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: System :: Software Distribution",
+    "Topic :: Utilities",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+
+# Cotas alineadas con requirements.txt (ver F137): mínimas realmente instalables
+# en 3.8–3.14 y techo de major para que una nueva major no entre sin revisión.
+dependencies = [
+    "pyqt5>=5.15,<6",
+    "requests>=2.28,<3",
+    "pyyaml>=6.0,<7",
+    "colorama>=0.4,<1",
+    "python-dateutil>=2.8,<3",
+]
+
+[project.optional-dependencies]
+# La gem «web» es opcional en este fork; sus dependencias también lo son.
+web = [
+    "lxml>=4.9",
+    "beautifulsoup4>=4.11",
+]
+# Lo mínimo para ejecutar la suite de tests sin Qt (ver requirements-dev.txt).
+test = [
+    "pyyaml>=6.0,<7",
+    "requests>=2.28,<3",
+    "colorama>=0.4,<1",
+    "python-dateutil>=2.8,<3",
+    "lxml>=4.9",
+    "beautifulsoup4>=4.11",
+]
+
+[project.scripts]
+bauh = "bauh.app:main"
+bauh-tray = "bauh.app:tray"
+bauh-cli = "bauh.cli.app:main"
+
+[project.urls]
+Homepage = "https://github.com/The-Gekko/Bauh-Fork-The-Gekko"
+Repository = "https://github.com/The-Gekko/Bauh-Fork-The-Gekko"
+Issues = "https://github.com/The-Gekko/Bauh-Fork-The-Gekko/issues"
+Changelog = "https://github.com/The-Gekko/Bauh-Fork-The-Gekko/blob/master/CHANGELOG.md"
+Upstream = "https://github.com/vinifmor/bauh"
+
+[tool.setuptools]
+license-files = ["LICENSE"]
+
+[tool.setuptools.dynamic]
+version = { attr = "bauh.__version__" }
+
+[tool.setuptools.packages.find]
+exclude = ["tests", "tests.*"]
+
+[tool.setuptools.package-data]
+# Equivalente al package_data del antiguo setup.py: locales, imágenes, hojas de
+# estilo y lanzadores .desktop deben viajar dentro del wheel.
+bauh = [
+    "view/resources/locale/*",
+    "view/resources/img/*",
+    "view/resources/style/*",
+    "view/resources/style/*/img/*",
+    "gems/*/resources/img/*",
+    "gems/*/resources/locale/*",
+    "desktop/*",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py38"
+exclude = [
+    ".git",
+    "build",
+    "dist",
+    "linux_dist",
+    "venv",
+    ".venv",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+
+# Estas reglas están silenciadas porque el código heredado del upstream las
+# incumple en masa y arreglarlas de golpe sería un cambio enorme e imposible de
+# revisar. Con esta lista `ruff check bauh tests tools` pasa hoy, así que puede
+# ser una comprobación BLOQUEANTE en CI: cualquier fallo nuevo de las reglas que
+# sí están activas (nombres indefinidos, errores de sintaxis, f-strings rotas…)
+# detiene la fusión desde el primer día.
+#
+# El número entre paréntesis es la deuda medida al crear este fichero. La idea
+# es ir vaciando la lista de arriba abajo: cuando un código llegue a cero, se
+# borra de aquí y queda vigilado para siempre.
+ignore = [
+    "E501",  # línea demasiado larga (masivo en todo el árbol heredado)
+    "F401",  # importación sin usar (656) — incluye los `import traceback` muertos
+    "E702",  # varias sentencias en una línea con «;» (142)
+    "F405",  # nombre que puede venir de un `import *` (118)
+    "W293",  # línea en blanco con espacios (51)
+    "E741",  # nombre de variable ambiguo, p. ej. «l» (21)
+    "F841",  # variable local asignada y nunca usada (18)
+    "F541",  # f-string sin ningún marcador (6)
+    "W292",  # falta el salto de línea final (4)
+    "F403",  # `from … import *` (4)
+    "E722",  # `except:` desnudo (2)
+    "E402",  # importación fuera del principio del módulo (2)
+    "F811",  # redefinición de un nombre sin usar (1)
+    "E713",  # `not x in y` en vez de `x not in y` (1)
+]

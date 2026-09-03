@@ -1,0 +1,231 @@
+name: ci
+
+# El instalador oficial distribuye directamente lo que haya en master
+# (install.sh resuelve el commit de master y lo instala con pipx), así que todo
+# lo que se fusiona aquí llega a los usuarios: cada push y cada pull request
+# tienen que pasar por estos trabajos.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+
+  # La suite completa NO necesita PyQt5: los errores de importación en un
+  # entorno limpio venían de pyyaml y colorama. Este trabajo lo garantiza, y de
+  # paso comprueba el rango de Python que anuncian los classifiers.
+  #
+  # Requisito para que este trabajo esté en verde: todo test que importe PyQt5
+  # debe llevar
+  #   @unittest.skipUnless(importlib.util.find_spec('PyQt5') is not None, 'PyQt5 no disponible')
+  # y hacer la importación dentro del test o del setUp, no en el nivel de módulo:
+  # `unittest discover` falla al recolectar antes de poder saltarse nada.
+  tests:
+    name: tests (py${{ matrix.python }}, sin Qt)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.9', '3.12', '3.14']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Instalar dependencias de test
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Comprobar que la suite arranca sin PyQt5
+        run: |
+          python - <<'PY'
+          import importlib.util
+          import sys
+          if importlib.util.find_spec('PyQt5') is not None:
+              sys.exit('PyQt5 no debería estar instalado en este trabajo')
+          print('OK: no hay PyQt5, la suite debe correr igualmente')
+          PY
+
+      # Los avisos de obsolescencia se tratan como error SOLO cuando los emite
+      # código de bauh: acotarlo por módulo evita que un DeprecationWarning
+      # heredado de una dependencia (o del propio unittest en una versión nueva
+      # de Python) tumbe la CI por algo que no está en nuestras manos.
+      - name: Ejecutar la suite
+        run: >
+          python
+          -W "default::DeprecationWarning"
+          -W "error::DeprecationWarning:bauh"
+          -m unittest discover -s tests -p 'test_*.py' -v
+
+  # Los tests que sí tocan Qt se ejecutan aparte, con plataforma offscreen.
+  qt:
+    name: tests con PyQt5 (offscreen)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar bibliotecas de sistema que pide Qt
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3 libglib2.0-0
+
+      # --only-binary=:all: convierte en fallo visible cualquier dependencia sin
+      # wheel para esta versión de Python: es exactamente lo que install.sh exige
+      # en la máquina del usuario, así que aquí se vigila igual.
+      - name: Instalar dependencias de ejecución y de test
+        run: |
+          python -m pip install --upgrade pip
+          pip install --only-binary=:all: -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Ejecutar la suite con Qt
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: >
+          python
+          -W "default::DeprecationWarning"
+          -W "error::DeprecationWarning:bauh"
+          -m unittest discover -s tests -p 'test_*.py' -v
+
+  lint:
+    name: lint (ruff + shellcheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar ruff
+        run: pip install ruff
+
+      # Bloqueante: usa la configuración de pyproject.toml, que silencia la
+      # deuda heredada del upstream y deja activas las reglas que hoy pasan
+      # (nombres indefinidos, errores de sintaxis, f-strings rotas…).
+      - name: ruff (reglas activas)
+        run: ruff check bauh tests tools
+
+      # Informativo: enseña la deuda pendiente sin bloquear. Cuando un código de
+      # los silenciados llegue a cero, quítalo de `ignore` en pyproject.toml.
+      - name: ruff (deuda heredada)
+        continue-on-error: true
+        run: ruff check bauh tests tools --select E,W,F --statistics
+
+      # El código nuevo de este frente sí se mide con la vara completa.
+      - name: ruff (estricto en código propio)
+        run: ruff check --select E,W,F --ignore E501 tools tests/installer bauh/__init__.py
+
+      - name: Instalar shellcheck
+        run: |
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y shellcheck
+          fi
+          shellcheck --version
+
+      - name: Sintaxis de los scripts
+        run: |
+          bash -n install.sh
+          bash -n tests/installer/run_tests.sh
+
+      - name: shellcheck
+        run: shellcheck install.sh tests/installer/run_tests.sh
+
+  # Ejecuta el instalador de verdad contra pipx, sudo y pacman falsos.
+  installer:
+    name: tests del instalador
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ejecutar tests/installer/run_tests.sh
+        run: bash tests/installer/run_tests.sh
+
+  build:
+    name: build + twine check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar herramientas de empaquetado
+        run: pip install build twine
+
+      - name: Construir wheel y sdist
+        run: python -m build
+
+      - name: twine check
+        run: twine check dist/*
+
+      # Un wheel sin locales, imágenes, estilos o .desktop instala una
+      # aplicación que arranca sin traducciones ni iconos: se comprueba aquí.
+      - name: Comprobar el contenido del wheel
+        run: |
+          python - <<'PY'
+          import glob
+          import sys
+          import zipfile
+
+          wheel = glob.glob('dist/*.whl')[0]
+          names = zipfile.ZipFile(wheel).namelist()
+          required = [
+              'bauh/view/resources/locale/en',
+              'bauh/view/resources/locale/es',
+              'bauh/view/resources/img/',
+              'bauh/view/resources/style/',
+              'bauh/desktop/bauh.desktop',
+              'bauh/desktop/bauh_tray.desktop',
+              'bauh/gems/arch/resources/locale/en',
+              'bauh/gems/flatpak/resources/locale/en',
+              'bauh/gems/eopkg/resources/locale/en',
+          ]
+          missing = [p for p in required if not any(n.startswith(p) for n in names)]
+          if missing:
+              sys.exit('Faltan en el wheel: ' + ', '.join(missing))
+          print(f'OK: {wheel} contiene los {len(required)} recursos comprobados')
+          PY
+
+  locales:
+    name: paridad de traducciones
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Informe completo: siempre visible en el log, nunca bloquea.
+      - name: Informe de traducciones
+        run: python tools/check_locales.py --report
+
+      # Puerta acotada al idioma que el fork garantiza junto con «en». Hoy NO
+      # bloquea porque arrastra dos huecos heredados del upstream:
+      #   bauh/view/resources/locale/es          -> category.mail
+      #   bauh/gems/debian/resources/locale/es   -> debian.info.04.priority.optional
+      # En cuanto se añadan esas dos claves, quita `continue-on-error` para que
+      # la paridad de «es» sea obligatoria; después, quita `--languages` para
+      # exigir todos los idiomas.
+      - name: Exigir paridad en «es»
+        continue-on-error: true
+        run: python tools/check_locales.py --languages es

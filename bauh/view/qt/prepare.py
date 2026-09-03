@@ -4,7 +4,7 @@ import time
 from functools import reduce
 from typing import Tuple, Optional
 
-from PyQt5.QtCore import QSize, Qt, QThread, pyqtSignal, QCoreApplication, QMutex
+from PyQt5.QtCore import QSize, Qt, QThread, pyqtSignal, QCoreApplication, QMutex, QMetaObject, Q_ARG
 from PyQt5.QtGui import QIcon, QCursor, QCloseEvent, QShowEvent
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QSizePolicy, QTableWidget, QHeaderView, QPushButton, \
     QProgressBar, QPlainTextEdit, QToolButton, QHBoxLayout
@@ -13,12 +13,17 @@ from bauh import __app_name__
 from bauh.api.abstract.context import ApplicationContext
 from bauh.api.abstract.controller import SoftwareManager, SoftwareAction
 from bauh.api.abstract.handler import TaskManager
+from bauh.api.abstract.view import MessageType
 from bauh.api import user
 from bauh.view.qt.components import new_spacer, QCustomToolbar
+from bauh.view.qt.dialog import ConfirmationDialog
 from bauh.view.qt.qt_utils import centralize, get_current_screen_geometry
 from bauh.view.qt.root import RootDialog
 from bauh.view.qt.thread import AnimateProgress
 from bauh.view.util.translation import I18n
+
+# margen para que los hilos de preparacion terminen su iteracion actual
+THREAD_STOP_TIMEOUT = 2000
 
 
 class Prepare(QThread, TaskManager):
@@ -60,8 +65,9 @@ class Prepare(QThread, TaskManager):
             ok, root_pwd = self.ask_password()
 
             if not ok:
-                from PyQt5.QtCore import QMetaObject, Qt, QCoreApplication
-                QMetaObject.invokeMethod(QCoreApplication.instance(), "quit", Qt.QueuedConnection)
+                # el upstream terminaba con codigo 1 al cancelar la contrasena: se conserva
+                # ese contrato (los lanzadores lo usan) invocando 'exit' de forma thread-safe
+                QMetaObject.invokeMethod(QCoreApplication.instance(), 'exit', Qt.QueuedConnection, Q_ARG(int, 1))
                 return
 
         self.manager.prepare(self, root_pwd, None)
@@ -114,13 +120,14 @@ class CheckFinished(QThread):
         self.finished = 0
 
     def run(self):
-        while True:
+        while not self.isInterruptionRequested():
             if self.finished == self.total:
                 break
 
             self.msleep(5)
 
-        self.signal_finished.emit()
+        if not self.isInterruptionRequested():
+            self.signal_finished.emit()
 
     def update(self, finished: int):
         if finished is not None:
@@ -134,7 +141,7 @@ class EnableSkip(QThread):
     def run(self):
         ti = datetime.datetime.now()
 
-        while True:
+        while not self.isInterruptionRequested():
             if datetime.datetime.now() >= ti + datetime.timedelta(seconds=10):
                 self.signal_timeout.emit()
                 break
@@ -309,9 +316,45 @@ class PreparePanel(QWidget, TaskManager):
         self.bt_close.setVisible(True)
         self.progress_bar.setVisible(True)
 
+    def stop_threads(self, include_prepare: bool = False) -> None:
+        """Detiene los hilos del panel antes de cerrarlo.
+
+        'include_prepare' solo debe activarse cuando la aplicacion va a terminar: al saltar
+        las tareas iniciales el hilo de preparacion debe seguir vivo en segundo plano.
+        """
+        self.progress_thread.stop = True
+
+        threads = [self.check_thread, self.skip_thread, self.progress_thread]
+
+        if include_prepare:
+            threads.append(self.prepare_thread)
+
+        for thread in threads:
+            if thread.isRunning():
+                thread.requestInterruption()
+
+        for thread in threads:
+            if thread.isRunning() and not thread.wait(THREAD_STOP_TIMEOUT):
+                self.context.logger.warning(f"The preparation thread '{thread.__class__.__name__}' did not stop "
+                                            f'within {THREAD_STOP_TIMEOUT} milliseconds')
+
     def closeEvent(self, ev: QCloseEvent):
-        if not self.self_close:
-            QCoreApplication.exit()
+        if self.self_close:
+            self.stop_threads()
+            return
+
+        if self.prepare_thread.isRunning():
+            confirmed = ConfirmationDialog(title=self.i18n['manage_window.close.transaction.title'],
+                                           body=f"<p>{self.i18n['manage_window.close.transaction.body']}</p>",
+                                           i18n=self.i18n,
+                                           confirmation_icon_type=MessageType.WARNING).ask()
+
+            if not confirmed:
+                ev.ignore()
+                return
+
+        self.stop_threads(include_prepare=True)
+        QCoreApplication.exit()
 
     def register_task(self, id_: str, label: str, icon_path: str):
         self.added_tasks += 1

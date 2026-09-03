@@ -1,28 +1,31 @@
-from typing import Optional, Iterable
+import os
+from typing import Iterable, List, Optional
 
-from bauh.api.abstract.model import SoftwarePackage, CustomSoftwareAction
+from bauh.api.abstract.model import CustomSoftwareAction, SoftwarePackage
 from bauh.commons import resource
-from bauh.gems.github import ROOT_DIR, DEFAULT_REPOS_DIR
+from bauh.gems.github import ROOT_DIR
 
 
 class GitHubPackage(SoftwarePackage):
-    """Represents a GitHub repository as a package within Bauh."""
+    """Representa un repositorio de GitHub dentro de bauh."""
 
     def __init__(self, name: str = None, description: str = None, version: str = None,
                  repo_url: str = None, owner: str = None, repo_name: str = None,
                  stars: int = 0, clone_path: str = None, build_method: str = None,
                  cloned: bool = False, built: bool = False, installed: bool = False,
                  license: str = None, categories=None, default_branch: str = 'main',
-                 language: str = None, **kwargs):
+                 language: str = None, installed_artifacts: Optional[List[str]] = None,
+                 update: bool = False, latest_version: str = None, **kwargs):
         super(GitHubPackage, self).__init__(
             id=repo_url or name,
             name=name,
             version=version,
-            latest_version=version,
+            latest_version=latest_version if latest_version else version,
             icon_url=None,
             license=license,
             description=description,
-            installed=installed
+            installed=installed,
+            update=update
         )
         self.repo_url = repo_url
         self.owner = owner
@@ -34,6 +37,7 @@ class GitHubPackage(SoftwarePackage):
         self.built = built
         self.default_branch = default_branch
         self.language = language
+        self.installed_artifacts = list(installed_artifacts) if installed_artifacts else []
         self.categories = categories if categories else ['GitHub']
 
     def __repr__(self):
@@ -76,26 +80,27 @@ class GitHubPackage(SoftwarePackage):
             'language': self.language,
             'version': self.version,
             'license': self.license,
+            'installed_artifacts': self.installed_artifacts,
         }
 
     def fill_cached_data(self, data: dict):
         for attr in ('name', 'description', 'repo_url', 'owner', 'repo_name', 'stars',
-                      'clone_path', 'build_method', 'cloned', 'built', 'default_branch',
-                      'language', 'version', 'license'):
+                     'clone_path', 'build_method', 'cloned', 'built', 'default_branch',
+                     'language', 'version', 'license', 'installed_artifacts'):
             val = data.get(attr)
+
             if val is not None:
                 setattr(self, attr, val)
 
     def can_be_run(self) -> bool:
-        return False
+        # el botón "ejecutar" abre la carpeta del clon en el gestor de archivos
+        return bool(self.clone_path) and os.path.isdir(self.clone_path)
 
     def get_publisher(self) -> str:
         return self.owner or ''
 
     def get_disk_cache_path(self) -> str:
-        if self.clone_path:
-            return self.clone_path
-        return f'{DEFAULT_REPOS_DIR}/{self.repo_name or self.name}'
+        return self.clone_path
 
     def get_disk_icon_path(self):
         return self.get_type_icon_path()
@@ -104,6 +109,9 @@ class GitHubPackage(SoftwarePackage):
         return False
 
     def get_name_tooltip(self) -> str:
+        if self.owner and self.repo_name:
+            return f'{self.owner}/{self.repo_name}'
+
         return self.repo_url if self.repo_url else self.name
 
     def get_custom_actions(self) -> Optional[Iterable[CustomSoftwareAction]]:

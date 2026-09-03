@@ -1,46 +1,48 @@
-import logging
 import operator
 import os.path
-import shutil
 import time
 from pathlib import Path
-from typing import List, Type, Set, Tuple, Optional, Dict, Any
-from PyQt5.QtCore import QEvent, Qt, pyqtSignal, QRect
-from PyQt5.QtGui import QIcon, QWindowStateChangeEvent, QCursor, QCloseEvent, QShowEvent
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QCheckBox, QHeaderView, QToolBar, QLabel, QPlainTextEdit, QProgressBar, QPushButton, QComboBox, QApplication, QListView, QSizePolicy, QMenu, QHBoxLayout, QFrame
+from typing import Type, Set, Tuple, Optional
+from PyQt5.QtGui import QIcon
+from PyQt5.QtWidgets import QWidget, QHeaderView, QLabel, QSizePolicy, QHBoxLayout
 from bauh.api import user
-from bauh.api.abstract.cache import MemoryCache
-from bauh.api.abstract.context import ApplicationContext
-from bauh.api.abstract.controller import SoftwareManager, SoftwareAction
+from bauh.api.abstract.controller import SoftwareAction
 from bauh.api.abstract.model import SoftwarePackage
 from bauh.api.abstract.view import MessageType
-from bauh.api.http import HttpClient
 from bauh.api.paths import LOGS_DIR
 from bauh.commons.html import bold
-from bauh.context import set_theme
-from bauh.view.qt.window.constants import *
-from bauh.stylesheet import read_all_themes_metadata, ThemeMetadata
-from bauh.view.core.config import CoreConfigManager
+from bauh.view.qt.window.constants import ACTION_SEARCH, ACTION_INSTALL, ACTION_UNINSTALL, ACTION_INFO, \
+    ACTION_HISTORY, ACTION_DOWNGRADE, ACTION_UPGRADE, ACTION_LAUNCH, ACTION_CUSTOM_ACTION, ACTION_SCREENSHOTS, \
+    ACTION_IGNORE_UPDATES, SEARCH_BAR, CHECK_DETAILS, GROUP_VIEW_INSTALLED, GROUP_VIEW_SEARCH, GROUP_UPPER_BAR, \
+    GROUP_LOWER_BTS
 from bauh.view.core.tray_client import notify_tray
 from bauh.view.qt import dialog, commons, qt_utils
-from bauh.view.qt.about import AboutDialog
-from bauh.view.qt.apps_table import PackagesTable, UpgradeToggleButton
-from bauh.view.qt.commons import sum_updates_displayed, PackageFilters
-from bauh.view.qt.components import new_spacer, IconButton, QtComponentsManager, to_widget, QSearchBar, QCustomMenuAction, QCustomToolbar
+from bauh.view.qt.apps_table import UpgradeToggleButton
 from bauh.view.qt.dialog import ConfirmationDialog
 from bauh.view.qt.history import HistoryDialog
 from bauh.view.qt.info import InfoDialog
 from bauh.view.qt.qt_utils import get_current_screen_geometry
 from bauh.view.qt.root import RootDialog
 from bauh.view.qt.screenshots import ScreenshotsDialog
-from bauh.view.qt.settings import SettingsWindow
-from bauh.view.qt.thread import UpgradeSelected, RefreshApps, UninstallPackage, DowngradePackage, ShowPackageInfo, ShowPackageHistory, SearchPackages, InstallPackage, AnimateProgress, NotifyPackagesReady, FindSuggestions, ListWarnings, AsyncAction, LaunchPackage, ApplyFilters, CustomSoftwareAction, ShowScreenshots, CustomAction, NotifyInstalledLoaded, IgnorePackageUpdates, SaveTheme, StartAsyncAction
-from bauh.view.qt.view_index import add_to_index, new_package_index
-from bauh.view.qt.view_model import PackageView, PackageViewStatus
+from bauh.view.qt.thread import UpgradeSelected, AsyncAction, CustomSoftwareAction
+from bauh.view.qt.view_model import PackageView
 from bauh.view.util import util, resource
-from bauh.view.util.translation import I18n
 
 class WindowActionsMixin:
+    """Acciones sobre paquetes (instalar, desinstalar, actualizar, buscar, ...) de la ventana principal.
+
+    Contrato con la clase anfitriona (ManageWindow), que debe definir:
+      - atributos de estado: 'i18n', 'logger', 'manager', 'context', 'config', 'icon_cache', 'http_client',
+        'pkgs', 'pkgs_available', 'pkgs_installed', 'custom_actions', 'search_performed',
+        'suggestions_requested', 'load_suggestions', 'types_changed', 'first_refresh', 'searched_term',
+        '_maximized', 'current_action_id', 'can_open_urls'
+      - widgets: 'search_bar', 'table_apps', 'textarea_details', 'check_details', 'progress_bar'
+      - colaboradores: 'comp_manager' (QtComponentsManager) y los hilos 'thread_*' creados en el __init__
+      - senales: 'signal_user_res', 'signal_root_password'
+      - metodos de los otros mixins: '_begin_action'/'_finish_action' (definidos aqui), '_handle_console_option',
+        '_show_console_errors', '_set_lower_buttons_visible', '_reorganize', '_resize', 'update_pkgs',
+        'update_bt_upgrade', 'begin_apply_filters', '_gen_filters', '_update_index', '_update_table_indexes'
+    """
 
     def _bind_async_action(self, action: AsyncAction, finished_call, only_finished: bool=False) -> AsyncAction:
         action.signal_finished.connect(finished_call)
@@ -215,6 +217,7 @@ class WindowActionsMixin:
         self.textarea_details.appendPlainText(output)
 
     def _begin_action(self, action_label: str, action_id: int=None):
+        self.current_action_id = action_id
         self.thread_animate_progress.stop = False
         self.thread_animate_progress.start()
         self.progress_bar.setVisible(True)
@@ -225,6 +228,7 @@ class WindowActionsMixin:
         self._change_status(action_label)
 
     def _finish_action(self, action_id: int=None):
+        self.current_action_id = None
         self.thread_animate_progress.stop = True
         self.thread_animate_progress.wait(msecs=1000)
         self.progress_bar.setVisible(False)
@@ -347,7 +351,8 @@ class WindowActionsMixin:
         pwd = None
         requires_root = self.manager.requires_root(action, pkg.model)
         if not user.is_root() and requires_root:
-            valid, pwd = RootDialog.ask_password(self.context, i18n=self.i18n, comp_manager=self.comp_manager)
+            valid, pwd = RootDialog.ask_password(self.context, i18n=self.i18n, comp_manager=self.comp_manager,
+                                                 parent=self)
             if not valid:
                 return (pwd, False)
         return (pwd, True)
@@ -448,7 +453,8 @@ class WindowActionsMixin:
             return False
         pwd = None
         if not user.is_root() and action.requires_root:
-            valid, pwd = RootDialog.ask_password(self.context, i18n=self.i18n, comp_manager=self.comp_manager)
+            valid, pwd = RootDialog.ask_password(self.context, i18n=self.i18n, comp_manager=self.comp_manager,
+                                                 parent=self)
             if not valid:
                 return
         action_label = self.i18n[action.i18n_status_key]

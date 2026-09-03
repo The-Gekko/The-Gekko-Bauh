@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import QWidget, QVBoxLayout, QSizePolicy, QPushButton, QHBo
 from bauh import __app_name__
 from bauh.api.abstract.controller import SoftwareManager
 from bauh.api.abstract.view import MessageType
+from bauh.view.core.config import CoreConfigManager
 from bauh.view.core.controller import GenericSoftwareManager
 from bauh.view.qt import dialog
 from bauh.view.qt.components import to_widget, new_spacer
@@ -111,6 +112,7 @@ class SettingsWindow(QWidget):
         success, warnings = self.manager.save_settings(self.settings_model)
 
         if success:
+            self._sync_manager_config()
             if not self.window:
                 ConfirmationDialog(title=self.i18n['success'].capitalize(),
                                    body=f"<p>{self.i18n['settings.changed.success.warning']}</p>",
@@ -141,15 +143,38 @@ class SettingsWindow(QWidget):
             self.bt_change.setEnabled(True)
             self.bt_close.setEnabled(True)
 
+    def _sync_manager_config(self):
+        """Relee la configuración guardada y la sincroniza in place para que ventana, bandeja y gems vean lo mismo."""
+        current_config = getattr(self.manager, 'config', None)
+
+        if not isinstance(current_config, dict):
+            return
+
+        try:
+            saved_config = CoreConfigManager().get_config()
+        except Exception:
+            logger = getattr(self.manager, 'logger', None)
+
+            if logger:
+                logger.warning("the saved settings could not be read back", exc_info=True)
+
+            return
+
+        # se muta el mismo dict: otras vistas y gems conservan la referencia recibida al arrancar
+        current_config.clear()
+        current_config.update(saved_config)
+
     def _reload_manage_panel(self):
         if self.window and self.window.isVisible():
-            custom_theme_config = self.manager.config.get('custom_theme') or {}
+            app_config = getattr(self.manager, 'config', None) or CoreConfigManager().get_config()
+            custom_theme_config = app_config.get('custom_theme') or {}
             opacity = custom_theme_config.get('opacity', 100)
             self.window.setWindowOpacity(opacity / 100.0)
-            
+
             from bauh.context import set_theme
-            set_theme(theme_key=self.manager.config['ui']['theme'], app=QApplication.instance(), logger=self.manager.logger, app_config=self.manager.config)
-            
+            set_theme(theme_key=app_config['ui']['theme'], app=QApplication.instance(),
+                      logger=self.manager.logger, app_config=app_config)
+
             self.window.reload()
 
         QApplication.restoreOverrideCursor()

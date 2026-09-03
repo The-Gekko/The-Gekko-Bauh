@@ -1,15 +1,12 @@
 import os
-import traceback
 from pathlib import Path
-from typing import Tuple, Dict, Optional, Set
+from typing import Tuple
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QIcon, QIntValidator, QCursor, QFocusEvent
-from PyQt5.QtWidgets import QRadioButton, QGroupBox, QCheckBox, QComboBox, QGridLayout, QWidget, \
-    QLabel, QSizePolicy, QLineEdit, QToolButton, QHBoxLayout, QFormLayout, QFileDialog, QTabWidget, QVBoxLayout, \
-    QSlider, QScrollArea, QFrame, QAction, QSpinBox, QPlainTextEdit, QWidgetAction, QPushButton, QMenu, QColorDialog
-from bauh.api.abstract.view import SingleSelectComponent, InputOption, MultipleSelectComponent, SelectViewType, \
-    TextInputComponent, FormComponent, FileChooserComponent, ViewComponent, TabGroupComponent, PanelComponent, \
-    TwoStateButtonComponent, TextComponent, SpacerComponent, RangeInputComponent, ViewObserver, TextInputType, \
+from PyQt5.QtWidgets import QGroupBox, QComboBox, QGridLayout, QWidget, \
+    QLabel, QSizePolicy, QLineEdit, QHBoxLayout, QFormLayout, QFileDialog, QSpinBox, QPlainTextEdit, QPushButton, QColorDialog
+from bauh.api.abstract.view import SingleSelectComponent, MultipleSelectComponent, SelectViewType, \
+    TextInputComponent, FormComponent, FileChooserComponent, ViewComponent, TwoStateButtonComponent, TextComponent, RangeInputComponent, ViewObserver, TextInputType, \
     ViewComponentAlignment, ColorPickerComponent
 from bauh.view.util.translation import I18n
 
@@ -335,11 +332,16 @@ class TextInputQt(QGroupBox):
 
 class InputFilter(QLineEdit):
 
+    # retardo (ms) entre la ultima tecla pulsada y la notificacion del cambio
+    TYPING_DELAY = 300
+
     def __init__(self, on_key_press):
         super(InputFilter, self).__init__()
         self.on_key_press = on_key_press
         self.last_text = ''
         self.typing = QTimer()
+        # 'single shot' evita un temporizador repetitivo que nunca se detiene durante toda la sesion
+        self.typing.setSingleShot(True)
         self.typing.timeout.connect(self.notify_text_change)
 
     def notify_text_change(self):
@@ -351,11 +353,8 @@ class InputFilter(QLineEdit):
 
     def keyPressEvent(self, event):
         super(InputFilter, self).keyPressEvent(event)
-
-        if self.typing.isActive():
-            return
-
-        self.typing.start(3000)
+        # cada tecla reinicia la cuenta: el filtro se aplica al dejar de escribir
+        self.typing.start(self.TYPING_DELAY)
 
     def get_text(self):
         return self.last_text
@@ -502,7 +501,6 @@ class ColorPickerQt(QWidget, ViewObserver):
         self.setLayout(QHBoxLayout())
         self.layout().setContentsMargins(0, 0, 0, 0)
         
-        from PyQt5.QtGui import QColor
 
         self.color_btn = QPushButton()
         self.color_btn.setCursor(Qt.PointingHandCursor)

@@ -1,85 +1,148 @@
+"""Detección del método de construcción de un repositorio clonado.
+
+IMPORTANTE — qué protege y qué no protege esta lista:
+
+La lista de métodos admitidos NO es una defensa contra código malicioso.  Detectar un
+``PKGBUILD`` o un ``Cargo.toml`` sólo dice cómo se construye el proyecto, nunca qué hace su
+código: construir cualquier repositorio ejecuta código de terceros (funciones ``build()``
+y ``package()`` del PKGBUILD, ``build.rs``, ``setup.py``, hooks de compilación...).
+
+Lo que sí consigue la lista es que la instalación pase siempre por un gestor que el sistema
+conoce (``pacman``, ``pipx``, ``cargo``), de modo que lo instalado pueda desinstalarse
+después y no se rocíen archivos sueltos por el sistema con un ``sudo make install``.
+
+Por eso el controlador exige una confirmación explícita del usuario, mostrando el
+repositorio, el método detectado y el comando literal, antes de construir nada; y por eso
+la contraseña de root nunca se le pasa al paso de construcción.
+"""
+
 import os
 from enum import Enum
-from typing import Optional, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 
 class BuildMethod(Enum):
     PKGBUILD = 'PKGBUILD'
     MAKEFILE = 'Makefile'
     INSTALL_SCRIPT = 'install.sh'
-    PYTHON_SETUP = 'Python (pip)'
+    PYTHON_SETUP = 'Python (pipx)'
     CARGO = 'Cargo (Rust)'
     MESON = 'Meson'
     CMAKE = 'CMake'
-    UNKNOWN = 'Desconocido'
+    # identificador estable: la etiqueta visible se resuelve por i18n en el controlador
+    UNKNOWN = 'unknown'
 
 
-# Maps build methods to the commands required to build and install.
-# Unsafe methods (that require sudo make install without pacman) are set to None.
+# comando de construcción y si hace falta root para el paso de instalación posterior.
+#
+# - PKGBUILD: 'makepkg' se niega a ejecutarse como root, así que se construye como usuario y
+#   después se instala el .pkg.tar.* resultante con 'pacman -U' (ese paso sí necesita root).
+# - Python: se usa pipx porque en Arch/Solus el intérprete del sistema está marcado como
+#   EXTERNALLY-MANAGED (PEP 668) y 'pip install --user .' falla; nunca se usa
+#   '--break-system-packages'.
+# - Cargo: 'cargo install' ya compila en modo release en su propio directorio, así que
+#   ejecutar antes 'cargo build --release' sólo duplicaba el trabajo.
 BUILD_COMMANDS = {
-    BuildMethod.PKGBUILD: ('makepkg -si --noconfirm', True),
+    BuildMethod.PKGBUILD: ('makepkg -s --noconfirm', True),
     BuildMethod.MAKEFILE: (None, False),
     BuildMethod.INSTALL_SCRIPT: (None, False),
-    BuildMethod.PYTHON_SETUP: ('pip install --user .', False),
-    BuildMethod.CARGO: ('cargo build --release && cargo install --path .', False),
+    BuildMethod.PYTHON_SETUP: ('pipx install .', False),
+    BuildMethod.CARGO: ('cargo install --path . --locked', False),
     BuildMethod.MESON: (None, False),
     BuildMethod.CMAKE: (None, False),
 }
 
-# Only these methods are safe to auto-build without risking system stability
-SAFE_METHODS = {BuildMethod.PKGBUILD, BuildMethod.PYTHON_SETUP, BuildMethod.CARGO}
+# métodos que la gem sabe construir e (sobre todo) desinstalar después
+SUPPORTED_METHODS = frozenset({BuildMethod.PKGBUILD, BuildMethod.PYTHON_SETUP,
+                               BuildMethod.CARGO})
 
-# Maps build methods to their uninstall commands (if applicable)
-UNINSTALL_COMMANDS = {
-    BuildMethod.PKGBUILD: None,  # pacman -R handles this
-    BuildMethod.MAKEFILE: 'sudo make uninstall',
-    BuildMethod.INSTALL_SCRIPT: None,
-    BuildMethod.PYTHON_SETUP: None,  # pip uninstall <name>
-    BuildMethod.CARGO: 'cargo uninstall',
-    BuildMethod.MESON: 'sudo ninja -C build uninstall',
-    BuildMethod.CMAKE: None,
+# herramienta que debe existir en el sistema para cada método admitido
+REQUIRED_BINARIES = {
+    BuildMethod.PKGBUILD: 'makepkg',
+    BuildMethod.PYTHON_SETUP: 'pipx',
+    BuildMethod.CARGO: 'cargo',
 }
+
+# Orden de detección.  Los métodos admitidos van primero a propósito: un proyecto de Rust o
+# de Python con un Makefile de conveniencia debe construirse con cargo o pipx (que dejan el
+# software desinstalable) y no quedarse en «instalación manual requerida».
+DETECTION_ORDER: Tuple[Tuple[BuildMethod, Tuple[str, ...]], ...] = (
+    (BuildMethod.PKGBUILD, ('PKGBUILD',)),
+    (BuildMethod.PYTHON_SETUP, ('setup.py', 'pyproject.toml')),
+    (BuildMethod.CARGO, ('Cargo.toml',)),
+    (BuildMethod.MESON, ('meson.build',)),
+    (BuildMethod.CMAKE, ('CMakeLists.txt',)),
+    (BuildMethod.MAKEFILE, ('Makefile', 'makefile', 'GNUmakefile')),
+    (BuildMethod.INSTALL_SCRIPT, ('install.sh', 'setup.sh')),
+)
 
 
 def detect_build_method(repo_path: str) -> Tuple[BuildMethod, Optional[str]]:
-    """
-    Analyzes the root directory of a cloned repository and returns the detected
-    build method along with the command string to execute.
-
-    Returns a tuple of (BuildMethod, command_string or None).
-    """
-    if not os.path.isdir(repo_path):
+    """Analiza la raíz de un repositorio clonado y devuelve (método, comando o ``None``)."""
+    if not repo_path or not os.path.isdir(repo_path):
         return BuildMethod.UNKNOWN, None
 
-    root_files = set(os.listdir(repo_path))
+    try:
+        root_files = set(os.listdir(repo_path))
+    except OSError:
+        return BuildMethod.UNKNOWN, None
 
-    # Priority order: PKGBUILD is the best for Arch Linux
-    if 'PKGBUILD' in root_files:
-        return BuildMethod.PKGBUILD, BUILD_COMMANDS[BuildMethod.PKGBUILD][0]
-
-    if 'Makefile' in root_files or 'makefile' in root_files or 'GNUmakefile' in root_files:
-        return BuildMethod.MAKEFILE, BUILD_COMMANDS[BuildMethod.MAKEFILE][0]
-
-    if 'install.sh' in root_files or 'setup.sh' in root_files:
-        return BuildMethod.INSTALL_SCRIPT, BUILD_COMMANDS[BuildMethod.INSTALL_SCRIPT][0]
-
-    if 'setup.py' in root_files or 'pyproject.toml' in root_files:
-        return BuildMethod.PYTHON_SETUP, BUILD_COMMANDS[BuildMethod.PYTHON_SETUP][0]
-
-    if 'Cargo.toml' in root_files:
-        return BuildMethod.CARGO, BUILD_COMMANDS[BuildMethod.CARGO][0]
-
-    if 'meson.build' in root_files:
-        return BuildMethod.MESON, BUILD_COMMANDS[BuildMethod.MESON][0]
-
-    if 'CMakeLists.txt' in root_files:
-        return BuildMethod.CMAKE, BUILD_COMMANDS[BuildMethod.CMAKE][0]
+    for method, markers in DETECTION_ORDER:
+        if root_files.intersection(markers):
+            return method, BUILD_COMMANDS[method][0]
 
     return BuildMethod.UNKNOWN, None
 
 
 def requires_root(method: BuildMethod) -> bool:
-    """Returns True if the build method requires root/sudo to install."""
-    if method in BUILD_COMMANDS:
-        return BUILD_COMMANDS[method][1]
-    return False
+    """Indica si el método necesita root para el paso de instalación (nunca para construir)."""
+    return BUILD_COMMANDS.get(method, (None, False))[1]
+
+
+def is_supported(method: BuildMethod) -> bool:
+    """Indica si la gem sabe construir e instalar con este método."""
+    return method in SUPPORTED_METHODS
+
+
+def get_required_binary(method: BuildMethod) -> Optional[str]:
+    """Herramienta necesaria para construir con este método."""
+    return REQUIRED_BINARIES.get(method)
+
+
+def method_from_value(value: Optional[str]) -> BuildMethod:
+    """Recupera el método a partir del valor almacenado en el paquete o en el registro."""
+    if value:
+        for method in BuildMethod:
+            if method.value == value:
+                return method
+
+    return BuildMethod.UNKNOWN
+
+
+def uninstall_command(method: BuildMethod,
+                      artifacts: Optional[Iterable[str]]) -> Optional[List[str]]:
+    """Comando que deshace lo que la construcción instaló fuera del clon.
+
+    ``artifacts`` son los nombres registrados durante la instalación: los paquetes de
+    pacman, la aplicación de pipx o el crate de cargo.
+    """
+    names = [name for name in (artifacts or []) if name]
+
+    if not names:
+        return None
+
+    if method == BuildMethod.PKGBUILD:
+        return ['pacman', '-R', '--noconfirm', *names]
+
+    if method == BuildMethod.PYTHON_SETUP:
+        return ['pipx', 'uninstall', names[0]]
+
+    if method == BuildMethod.CARGO:
+        return ['cargo', 'uninstall', names[0]]
+
+    return None
+
+
+def uninstall_requires_root(method: BuildMethod) -> bool:
+    """Sólo la desinstalación vía pacman necesita privilegios de root."""
+    return method == BuildMethod.PKGBUILD

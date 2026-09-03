@@ -1,10 +1,11 @@
-include LICENSE CHANGELOG.md README.md requirements.txt
+include LICENSE CHANGELOG.md README.md CREDITS.md requirements.txt requirements-dev.txt
 recursive-include bauh/desktop *
-recursive-exclude bauh/desktop *.orig
 recursive-include bauh/view/resources *
-recursive-exclude bauh/view/resources *.orig
-recursive-include bauh/gems/*/resources *
-recursive-exclude bauh/gems/*/resources *.orig
-recursive-exclude linux_dist *
-recursive-exclude venv *
-recursive-exclude .venv *
+recursive-include bauh/gems *
+global-exclude *.orig
+global-exclude *.pyc
+global-exclude __pycache__/*
+prune linux_dist
+prune tests
+prune venv
+prune .venv

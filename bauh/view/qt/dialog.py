@@ -1,3 +1,4 @@
+from functools import lru_cache
 from typing import List, Optional
 
 from PyQt5.QtCore import Qt
@@ -17,7 +18,9 @@ MSG_TYPE_MAP = {
 }
 
 
+@lru_cache(maxsize=1)
 def _default_icon() -> QIcon:
+    # se cachea porque cada dialogo lo pedia y volvia a decodificar el PNG
     return QIcon(resource.get_path('img/gekko-bauh.png'))
 
 

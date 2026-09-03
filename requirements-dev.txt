@@ -1,0 +1,27 @@
+# Dependencias para ejecutar la suite de tests SIN interfaz gráfica.
+#
+# La mayoría de los tests no necesitan PyQt5: los errores de importación del
+# `unittest discover` en un entorno limpio vienen de pyyaml y colorama, no de Qt
+# (ver F53). Los tests que sí necesitan Qt se saltan solos con skipUnless.
+#
+# Uso:  pip install -r requirements-dev.txt
+#       python -m unittest discover -s tests
+#
+# Para ejecutar además los tests de Qt:  pip install -r requirements.txt
+# y exportar QT_QPA_PLATFORM=offscreen.
+
+# Núcleo: sin esto el discover falla al importar bauh.api.abstract.controller
+# y bauh.commons.config.
+pyyaml>=6.0,<7
+colorama>=0.4,<1
+requests>=2.28,<3
+python-dateutil>=2.8,<3
+
+# Necesarias para los tests de la gem «web» (opcional, pero con tests propios).
+lxml>=4.9
+beautifulsoup4>=4.11
+
+# Herramientas de calidad usadas por el workflow de CI.
+ruff>=0.6
+build>=1.0
+twine>=5.0

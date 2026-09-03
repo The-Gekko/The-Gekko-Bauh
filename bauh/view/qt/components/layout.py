@@ -1,16 +1,10 @@
-import os
-import traceback
-from pathlib import Path
-from typing import Tuple, Dict, Optional, Set
-from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QIcon, QIntValidator, QCursor, QFocusEvent
-from PyQt5.QtWidgets import QRadioButton, QGroupBox, QCheckBox, QComboBox, QGridLayout, QWidget, \
-    QLabel, QSizePolicy, QLineEdit, QToolButton, QHBoxLayout, QFormLayout, QFileDialog, QTabWidget, QVBoxLayout, \
-    QSlider, QScrollArea, QFrame, QAction, QSpinBox, QPlainTextEdit, QWidgetAction, QPushButton, QMenu
-from bauh.api.abstract.view import SingleSelectComponent, InputOption, MultipleSelectComponent, SelectViewType, \
-    TextInputComponent, FormComponent, FileChooserComponent, ViewComponent, TabGroupComponent, PanelComponent, \
-    TwoStateButtonComponent, TextComponent, SpacerComponent, RangeInputComponent, ViewObserver, TextInputType, \
-    ViewComponentAlignment
+from typing import Optional
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QIcon, QCursor
+from PyQt5.QtWidgets import QWidget, \
+    QLabel, QSizePolicy, QHBoxLayout, QTabWidget, QVBoxLayout, \
+    QScrollArea, QFrame, QPushButton
+from bauh.api.abstract.view import TabGroupComponent, PanelComponent
 from bauh.view.util.translation import I18n
 from .inputs import QCustomLineEdit
 

@@ -1,6 +1,12 @@
 from bauh.commons.config import YAMLConfigManager
 from bauh.gems.eopkg import CONFIG_FILE
 
+# número máximo de resultados devueltos por una búsqueda cuando la vista no impone un límite
+DEFAULT_SEARCH_LIMIT = 50
+
+# segundos que puede tardar un comando de sólo lectura de eopkg antes de considerarse colgado
+DEFAULT_COMMAND_TIMEOUT = 60
+
 
 class EopkgConfigManager(YAMLConfigManager):
 
@@ -9,5 +15,8 @@ class EopkgConfigManager(YAMLConfigManager):
 
     def get_default_config(self) -> dict:
         return {
-            'search_limit': 50,
+            'search_limit': DEFAULT_SEARCH_LIMIT,
+            'command_timeout': DEFAULT_COMMAND_TIMEOUT,
+            # 'sudo eopkg ur' antes de actualizar, tal y como recomienda el flujo oficial
+            'sync_repos_before_upgrade': True,
         }
