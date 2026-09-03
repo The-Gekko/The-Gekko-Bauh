@@ -1,7 +1,10 @@
+import hashlib
 import io
+import logging
 import os
 import tarfile
 import tempfile
+from tempfile import TemporaryDirectory
 from datetime import datetime, timedelta, timezone
 from unittest import TestCase
 from unittest.mock import Mock, patch
@@ -148,3 +151,82 @@ class EnvironmentUpdaterShouldDownloadSettingsTest(TestCase):
     def test_must_return_true_when_timestamp_is_invalid(self):
         self._write_cache('not-a-number')
         self.assertTrue(self.updater.should_download_settings(self.config))
+
+
+class ElectronChecksumTest(TestCase):
+    """Descarga y verificación de Electron, que antes se anunciaba pero no se hacía."""
+
+    def setUp(self):
+        self.dir = TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+
+        logger = logging.getLogger('web-env-tests')
+        logger.addHandler(logging.NullHandler())
+
+        self.updater = EnvironmentUpdater.__new__(EnvironmentUpdater)
+        self.updater.logger = logger
+        self.updater.i18n = {}
+        self.updater.file_downloader = Mock()
+
+    def _write(self, name: str, content: bytes) -> str:
+        path = os.path.join(self.dir.name, name)
+        with open(path, 'wb') as f:
+            f.write(content)
+        return path
+
+    def _sha_file(self, name: str, content: bytes, *, style: str = 'plain') -> str:
+        digest = hashlib.sha256(content).hexdigest()
+        marker = '*' if style == 'binary' else ''
+        return self._write('SHASUMS256.txt', f'{digest}  {marker}{name}\n'.encode())
+
+    def test_a_matching_checksum_is_accepted(self):
+        content = b'electron falso'
+        zip_path = self._write('electron-v28-linux-x64.zip', content)
+        sha_path = self._sha_file('electron-v28-linux-x64.zip', content)
+
+        self.assertTrue(self.updater._verify_sha256(zip_path, sha_path))
+
+    def test_the_binary_marker_form_is_accepted(self):
+        # el fichero de Electron usa «<suma>  *<nombre>» en algunas versiones
+        content = b'electron falso'
+        zip_path = self._write('electron-v28-linux-x64.zip', content)
+        sha_path = self._sha_file('electron-v28-linux-x64.zip', content, style='binary')
+
+        self.assertTrue(self.updater._verify_sha256(zip_path, sha_path))
+
+    def test_a_tampered_file_is_rejected(self):
+        sha_path = self._sha_file('electron-v28-linux-x64.zip', b'el original')
+        zip_path = self._write('electron-v28-linux-x64.zip', b'otro contenido')
+
+        self.assertFalse(self.updater._verify_sha256(zip_path, sha_path))
+
+    def test_a_file_not_listed_is_rejected(self):
+        content = b'electron falso'
+        zip_path = self._write('electron-v28-linux-x64.zip', content)
+        sha_path = self._sha_file('electron-v28-linux-ia32.zip', content)
+
+        self.assertFalse(self.updater._verify_sha256(zip_path, sha_path))
+
+    def test_a_missing_checksum_file_is_rejected(self):
+        zip_path = self._write('electron.zip', b'x')
+
+        self.assertFalse(self.updater._verify_sha256(zip_path, os.path.join(self.dir.name, 'no-existe')))
+
+    def test_the_cache_check_looks_for_both_files_separately(self):
+        # antes «sha256» se copiaba de «electron»: con el zip presente se afirmaba que las
+        # sumas estaban descargadas aunque el fichero no existiera
+        with patch(f'{__package_name__}.gems.web.environment.ELECTRON_CACHE_DIR', self.dir.name), \
+                patch.object(EnvironmentUpdater, '_get_electron_url',
+                             return_value='https://x/electron-v28-linux-x64.zip'):
+            self._write('electron-v28-linux-x64.zip', b'x')
+
+            res = self.updater.check_electron_installed(version='28.0.0', base_url='',
+                                                        is_x86_x64_arch=True, widevine=False)
+            self.assertTrue(res['electron'])
+            self.assertFalse(res['sha256'])
+
+            self._write('SHASUMS256.txt-28.0.0', b'x')
+
+            res = self.updater.check_electron_installed(version='28.0.0', base_url='',
+                                                        is_x86_x64_arch=True, widevine=False)
+            self.assertTrue(res['sha256'])

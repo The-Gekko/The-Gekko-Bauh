@@ -1,4 +1,5 @@
 import glob
+import hashlib
 import logging
 import os
 import shutil
@@ -233,26 +234,131 @@ class EnvironmentUpdater:
         return base_url.format(version=version, arch='x64' if is_x86_x64_arch else 'ia32')
 
     def check_electron_installed(self, version: str, base_url: str, is_x86_x64_arch: bool, widevine: bool) -> Dict[str, bool]:
+        """Indica si el Electron de esa versión y su fichero de sumas ya están en la caché.
+
+        Antes 'sha256' se copiaba de 'electron': se informaba de que las sumas estaban
+        descargadas por el mero hecho de existir el zip, aunque el fichero no estuviera. Aquí
+        se comprueba cada uno por su cuenta.
+        """
         self.logger.info(f"Checking if Electron {version} (widevine={widevine}) is installed")
         res = {'electron': False, 'sha256': False}
 
         if not os.path.exists(ELECTRON_CACHE_DIR):
             self.logger.info(f"Electron cache directory {ELECTRON_CACHE_DIR} not found")
-        else:
-            files = {os.path.basename(f) for f in glob.glob(f'{ELECTRON_CACHE_DIR}/**', recursive=True) if os.path.isfile(f)}
+            return res
 
-            if files:
-                electron_url = self._get_electron_url(version=version, base_url=base_url, is_x86_x64_arch=is_x86_x64_arch)
-                res['electron'] = os.path.basename(electron_url) in files
-                res['sha256'] = res['electron']
-            else:
-                self.logger.info(f"No Electron file found in '{ELECTRON_CACHE_DIR}'")
+        files = {os.path.basename(f) for f in glob.glob(f'{ELECTRON_CACHE_DIR}/**', recursive=True)
+                 if os.path.isfile(f)}
 
-            for att in ('electron', 'sha256'):
-                if res[att]:
-                    self.logger.info(f'{att} ({version}) already downloaded')
+        if not files:
+            self.logger.info(f"No Electron file found in '{ELECTRON_CACHE_DIR}'")
+            return res
+
+        electron_url = self._get_electron_url(version=version, base_url=base_url,
+                                              is_x86_x64_arch=is_x86_x64_arch)
+        res['electron'] = os.path.basename(electron_url) in files
+        res['sha256'] = self._sha_file_name(version) in files
+
+        for att in ('electron', 'sha256'):
+            if res[att]:
+                self.logger.info(f'{att} ({version}) already downloaded')
 
         return res
+
+    @staticmethod
+    def _sha_file_name(version: str) -> str:
+        """Nombre con el que @electron/get espera encontrar las sumas dentro de su caché."""
+        return f'SHASUMS256.txt-{version}'
+
+    def _verify_sha256(self, file_path: str, sha_file_path: str) -> bool:
+        """Comprueba el zip de Electron contra la línea que le corresponde en SHASUMS256.txt."""
+        file_name = os.path.basename(file_path)
+        expected = None
+
+        try:
+            with open(sha_file_path) as f:
+                for line in f:
+                    parts = line.split()
+
+                    # formato «<suma>  <nombre>» y también «<suma> *<nombre>»
+                    if len(parts) >= 2 and parts[-1].lstrip('*') == file_name:
+                        expected = parts[0].strip().lower()
+                        break
+        except OSError as e:
+            self.logger.error(f"Could not read '{sha_file_path}': {e}")
+            return False
+
+        if not expected:
+            self.logger.error(f"'{file_name}' is not listed in '{sha_file_path}'")
+            return False
+
+        digest = hashlib.sha256()
+
+        try:
+            with open(file_path, 'rb') as f:
+                for chunk in iter(lambda: f.read(1024 * 1024), b''):
+                    digest.update(chunk)
+        except OSError as e:
+            self.logger.error(f"Could not read '{file_path}': {e}")
+            return False
+
+        actual = digest.hexdigest().lower()
+
+        if actual != expected:
+            self.logger.error(f"Checksum mismatch for '{file_name}': expected {expected}, got {actual}")
+            return False
+
+        self.logger.info(f"Checksum of '{file_name}' verified")
+        return True
+
+    def _install_electron(self, electron: 'EnvironmentComponent', sha: Optional['EnvironmentComponent'],
+                          handler: ProcessHandler) -> bool:
+        """Descarga Electron y sus sumas a la caché, y comprueba el zip antes de darlo por bueno.
+
+        La caché la reutiliza nativefier a través de @electron/get, así que dejar aquí el zip
+        evita que lo vuelva a bajar en cada aplicación que se cree. Un fichero corrupto o
+        manipulado se borra en lugar de quedarse envenenando la caché.
+        """
+        Path(ELECTRON_CACHE_DIR).mkdir(parents=True, exist_ok=True)
+        watcher = handler.watcher if handler else None
+
+        electron_path = f"{ELECTRON_CACHE_DIR}/{electron.url.split('/')[-1]}"
+        self.logger.info(f'Downloading Electron {electron.version}: {electron.url}')
+
+        if not self.file_downloader.download(electron.url, watcher=watcher,
+                                             output_path=electron_path, cwd=ELECTRON_CACHE_DIR):
+            self.logger.error(f"Could not download '{electron.url}'")
+            return False
+
+        if not sha:
+            # sin las sumas no se puede comprobar nada: se avisa, pero no se bloquea la
+            # instalación, porque @electron/get vuelve a validar al construir la aplicación
+            self.logger.warning('No SHA256 file available: the Electron download was not verified')
+            return True
+
+        sha_path = f'{ELECTRON_CACHE_DIR}/{self._sha_file_name(electron.version)}'
+        self.logger.info(f'Downloading the Electron checksums: {sha.url}')
+
+        if not self.file_downloader.download(sha.url, watcher=watcher,
+                                             output_path=sha_path, cwd=ELECTRON_CACHE_DIR):
+            self.logger.error(f"Could not download '{sha.url}'")
+            return False
+
+        if not self._verify_sha256(electron_path, sha_path):
+            for path in (electron_path, sha_path):
+                try:
+                    os.remove(path)
+                except OSError:
+                    self.logger.warning(f"Could not delete '{path}' after the failed verification")
+
+            if watcher:
+                watcher.show_message(title=self.i18n['error'].capitalize(),
+                                     body=self.i18n['web.environment.electron.checksum_error'].format(
+                                         bold(os.path.basename(electron_path))),
+                                     type_=MessageType.ERROR)
+            return False
+
+        return True
 
     def _finish_task_download_settings(self):
         if self.taskman:
@@ -493,6 +599,16 @@ class EnvironmentUpdater:
         else:
             if nativefier_data and not self._install_nativefier(version=nativefier_data.version, url=nativefier_data.url, handler=handler):
                 return False
+
+        # Electron y sus sumas se listaban en la confirmación -con su tamaño- pero no se
+        # descargaba ninguno de los dos: el usuario aprobaba cientos de megabytes que nadie
+        # llegaba a pedir, y la caché quedaba vacía para nativefier.
+        electron_data = comp_map.get('electron')
+
+        if electron_data and not self._install_electron(electron=electron_data,
+                                                        sha=comp_map.get('electron_sha256'),
+                                                        handler=handler):
+            return False
 
         self.logger.info('Environment successfully updated')
         return True

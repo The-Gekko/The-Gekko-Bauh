@@ -11,6 +11,7 @@ web.custom_action.install_app.invalid_url=Адрес {URL} {url} не может
 web.custom_action.install_app.status=Установка веб-приложения
 web.env.checking=Проверка Веб-среды
 web.env.error=Проблемы с Веб-средой. Невозможно установить {}.
+web.environment.electron.checksum_error=Не удалось проверить контрольную сумму {}. Загрузка удалена.
 web.environment.install=Устанавливается {}
 web.info.01_url=URL
 web.info.02_description=описание

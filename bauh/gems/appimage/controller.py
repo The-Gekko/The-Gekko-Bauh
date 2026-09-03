@@ -841,7 +841,10 @@ class AppImageManager(SoftwareManager, SettingsController):
             appimag_path = util.find_appimage_file(installation_dir)
 
             if appimag_path:
-                subprocess.Popen(args=[appimag_path], shell=True, env={**os.environ},
+                # Sin shell: con shell=True solo se ejecuta args[0] como una línea de shell, así
+                # que una ruta con un espacio (o con cualquier metacarácter) fallaba en silencio
+                # o ejecutaba otra cosa. El nombre del directorio sale del nombre del paquete.
+                subprocess.Popen(args=[appimag_path], env={**os.environ},
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
             else:
                 self.logger.error(f"Could not find the AppImage file of '{pkg.name}' in '{installation_dir}'")

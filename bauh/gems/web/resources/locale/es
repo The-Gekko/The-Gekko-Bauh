@@ -11,6 +11,7 @@ web.custom_action.install_app.invalid_url=No se pudo encontrar la dirección {UR
 web.custom_action.install_app.status=Instalando aplicación Web
 web.env.checking=Verificando el ambiente de instalación web
 web.env.error=Parece que hay problemas con el ambiente de instalación web. No será posible instalar {}.
+web.environment.electron.checksum_error=No se ha podido verificar la suma de comprobación de {}. La descarga se ha borrado.
 web.environment.install=Instalando {}
 web.info.01_url=URL
 web.info.02_description=descripción

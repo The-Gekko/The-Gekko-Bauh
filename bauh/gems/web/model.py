@@ -64,8 +64,25 @@ class WebApplication(SoftwarePackage):
             return f'{self.installation_dir}/{self.id}'
 
     def get_command(self) -> str:
+        """Orden de lanzamiento como texto. Solo para mostrarla; para ejecutar, ``get_command_args``."""
         if self.installation_dir:
             return f"{self.get_exec_path()}{' --no-sandbox' if user.is_root() else ''}"
+
+    def get_command_args(self) -> Optional[List[str]]:
+        """Orden de lanzamiento como lista de argumentos, que es como debe ejecutarse.
+
+        La ruta se construye a partir del nombre de la aplicación web, que elige el usuario:
+        un espacio bastaba para que la ejecución con shell fallara, y un metacarácter para
+        que se ejecutara otra cosa.
+        """
+        if self.installation_dir:
+            args = [self.get_exec_path()]
+
+            if user.is_root():
+                # Electron se niega a arrancar como root sin esto
+                args.append('--no-sandbox')
+
+            return args
 
     def get_type(self):
         return 'web'

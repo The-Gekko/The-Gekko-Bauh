@@ -11,6 +11,7 @@ web.custom_action.install_app.invalid_url=The address {URL} {url} could not be f
 web.custom_action.install_app.status=Installing Web application
 web.env.checking=Verification de l'environnement d'installation Web.
 web.env.error=Il y a des problèmes avec l'environnement d'installation Web. {} ne pourra pas être installé.
+web.environment.electron.checksum_error=La somme de contrôle de {} n'a pas pu être vérifiée. Le téléchargement a été supprimé.
 web.environment.install=Intallation de {}
 web.info.01_url=URL
 web.info.02_description=description

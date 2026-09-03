@@ -11,6 +11,7 @@ web.custom_action.install_app.status=安装 Web 应用程序
 web.custom_action.install_app=安装 Web 应用程序
 web.env.checking=检查 Web 安装环境
 web.env.error=似乎存在 Web 安装环境问题。将无法安装 {}。
+web.environment.electron.checksum_error=无法验证 {} 的校验和。已删除下载的文件。
 web.environment.install=安装 {}
 web.info.01_url=URL
 web.info.02_description=描述

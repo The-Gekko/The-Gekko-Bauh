@@ -11,6 +11,7 @@ web.custom_action.install_app.status=Instalando aplicação Web
 web.custom_action.install_app=Instalar aplicação Web
 web.env.checking=Verificando o ambiente de instalação Web
 web.env.error=Parce que existem problemas com o ambiente de instalação Web. Não será possível instalar {}.
+web.environment.electron.checksum_error=Não foi possível verificar a soma de verificação de {}. O download foi apagado.
 web.environment.install=Instalando {}
 web.environment.nativefier=Instalando {}
 web.info.01_url=URL

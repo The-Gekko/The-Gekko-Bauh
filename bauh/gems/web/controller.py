@@ -925,20 +925,55 @@ class WebApplicationManager(SoftwareManager, SettingsController):
 
         return False
 
+    @staticmethod
+    def _quote_desktop_exec(command: Optional[str]) -> str:
+        """Entrecomilla el valor de ``Exec=`` según la especificación de entradas de escritorio.
+
+        La ruta se construye con el nombre que el usuario le da a la aplicación web, así que
+        puede llevar espacios. Sin comillas, el lanzador partía la ruta y no arrancaba nada.
+        La especificación pide comillas dobles y escapar con barra invertida los caracteres
+        reservados « " », « ` », « $ » y « \\ ».
+        """
+        if not command:
+            return ''
+
+        if not any(char in command for char in ' \t"\'`$\\<>~|&;*?#()'):
+            return command
+
+        escaped = command
+        for char in ('\\', '"', '`', '$'):
+            escaped = escaped.replace(char, f'\\{char}')
+
+        return f'"{escaped}"'
+
+    @staticmethod
+    def _clean_desktop_value(value: Optional[str]) -> str:
+        """Deja un valor en una sola línea: un salto rompería el fichero .desktop entero."""
+        if not value:
+            return ''
+
+        return ' '.join(str(value).split())
+
     def _gen_desktop_entry_content(self, pkg: WebApplication) -> str:
-        return """
-        [Desktop Entry]
-        Type=Application
-        Name={name} (web)
-        Comment={desc}
-        Icon={icon}
-        Exec={exec_path}
-        {categories}
-        {wmclass}
-        """.format(name=pkg.name, exec_path=pkg.get_command(),
-                   desc=pkg.description or pkg.url, icon=pkg.get_disk_icon_path(),
-                   categories='Categories={}'.format(';'.join(pkg.categories)) if pkg.categories else '',
-                   wmclass="StartupWMClass={}".format(pkg.package_name) if pkg.package_name else '')
+        # Sin sangría y con el grupo en la primera línea: la especificación lo exige y los
+        # validadores de escritorio (desktop-file-validate) rechazan lo contrario.
+        lines = ['[Desktop Entry]',
+                 'Type=Application',
+                 f'Name={self._clean_desktop_value(pkg.name)} (web)',
+                 f'Comment={self._clean_desktop_value(pkg.description or pkg.url)}',
+                 f'Icon={pkg.get_disk_icon_path()}',
+                 f'Exec={self._quote_desktop_exec(pkg.get_command())}']
+
+        if pkg.categories:
+            categories = ';'.join(self._clean_desktop_value(c) for c in pkg.categories if c)
+
+            if categories:
+                lines.append(f'Categories={categories};')
+
+        if pkg.package_name:
+            lines.append(f'StartupWMClass={self._clean_desktop_value(pkg.package_name)}')
+
+        return '\n'.join(lines) + '\n'
 
     def is_enabled(self) -> bool:
         return self.enabled
@@ -1150,7 +1185,12 @@ class WebApplicationManager(SoftwareManager, SettingsController):
         return False
 
     def launch(self, pkg: WebApplication):
-        subprocess.Popen(args=[pkg.get_command()], shell=True, env={**os.environ})
+        args = pkg.get_command_args()
+
+        if args:
+            subprocess.Popen(args=args, env={**os.environ})
+        else:
+            self.logger.error(f"Could not determine the command to launch '{pkg.name}'")
 
     def clear_data(self, logs: bool = True):
         if os.path.exists(ENV_PATH):

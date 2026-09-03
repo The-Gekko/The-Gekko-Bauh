@@ -11,6 +11,7 @@ web.custom_action.install_app.invalid_url=The address {URL} {url} could not be f
 web.custom_action.install_app.status=Installing Web application
 web.env.checking=Web kurulum ortamını kontrol et
 web.env.error=Görünüşe göre Web kurulum ortamıyla ilgili sorunlar var. {} kurmak mümkün olmayacak.
+web.environment.electron.checksum_error={} sağlama toplamı doğrulanamadı. İndirilen dosya silindi.
 web.environment.install={} yükleniyor
 web.info.01_url=URL
 web.info.02_description=açıklama
