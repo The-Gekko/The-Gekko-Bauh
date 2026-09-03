@@ -65,17 +65,17 @@ resucita el archivo antiguo para «que aplique el parche».
 | `bauh/view/qt/root.py` (`RootDialog`) | Mismo archivo, reescrito | Mantener la firma `ask_password(..., parent=...)` y la entrega de la contraseña por `stdin`; portar solo la lógica. |
 | `bauh/context.py`, `bauh/stylesheet.py` | Mismos archivos | Mantener `set_theme(theme_key, app, logger, app_config=None)` y el vigilante de temas; portar el cambio. |
 | `bauh/gems/arch/pacman.py`, `controller.py` | Mismos archivos | Merge normal. Cuidado con `get_databases` (regex con guion), la deduplicación en `search()` y la acción de cambio a binario. |
-| `setup.py`, `pyproject.toml`, `requirements.txt` | `pyproject.toml` (`[project]`), `setup.py` shim | Las dependencias y clasificadores nuevos van a `pyproject.toml`; `setup.py` no se toca. |
+| `setup.py`, `setup.cfg`, `pyproject.toml`, `requirements.txt` | Solo `pyproject.toml` (`[project]`) | Este proyecto borró `setup.py` y `setup.cfg`: acepta el borrado en el conflicto y porta a `pyproject.toml` las dependencias y clasificadores nuevos. |
 | `bauh/__init__.py` (`__version__`) | Mismo archivo | Conservar siempre la versión del fork (sección 5). |
 | `CHANGELOG.md` | Mismo archivo | La sección del fork queda arriba; las del upstream se conservan literalmente debajo de la nota «Las entradas siguientes proceden del upstream». |
 | `README.md`, `CONTRIBUTING.md`, plantillas de `.github/` | Reescritos en español | Se descarta el texto del upstream; si trae información nueva (requisitos, dependencias) se incorpora redactada. |
 | `bauh/view/resources/locale/*`, `bauh/gems/*/resources/locale/*` | Mismos archivos | Merge normal; después `python3 tools/check_locales.py`. Las claves nuevas del fork nunca colisionan si llevan prefijo propio (`gekko.`, `eopkg.`, `github.`). |
-| `bauh/desktop/*.desktop`, `linux_dist/` | Mismos archivos | Merge normal; conservar `StartupWMClass=bauh` y el nombre visible. |
+| `bauh/desktop/gekko-bauh.desktop`, `gekko-bauh-tray.desktop`, `linux_dist/` | Archivos propios | Merge normal; conservar `StartupWMClass=gekko-bauh` y el nombre visible. Renombrar los del upstream, no añadirlos. |
 | `install.sh` | Solo existe en el fork | Sin conflicto posible. |
 
 Tras cualquier merge con conflictos se ejecuta la suite completa con PyQt5 (los
 conflictos en la capa Qt no se detectan sin ella) y se arranca la aplicación
-al menos una vez (`bauh --logs`).
+al menos una vez (`gekko-bauh --logs`).
 
 ## 5. Esquema de versiones
 

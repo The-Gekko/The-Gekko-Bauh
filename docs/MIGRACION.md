@@ -21,8 +21,8 @@ la configuración. Si vienes de una versión anterior, lee también la sección 
 | `~/.local/share/applications/gekko-bauh.desktop`, `gekko-bauh-tray.desktop` | Solo este proyecto | El oficial instala los suyos como `bauh.desktop` en `/usr/share/applications/`. |
 | `~/.local/share/icons/hicolor/<N>x<N>/apps/gekko-bauh.png` | Solo este proyecto | El oficial usa `bauh.png` desde `/usr/share`. |
 | `~/.config/autostart/gekko-bauh-tray.desktop` | Solo este proyecto | Si activaste el arranque de la bandeja. |
-| `~/BauhRepos/` | Solo este proyecto | Clones de la gem GitHub (configurable con `repos_dir` en `github.yml`). Nunca se borra automáticamente. |
-| `/etc/bauh/gems.forbidden` | Ambos | Gems prohibidas por el administrador. Se conserva el nombre heredado a propósito, para respetar la política que ya tuviera el sistema. |
+| `~/.local/share/gekko-bauh/github/repos/` | Solo este proyecto | Clones de la gem GitHub (configurable con `repos_dir` en `github.yml`). No se borran nunca, ni siquiera con `--purge`. `~/BauhRepos` es la ruta heredada. |
+| `/etc/bauh/gems.forbidden` y `/etc/gekko-bauh/gems.forbidden` | Ambos | Gems prohibidas por el administrador. Se leen **las dos** y se unen las listas: la heredada, a propósito, para respetar la política que ya tuviera el sistema. |
 
 Los ejecutables tampoco chocan: este proyecto instala `gekko-bauh`,
 `gekko-bauh-tray` y `gekko-bauh-cli`, mientras que el oficial instala `bauh`,
@@ -81,9 +81,10 @@ curl -fsSL https://raw.githubusercontent.com/The-Gekko/Bauh-Fork-The-Gekko/maste
 ```
 
 `--purge` borra `~/.config/gekko-bauh`, `~/.cache/gekko-bauh`,
-`~/.local/share/gekko-bauh` y el directorio temporal. **No toca**
-`~/.config/bauh`, que pertenece al oficial, ni `~/BauhRepos`, ni nada que hayas
-compilado o instalado con la gem GitHub.
+`~/.local/share/gekko-bauh` y el directorio temporal, **conservando**
+`~/.local/share/gekko-bauh/github/repos`, donde la gem GitHub clona tus
+repositorios. Tampoco toca `~/.config/bauh`, que pertenece al oficial, ni
+`~/BauhRepos`, ni nada que hayas compilado o instalado con la gem GitHub.
 
 ### Camino manual
 
@@ -106,7 +107,7 @@ puede contener ajustes que el bauh oficial no entiende:
 | `gems` | Lista con `eopkg`, `github`, ... | Los nombres que no conoce se ignoran, pero como la lista existe, el oficial solo activará las gems que aparezcan en ella. Pon `gems: null` para que active todas las que el sistema permita. |
 
 El desinstalador detecta el caso del tema y **ofrece devolver `ui.theme` a
-`light`**. Acepta si vas a seguir usando el bauh oficial.
+`light`**, con `--purge` y sin él. Acepta si vas a seguir usando el bauh oficial.
 
 El instalador también migra el entorno de pipx: si encuentra uno llamado `bauh`
 con la marca `.gekko-source-ref` dentro (es decir, instalado por este proyecto),

@@ -30,8 +30,8 @@ El esquema de versiones del fork es `<versión upstream>+gekko.N`
 - Gem **GitHub** (opt-in): clona un repositorio, detecta el método de build
   (PKGBUILD, `setup.py`/`pyproject`, Cargo, ...), muestra el comando exacto,
   pide confirmación antes de ejecutarlo y separa la compilación (usuario) de
-  la instalación (privilegios). Clones en `~/BauhRepos` (`repos_dir` en
-  `github.yml`).
+  la instalación (privilegios). Clones en `~/.local/share/gekko-bauh/github/repos`
+  (`repos_dir` en `github.yml`), que `uninstall --purge` conserva.
 - Arch: acción **«Cambiar al binario del repositorio»** para paquetes AUR
   instalados que existen en un repositorio de pacman habilitado (por ejemplo
   Chaotic AUR); la tabla muestra el repositorio disponible.
@@ -88,7 +88,9 @@ El esquema de versiones del fork es `<versión upstream>+gekko.N`
 ### Security
 - La contraseña de administrador se entrega por `stdin` a `sudo -S -k` y
   nunca como argumento; el éxito se valida por código de retorno.
-- Directorios temporales bajo `$XDG_RUNTIME_DIR` con permisos `0700`.
+- Directorios temporales privados con permisos `0700` bajo `~/.cache/gekko-bauh/tmp`,
+  verificando dueño y que no sean un enlace simbólico. No se usa `$XDG_RUNTIME_DIR`
+  porque es un tmpfs pequeño (10 % de la RAM).
 - Comandos de pacman construidos como listas de argumentos (sin shell) y
   saneado de entrada reforzado.
 - Gem GitHub: ningún comando de build se ejecuta sin mostrarlo y pedir
@@ -111,19 +113,20 @@ El esquema de versiones del fork es `<versión upstream>+gekko.N`
   origen y sin copiar la caché, de modo que el bauh oficial sigue funcionando
   igual y ambos pueden convivir.
 - `pyproject.toml` con la sección `[project]` completa (el upstream la
-  introdujo en 0.10.6 solo como `[build-system]`); `setup.py` reducido a un
-  shim; `requirements-dev.txt` para desarrollo.
-- CI en GitHub Actions: tests en Python 3.9/3.12/3.14 con Qt offscreen,
-  `ruff`, `shellcheck`, `python -m build` y paridad de traducciones
-  (`tools/check_locales.py`).
+  introdujo en 0.10.6 solo como `[build-system]`); `setup.py` y `setup.cfg`
+  eliminados; `requirements-dev.txt` para desarrollo.
+- CI en GitHub Actions: la suite sin PyQt5 en Python 3.9/3.12/3.14 y la suite
+  completa con Qt offscreen en 3.12; `ruff`, `shellcheck`, `python -m build` y
+  paridad de traducciones (`tools/check_locales.py`).
 - `install.sh`: instala el commit exacto que resuelve (no la punta de `master`
   en el instante de la descarga), pasa `--python` a pipx, migra el entorno
   pipx `bauh` de versiones anteriores a `gekko-bauh`, instala iconos por
   tamaño (`pictures/icons/gekko-bauh-<N>.png`, N = 16…512) y un `.desktop`
   con traducciones y `StartupWMClass=gekko-bauh`; `uninstall --purge` borra la
   configuración, la caché, los datos y los temporales propios, deja intacto
-  `~/.config/bauh` (que pertenece al bauh oficial) y ofrece restablecer su
-  `ui.theme` si una versión anterior lo dejó en un tema desconocido para él.
+  `~/.config/bauh` (que pertenece al bauh oficial) y conserva los clones de la gem
+  GitHub. El ofrecimiento de restablecer `ui.theme` en la configuración del bauh
+  oficial se hace tanto con `--purge` como sin él.
 
 ### Known issues
 - En compositores Wayland que solo implementan `xdg-shell` (Hyprland, Niri,

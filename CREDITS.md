@@ -66,8 +66,8 @@ es del proyecto original.
 - **Alcance acotado**: Arch/AUR/Chaotic AUR, Flatpak y Solus (eopkg) activas por
   defecto; AppImage, Snap, Web y Debian pasan a opt-in y sin soporte activo.
 - **Diálogo de contraseña** modal y endurecimiento de seguridad (contraseña
-  por `stdin` a `sudo -S -k`, temporales bajo `$XDG_RUNTIME_DIR`, pacman sin
-  shell).
+  por `stdin` a `sudo -S -k`, temporales privados `0700` bajo
+  `~/.cache/gekko-bauh/tmp` con dueño y enlaces comprobados, pacman sin shell).
 - **Reorganización de la ventana principal** en `ManageWindow` + mixins, un
   único módulo de hilos (`bauh/view/qt/thread.py`) y eliminación de módulos
   fósiles; cierre bloqueado durante transacciones; `SIGINT`/`SIGTERM`;
@@ -82,7 +82,7 @@ es del proyecto original.
 
 Nota de atribución: el `pyproject.toml` **no** es una aportación de este proyecto.
 El proyecto original lo introdujo en 0.10.6 (solo con `[build-system]`); aquí se
-completa con la sección `[project]` y convierte `setup.py` en un shim.
+completa con la sección `[project]` y se eliminan `setup.py` y `setup.cfg`.
 
 ## Arte
 

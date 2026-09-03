@@ -21,7 +21,7 @@ considera enviarlo **también** al proyecto original
 - Indica el commit instalado (`cat "$(pipx environment --value PIPX_LOCAL_VENVS)/gekko-bauh/.gekko-source-ref"`),
   la salida de `pipx list`, la distribución, el entorno de escritorio o
   compositor (X11/Wayland) y la versión de Python.
-- Adjunta la salida de `bauh --logs` reproduciendo el problema.
+- Adjunta la salida de `gekko-bauh --logs` reproduciendo el problema.
 - Si el mismo error ocurre con el bauh oficial, repórtalo en el upstream y
   enlaza el issue aquí.
 
@@ -120,10 +120,10 @@ Directorios de locale:
 - `bauh/gems/snap/resources/locale/`
 - `bauh/gems/web/resources/locale/`
 
-Idiomas actualmente presentes: `ca`, `de`, `en`, `es`, `fr`, `it`, `pt`,
-`ru`, `tr`, `zh` (las gems `eopkg` y `github`, nuevas en el fork, todavía solo
-tienen `en` y `es`; las traducciones son bienvenidas). Para añadir un idioma
-nuevo crea el archivo en **todos** los directorios anteriores.
+Idiomas presentes: `ca`, `de`, `en`, `es`, `fr`, `it`, `pt`, `ru`, `tr` y `zh`,
+los diez en **todos** los directorios anteriores. `tools/check_locales.py` exige
+esa paridad y falla si un directorio se queda sin uno de ellos, así que al añadir
+un idioma nuevo crea el archivo en todos.
 
 ## Estilo de código
 

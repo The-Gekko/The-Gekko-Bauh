@@ -124,7 +124,8 @@ punto es comprobable en el código o en la propia interfaz.
 - La contraseña de administrador **nunca viaja como argumento** de un proceso:
   se entrega por `stdin` a `sudo -S -k` y se valida por el código de retorno,
   no analizando texto.
-- Directorios temporales bajo `$XDG_RUNTIME_DIR` con permisos `0700`
+- Directorios temporales privados con permisos `0700` bajo `~/.cache/gekko-bauh/tmp`,
+  comprobando dueño y que no sean un enlace simbólico
   (antes `/tmp/bauh@usuario`, una ruta predecible en un directorio compartido).
 - Los comandos de pacman se construyen como listas de argumentos (sin pasar
   por un shell) y el saneado de la entrada del usuario se ha reforzado.
@@ -141,9 +142,10 @@ punto es comprobable en el código o en la propia interfaz.
   sigue llamándose `bauh` para poder integrar las correcciones del proyecto
   original. Versión PEP 440 `0.10.8+gekko.1`, `pyproject.toml` con la sección
   `[project]` completa.
-- **CI en GitHub Actions**: tests en Python 3.9, 3.12 y 3.14 con Qt
-  offscreen, `ruff`, `shellcheck` sobre `install.sh`, construcción del wheel y
-  comprobación de paridad de traducciones (`tools/check_locales.py`).
+- **CI en GitHub Actions**: la suite sin PyQt5 en Python 3.9, 3.12 y 3.14, y la
+  suite completa con Qt offscreen en 3.12; `ruff`, `shellcheck` sobre
+  `install.sh`, construcción del wheel y comprobación de paridad de
+  traducciones (`tools/check_locales.py`).
 - Compatibilidad con **Python 3.13 y 3.14**.
 - Integrado el arreglo del upstream que fuerza `QT_QPA_PLATFORM=wayland` en
   sesiones Wayland (evitaba un cierre inesperado al arrancar en algunos
@@ -206,7 +208,7 @@ Qué hace el instalador:
    `python3`). Si encuentra el entorno `bauh` de una versión anterior de este
    proyecto, lo **migra** a `gekko-bauh` y elimina el antiguo.
 4. Instala el icono en los tamaños estándar de `hicolor` (16 a 512 px) y un
-   `.desktop` con traducciones y `StartupWMClass=bauh` en
+   `.desktop` con traducciones y `StartupWMClass=gekko-bauh` en
    `~/.local/share/applications/`, y refresca las cachés del escritorio.
 
 Si detecta el bauh **oficial** instalado por pacman o eopkg, avisa del
@@ -342,12 +344,15 @@ curl -fsSL https://raw.githubusercontent.com/The-Gekko/Bauh-Fork-The-Gekko/maste
 ```
 
 `--purge` elimina `~/.config/gekko-bauh`, `~/.cache/gekko-bauh`,
-`~/.local/share/gekko-bauh` y
-el directorio temporal de la sesión, y **ofrece restablecer `ui.theme`** en
-`config.yml` antes de borrarlo si prefieres conservar la configuración pero
-volver al bauh oficial (que no conoce los temas Aurora, GTK ni Matugen). Los
-clones de la gem GitHub (`~/BauhRepos`) y lo que hayas compilado con ellos no
-se borran nunca automáticamente. Detalles en [docs/MIGRACION.md](docs/MIGRACION.md).
+`~/.local/share/gekko-bauh` y el directorio temporal de la sesión, **conservando
+`~/.local/share/gekko-bauh/github/repos`**, donde la gem GitHub clona tus
+repositorios: pueden contener trabajo sin publicar, así que no se borran nunca
+automáticamente (ni ese directorio ni el heredado `~/BauhRepos`).
+
+Con `--purge` y sin él, el desinstalador **ofrece restablecer `ui.theme`** en
+`~/.config/bauh/config.yml` si prefieres volver al bauh oficial, que no conoce
+los temas Aurora, GTK ni Matugen y arrancaría sin hoja de estilos. Detalles en
+[docs/MIGRACION.md](docs/MIGRACION.md).
 
 ## Migración desde y hacia el bauh oficial
 
@@ -408,8 +413,8 @@ window-rule {
 ```
 
 Comprueba la clase real que ve tu compositor con `hyprctl clients` o
-`niri msg windows` mientras el diálogo está abierto; si no es `bauh`, abre un
-issue indicando lo que aparece.
+`niri msg windows` mientras el diálogo está abierto; si no es `gekko-bauh`, abre
+un issue indicando lo que aparece.
 
 ## Temas
 
@@ -428,11 +433,12 @@ del upstream.
 | `~/.config/gekko-bauh/<gem>.yml` | Configuración de cada gem (`arch.yml`, `eopkg.yml`, `github.yml`, ...). |
 | `~/.cache/gekko-bauh/` | Caché de paquetes, iconos y sugerencias. |
 | `~/.local/share/gekko-bauh/` | Datos compartidos y temas de usuario (`themes/`). |
-| `$XDG_RUNTIME_DIR/bauh/` | Archivos temporales y logs de la sesión (`bauh --logs` los muestra en el terminal). |
-| `/etc/bauh/gems.forbidden` | Lista de gems que el administrador prohíbe cargar (una por línea). |
+| `~/.cache/gekko-bauh/tmp` | Archivos temporales de la sesión, con permisos `0700`. No se usa `$XDG_RUNTIME_DIR` porque es un tmpfs pequeño (10 % de la RAM). |
+| `~/.cache/gekko-bauh/logs` | Logs de la sesión (`gekko-bauh --logs` los muestra además en el terminal). |
+| `/etc/bauh/gems.forbidden`, `/etc/gekko-bauh/gems.forbidden` | Gems que el administrador prohíbe cargar (una por línea). Se leen las dos rutas y se unen: la heredada respeta una política que el sistema ya tuviera puesta. |
 
-Argumentos útiles: `bauh --logs` (logs en el terminal), `bauh --settings`
-(abre directamente los ajustes), `bauh --offline`, `bauh --reset` (borra
+Argumentos útiles: `gekko-bauh --logs` (logs en el terminal), `gekko-bauh --settings`
+(abre directamente los ajustes), `gekko-bauh --offline`, `gekko-bauh --reset` (borra
 configuración, caché y temporales), `gekko-bauh-cli updates [--format json]`.
 
 ## Cómo ejecutar los tests
@@ -475,7 +481,7 @@ en [docs/SINCRONIZACION_UPSTREAM.md](docs/SINCRONIZACION_UPSTREAM.md).
 
 Lee [CONTRIBUTING.md](CONTRIBUTING.md): entorno de desarrollo, tests, lint,
 traducciones, convención de commits y flujo de pull requests. Para reportar un
-error usa la plantilla de issue (pide la salida de `bauh --logs`, `pipx list` y
+error usa la plantilla de issue (pide la salida de `gekko-bauh --logs`, `pipx list` y
 el commit instalado).
 
 ## Créditos

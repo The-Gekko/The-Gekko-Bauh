@@ -669,6 +669,83 @@ test_remote_icon_fallback() {
 
 echo "Instalador bajo prueba: $INSTALLER"
 
+test_purge_also_resets_fork_theme() {
+    start_case 'uninstall --purge también devuelve el tema del fork a «light»'
+
+    run_installer_local --yes --no-autostart
+    assert_status 0 "$?" 'la instalación previa termina bien'
+
+    mkdir -p "$HOME/.config/bauh"
+    printf 'ui:\n  theme: aurora\n' > "$HOME/.config/bauh/config.yml"
+
+    run_installer_local uninstall --purge --yes
+    assert_status 0 "$?" 'el desinstalador termina bien'
+
+    # reset_fork_theme opera sobre ~/.config/bauh, que la purga no toca: dejar el tema
+    # propio ahí haría arrancar al bauh oficial sin hoja de estilos y sin ningún error
+    assert_contains "$HOME/.config/bauh/config.yml" 'theme: light'
+
+    cleanup_sandbox
+}
+
+test_purge_keeps_github_clones() {
+    start_case 'uninstall --purge conserva los clones de la gem GitHub'
+
+    run_installer_local --yes --no-autostart
+    assert_status 0 "$?" 'la instalación previa termina bien'
+
+    local repos="$HOME/.local/share/gekko-bauh/github/repos"
+    mkdir -p "$repos/mi-usuario/mi-proyecto/.git" \
+             "$HOME/.local/share/gekko-bauh/themes"
+    : > "$repos/mi-usuario/mi-proyecto/trabajo-sin-publicar.txt"
+    : > "$HOME/.local/share/gekko-bauh/themes/mio.qss"
+    : > "$HOME/.local/share/gekko-bauh/github/cache.yml"
+
+    run_installer_local uninstall --purge --yes
+    assert_status 0 "$?" 'el desinstalador termina bien'
+
+    # el trabajo local del usuario no se borra ni con --purge
+    if [[ -f "$repos/mi-usuario/mi-proyecto/trabajo-sin-publicar.txt" ]]; then
+        pass 'los clones de la gem GitHub siguen ahí'
+    else
+        fail 'se borraron los clones de la gem GitHub'
+    fi
+
+    assert_no_file "$HOME/.local/share/gekko-bauh/themes/mio.qss"
+    assert_no_file "$HOME/.local/share/gekko-bauh/github/cache.yml"
+    assert_contains "$SANDBOX/output.txt" 'no se han borrado'
+
+    cleanup_sandbox
+}
+
+test_foreign_bauh_binary_is_not_a_leftover() {
+    start_case 'uninstall no da por fallida la desinstalación por el bauh oficial'
+
+    run_installer_local --yes --no-autostart
+    assert_status 0 "$?" 'la instalación previa termina bien'
+
+    # venv «bauh» ajeno: sin nuestra marca de origen y con su propio ejecutable en el PATH
+    local venvs="$HOME/.local/share/pipx/venvs"
+    mkdir -p "$venvs/bauh/bin"
+    printf '#!/bin/sh\necho bauh oficial\n' > "$HOME/.local/bin/bauh"
+    chmod +x "$HOME/.local/bin/bauh"
+    ln -sf "$HOME/.local/bin/bauh" "$venvs/bauh/bin/bauh"
+
+    run_installer_local uninstall --yes
+    assert_status 0 "$?" 'el desinstalador termina bien pese al bauh ajeno'
+
+    assert_not_contains "$SANDBOX/output.txt" 'La desinstalación NO se completó'
+    assert_contains "$SANDBOX/output.txt" 'se deja intacto'
+
+    if [[ -x "$HOME/.local/bin/bauh" ]]; then
+        pass 'el ejecutable del bauh oficial sigue intacto'
+    else
+        fail 'se borró el ejecutable del bauh oficial'
+    fi
+
+    cleanup_sandbox
+}
+
 test_local_install
 test_autostart
 test_legacy_migration
@@ -680,6 +757,9 @@ test_remote_installs_resolved_commit
 test_uninstall_without_installation
 test_uninstall_after_install
 test_uninstall_purge
+test_purge_also_resets_fork_theme
+test_purge_keeps_github_clones
+test_foreign_bauh_binary_is_not_a_leftover
 test_uninstall_resets_fork_theme
 test_theme_untouched_when_standard
 test_help_and_bad_option

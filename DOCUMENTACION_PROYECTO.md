@@ -58,8 +58,6 @@ en el sistema anfitrión.
 ├── requirements.txt            # Dependencias de ejecución
 ├── requirements-dev.txt        # Dependencias de desarrollo
 ├── pyproject.toml              # Metadatos [project] y backend PEP 517/518
-├── setup.py                    # Shim de compatibilidad (delega en pyproject)
-├── setup.cfg                   # Metadatos adicionales del paquete
 ├── MANIFEST.in                 # Archivos incluidos en la distribución
 ├── README.md                   # Presentación, instalación y características
 ├── CONTRIBUTING.md             # Entorno, tests, lint, traducciones, commits
@@ -87,8 +85,6 @@ que debe modificarse está en `bauh/` y las pruebas en `tests/`.
 | `install.sh` | Instala/actualiza/desinstala el fork con pipx; ver sección 6. |
 | `requirements.txt` / `requirements-dev.txt` | Dependencias de ejecución / de desarrollo (ruff, build, twine, lxml, beautifulsoup4). |
 | `pyproject.toml` | Sección `[project]` completa (nombre `gekko-bauh`, versión dinámica, dependencias, scripts, clasificadores) y `[build-system]` con setuptools. |
-| `setup.py` | Shim mínimo para herramientas que aún lo invocan; no contiene metadatos propios. |
-| `setup.cfg` | Metadatos residuales de setuptools. |
 | `MANIFEST.in` | Archivos adicionales incluidos en la distribución fuente. |
 
 ## 3. Arquitectura y flujo de ejecución
@@ -126,7 +122,9 @@ muestra las actualizaciones disponibles.
 `controller.py` de cada uno y busca una clase que herede directamente de
 `SoftwareManager`. La activación sigue esta lógica:
 
-- Si `/etc/bauh/gems.forbidden` lista la gem, no se carga.
+- Si `/etc/bauh/gems.forbidden` o `/etc/gekko-bauh/gems.forbidden` listan la gem, no se carga.
+  Se leen las dos rutas y se unen las listas: la heredada es literal a propósito, para
+  respetar una política que el sistema ya tuviera puesta antes de instalar este proyecto.
 - Si `config.yml` no tiene la clave `gems` (valor `null`), cada gem queda
   activada según su propio `is_default_enabled()`: `True` para `arch`,
   `flatpak` y `eopkg` (esta última solo si `can_work()` encuentra el binario
@@ -194,7 +192,7 @@ Aurora y sustituyen sus colores por los del sistema. `parse_gtk_matugen_colors()
 `~/.config/gtk-4.0/gtk.css` y `/etc/gtk-3.0/gtk.css`, y las mapea a las
 variables del tema (fondo, vista, texto, barra lateral, acento).
 
-`setup_theme_watcher()` (`bauh/context.py`) instala un `QFileSystemWatcher`
+`update_theme_watcher()` (`bauh/context.py`) instala un `QFileSystemWatcher`
 sobre esos archivos **solo cuando el tema activo es `gtk` o `matugen`**, con
 debounce para agrupar escrituras consecutivas, y vuelve a llamar a
 `set_theme(theme_key, app, logger, app_config)` al detectar cambios. La
@@ -218,7 +216,7 @@ de usarse en comandos.
 
 | Archivo | Responsabilidad |
 |---|---|
-| `bauh/__init__.py` | Declara `__version__` (`0.10.8+gekko.1`), `__app_name__` (`bauh`) y `ROOT_DIR`. |
+| `bauh/__init__.py` | Declara `__version__` (`0.10.8+gekko.1`), `__app_name__` (`gekko-bauh`), `__package_name__` (`bauh`), `__display_name__`, `__repo_url__`, `__upstream_url__` y `ROOT_DIR`. |
 | `bauh/app.py` | Entrada GUI; prepara Qt, argumentos, logging, `excepthook`, señales, escalado, modo offline, modo bandeja y ciclo de eventos. |
 | `bauh/app_args.py` | Define `--logs`, `--offline`, `--suggestions`, `--tray`, `--settings` y `--reset`. |
 | `bauh/context.py` | Crea `QApplication`, configura estilo/paleta, temas, vigilante de temas e internacionalización. |
@@ -341,7 +339,7 @@ restantes encapsulan consultas, comandos, workers, configuración o UI propia.
 |---|---|---|
 | `arch/` | Sí (si hay `pacman`) | `controller.py` integra el gestor (búsqueda con deduplicación repositorio/AUR, acción «Cambiar al binario del repositorio»); `pacman.py` ejecuta operaciones de Pacman con listas de argumentos (`get_databases` reconoce repositorios con guion); `aur.py` consulta AUR; `makepkg.py`, `pkgbuild.py`, `git.py` y `gpg.py` soportan compilación/verificación; `dependencies.py`, `updates.py`, `rebuild_detector.py` y `sorting.py` resuelven dependencias, actualizaciones y orden; `database.py`, `mapper.py` y `model.py` representan datos; `config.py`, `confirmation.py`, `message.py`, `output.py`, `worker.py`, `download.py`, `disk.py`, `mirrors.py`, `cpu_manager.py`, `proc_util.py`, `sshell.py` y `exceptions.py` completan configuración, procesos, descarga, salida y errores; `suggestions.py` aporta recomendaciones. |
 | `eopkg/` | Sí (si hay `eopkg`) | Propia del fork. `controller.py` adapta Solus/eopkg (búsqueda, instalados con versión, `list-upgrades`, instalar/eliminar/actualizar con `-y`; `-N` solo desactiva el color); `model.py` representa paquetes; `config.py` (`search_limit`). |
-| `github/` | No (opt-in) | Propia del fork. `controller.py` clona repositorios en `repos_dir` (`~/BauhRepos`), detecta el método de build con `build_detector.py`, muestra el comando, pide confirmación y separa compilación (usuario) de instalación (root); `model.py` representa proyectos; `config.py` (`repos_dir`, `clone_only`). |
+| `github/` | No (opt-in) | Propia del fork. `controller.py` clona repositorios en `repos_dir` (por defecto `~/.local/share/gekko-bauh/github/repos`; `~/BauhRepos` es el heredado), detecta el método de build con `build_detector.py`, muestra el comando, pide confirmación y separa compilación (usuario) de instalación (root); `model.py` representa proyectos; `config.py` (`repos_dir`, `clone_only`). |
 | `appimage/` | No (opt-in) | `controller.py`, `query.py`, `util.py`, `worker.py`: ciclo de vida de AppImages desde la base de datos del upstream. |
 | `debian/` | No (opt-in) | `controller.py`, `aptitude.py`, `index.py`, `tasks.py`, `gui.py`: APT/aptitude. |
 | `flatpak/` | Sí (si hay `flatpak`) | Dentro del alcance del fork. `controller.py`, `flatpak.py`, `worker.py`, `constants.py`. |
@@ -349,8 +347,8 @@ restantes encapsulan consultas, comandos, workers, configuración o UI propia.
 | `web/` | No (opt-in) | `controller.py`, `search.py`, `nativefier.py`, `environment.py`, `worker.py`: aplicaciones web empaquetadas con nativefier. |
 
 Cada gem tiene `resources/locale/` (traducciones) y, cuando aplica,
-`resources/img/`. Las gems `eopkg` y `github` disponen por ahora de `en` y
-`es`; el resto de `ca`, `de`, `en`, `es`, `fr`, `it`, `pt`, `ru`, `tr` y `zh`.
+`resources/img/`. Todas disponen de los diez idiomas: `ca`, `de`, `en`, `es`,
+`fr`, `it`, `pt`, `ru`, `tr` y `zh`.
 
 ### 4.8 Recursos
 
@@ -361,7 +359,7 @@ Cada gem tiene `resources/locale/` (traducciones) y, cuando aplica,
 | `bauh/view/resources/style/` | Temas Qt/QSS (`.qss`, `.vars`, `.meta`, `img/`). |
 | `bauh/gems/*/resources/locale/` | Traducciones específicas de cada gem. |
 | `bauh/gems/*/resources/img/` | Iconos y recursos gráficos específicos de cada formato. |
-| `bauh/desktop/` | `bauh.desktop` y `bauh_tray.desktop` con traducciones y `StartupWMClass=bauh`. |
+| `bauh/desktop/` | `gekko-bauh.desktop` y `gekko-bauh-tray.desktop` con traducciones y `StartupWMClass=gekko-bauh`. |
 | `pictures/` | `gekko-bauh.png` (arte del fork) e `icons/gekko-bauh-<N>.png` con N en 16, 32, 48, 64, 128, 256 y 512, usados por `install.sh`. |
 
 Los archivos `.qss` definen estilos Qt, los `.vars` contienen variables de
@@ -378,8 +376,9 @@ QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests
 
 Los tests que necesitan Qt se saltan solos si PyQt5 no está instalado
 (`@unittest.skipUnless(importlib.util.find_spec('PyQt5') is not None, ...)`).
-La CI los ejecuta en Python 3.9, 3.12 y 3.14 junto con `ruff`, `shellcheck`,
-`python -m build` y `tools/check_locales.py`.
+La CI ejecuta la suite sin PyQt5 en Python 3.9, 3.12 y 3.14, y la suite completa
+con Qt offscreen en 3.12, junto con `ruff`, `shellcheck`, `python -m build` y
+`tools/check_locales.py`.
 
 La carpeta `tests/` está organizada de forma paralela a la implementación:
 
@@ -416,12 +415,12 @@ leída de `bauh/__init__.py`, `requires-python`, dependencias, clasificadores,
 URLs del fork y del upstream, licencia zlib/libpng) y registra los comandos:
 
 ```text
-bauh      -> bauh.app:main
-bauh-tray -> bauh.app:tray
-bauh-cli  -> bauh.cli.app:main
+gekko-bauh       -> bauh.app:main
+gekko-bauh-tray  -> bauh.app:tray
+gekko-bauh-cli   -> bauh.cli.app:main
 ```
 
-`setup.py` es un shim de compatibilidad. La versión sigue el esquema
+`setup.py` y `setup.cfg` ya no existen: todo vive en `pyproject.toml`. La versión sigue el esquema
 `<versión upstream>+gekko.N` y la etiqueta git `v<versión upstream>-gekko.N`
 (ver `docs/SINCRONIZACION_UPSTREAM.md`).
 
@@ -450,12 +449,12 @@ Instalador y desinstalador en bash pensado para `curl ... | bash`:
 ### Ejemplos de uso
 
 ```bash
-bauh --logs
-bauh --offline
-bauh --settings
-bauh --reset          # borra configuración, caché y temporales
-bauh-cli updates
-bauh-cli updates --format json
+gekko-bauh --logs
+gekko-bauh --offline
+gekko-bauh --settings
+gekko-bauh --reset    # borra configuración, caché y temporales
+gekko-bauh-cli updates
+gekko-bauh-cli updates --format json
 ```
 
 La forma recomendada de instalación, los requisitos y las limitaciones
@@ -492,7 +491,7 @@ convivencia con el bauh oficial en `docs/MIGRACION.md`.
   operaciones de gestión están integradas en la GUI.
 - La selección efectiva de gestores depende de `can_work()`,
   `is_default_enabled()`, la clave `gems` de la configuración, el archivo
-  `/etc/bauh/gems.forbidden` y las herramientas instaladas.
+  `/etc/bauh/gems.forbidden`, `/etc/gekko-bauh/gems.forbidden` y las herramientas instaladas.
 - «Siempre al frente» del diálogo de contraseña no está garantizado en
   compositores Wayland que solo implementan `xdg-shell` (Hyprland, Niri);
   `README.md` documenta la limitación y una regla de ventana de ejemplo.
