@@ -35,9 +35,14 @@
 buscar, instalar, actualizar y desinstalar software en Linux. Su alcance son tres
 plataformas: **Arch Linux y derivados** (pacman, AUR y cualquier repositorio
 adicional de pacman, por ejemplo Chaotic AUR), **Flatpak** y **Solus (eopkg)**.
-Las tres vienen activadas de fábrica. Los demás formatos heredados del proyecto
-original (AppImage, Snap, Web, Debian) siguen incluidos, pero **desactivados por
-defecto** y sin soporte activo: se activan en `Ajustes → Tipos de aplicaciones`.
+Las tres vienen activadas de fábrica. Se incluyen además tres gestores que **no
+pertenecen a ninguna distribución**: AppImage, aplicaciones web y compilación
+desde un repositorio de GitHub. Vienen desactivados y se activan en
+`Ajustes → Tipos de aplicaciones`.
+
+Los gestores de otras distribuciones (Debian/Ubuntu y Snap) se han **eliminado**:
+este proyecto es para Arch y Solus, y arrastrar código que aquí nunca se ejecuta
+solo añadía superficie que mantener y revisar.
 
 ## Índice
 
@@ -114,10 +119,13 @@ punto es comprobable en el código o en la propia interfaz.
   ninguna «protección anti-scripts»: compilar código de terceros es tu
   responsabilidad. Los clones se guardan en `~/BauhRepos` (clave `repos_dir`
   de `~/.config/gekko-bauh/github.yml`).
-- **Gems heredadas opt-in**: AppImage, Snap, Web y Debian vienen desactivadas
-  y sin soporte activo. Se activan en `Ajustes → Tipos de aplicaciones` (o con
-  la clave `gems` de `config.yml`). Arch, Flatpak y eopkg, que son el alcance
-  del proyecto, siguen activadas por defecto.
+- **Gems universales opt-in**: AppImage, Web y GitHub vienen desactivadas. Se
+  activan en `Ajustes → Tipos de aplicaciones` (o con la clave `gems` de
+  `config.yml`). No dependen de ninguna distribución, así que funcionan igual en
+  Arch y en Solus. Arch, Flatpak y eopkg, que son el alcance del proyecto,
+  siguen activadas por defecto.
+- **Sin código de otras distribuciones**: las gems de Debian/Ubuntu y Snap se
+  han eliminado del árbol, junto con la acción de Arch que configuraba `snapd`.
 
 ### Seguridad
 
@@ -169,8 +177,8 @@ son mérito de este proyecto:
 - El gestor de **Flatpak** (búsqueda en Flathub, instalación por usuario o para
   todo el sistema, actualización de runtimes), que este proyecto mantiene dentro de su
   alcance.
-- Los demás gestores, ya sin soporte activo: AppImage, Snap, Web (nativefier) y
-  Debian.
+- Los gestores universales, desactivados de fábrica: AppImage, aplicaciones web
+  (nativefier) y compilación desde un repositorio de GitHub.
 
 ## Requisitos
 
@@ -363,8 +371,9 @@ los datos de usuario. En resumen:
   `gekko-bauh`, tus ajustes y tus temas de usuario se **copian** de
   `~/.config/bauh` y `~/.local/share/bauh` a las rutas propias. El directorio
   original queda intacto, así que puedes seguir usando el bauh oficial en
-  paralelo. Las gems AppImage/Snap/Web/Debian quedan desactivadas hasta que las
-  marques en `Ajustes → Tipos de aplicaciones`.
+  paralelo. Las gems AppImage, Web y GitHub quedan desactivadas hasta que las
+  marques en `Ajustes → Tipos de aplicaciones`. Si en el oficial usabas Snap o
+  Debian, aquí no existen: este proyecto solo cubre Arch y Solus.
 - **Convivir con el oficial**: no hace falta desinstalarlo. Cada uno tiene su
   ejecutable, su lanzador, su icono y su configuración. Si aun así prefieres
   quitarlo, el instalador puede hacerlo con `--remove-system-bauh`.

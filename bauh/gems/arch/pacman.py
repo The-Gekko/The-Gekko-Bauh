@@ -1280,10 +1280,6 @@ def get_packages_to_sync_first() -> Set[str]:
     return set()
 
 
-def is_snapd_installed() -> bool:
-    return bool(_run(['pacman', '-Qq', 'snapd'], print_error=False))
-
-
 def list_hard_requirements(name: str, logger: Optional[logging.Logger] = None,
                            assume_installed: Optional[Set[str]] = None) -> Optional[Set[str]]:
     cmd = ['pacman', '-Rc', name, '--print-format=%n']

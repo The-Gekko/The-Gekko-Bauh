@@ -113,11 +113,9 @@ Directorios de locale:
   `about/` y `tray/`)
 - `bauh/gems/appimage/resources/locale/`
 - `bauh/gems/arch/resources/locale/`
-- `bauh/gems/debian/resources/locale/`
 - `bauh/gems/eopkg/resources/locale/`
 - `bauh/gems/flatpak/resources/locale/`
 - `bauh/gems/github/resources/locale/`
-- `bauh/gems/snap/resources/locale/`
 - `bauh/gems/web/resources/locale/`
 
 Idiomas presentes: `ca`, `de`, `en`, `es`, `fr`, `it`, `pt`, `ru`, `tr` y `zh`,

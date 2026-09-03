@@ -64,7 +64,8 @@ es del proyecto original.
 - **Gem Arch**: repositorios con guion en `get_databases`, deduplicación
   repositorio/AUR y acción «Cambiar al binario del repositorio».
 - **Alcance acotado**: Arch/AUR/Chaotic AUR, Flatpak y Solus (eopkg) activas por
-  defecto; AppImage, Snap, Web y Debian pasan a opt-in y sin soporte activo.
+  defecto; AppImage, Web y GitHub quedan como opcionales. Los gestores de Debian
+  y Snap, que pertenecen a otras distribuciones, se han eliminado.
 - **Diálogo de contraseña** modal y endurecimiento de seguridad (contraseña
   por `stdin` a `sudo -S -k`, temporales privados `0700` bajo
   `~/.cache/gekko-bauh/tmp` con dueño y enlaces comprobados, pacman sin shell).

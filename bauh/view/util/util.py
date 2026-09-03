@@ -70,19 +70,29 @@ def restart_app():
     QCoreApplication.exit()
 
 
-def get_distro():
+def get_distro() -> str:
+    """Familia de la distribución, para que las gems ajusten su comportamiento.
+
+    Solo se distingue lo que alguna gem necesita: 'arch' (que incluye los derivados que
+    declaran ID_LIKE=arch, como EndeavourOS, Garuda o Manjaro) y 'solus'. El resto es
+    'unknown', que no impide nada: Flatpak y las gems universales funcionan igual.
+    """
     if os.path.exists('/etc/arch-release'):
         return 'arch'
 
-    if os.path.exists('/etc/os-release'):
-        with open('/etc/os-release', 'r') as os_release_file:
+    if os.path.exists('/usr/bin/eopkg') or os.path.exists('/usr/bin/eopkg4'):
+        return 'solus'
+
+    try:
+        with open('/etc/os-release') as os_release_file:
             for line in os_release_file:
-                if 'ID_LIKE=arch' in line:
+                if line.startswith('ID_LIKE=') and 'arch' in line:
                     return 'arch'
 
-    if os.path.exists('/proc/version'):
-        if 'ubuntu' in run_cmd('cat /proc/version').lower():
-            return 'ubuntu'
+                if line.startswith('ID=') and line[3:].strip().strip('"') == 'solus':
+                    return 'solus'
+    except OSError:
+        pass
 
     return 'unknown'
 

@@ -24,7 +24,7 @@ limitada a la consulta de actualizaciones.
 El alcance del fork son tres plataformas: Arch Linux y derivados (pacman, AUR y
 cualquier repositorio adicional de pacman), Flatpak y Solus (eopkg). Esas tres
 gems están activadas por defecto. El árbol conserva los gestores del upstream
-para AppImage, Debian, Snap y Web, pero estos están **desactivados por defecto**
+para AppImage, Web y GitHub, pero estos están **desactivados por defecto**
 (`is_default_enabled()` devuelve `False`), sin soporte activo, y el usuario los
 activa en `Ajustes → Tipos de aplicaciones`. La gem GitHub, propia del fork,
 también es opt-in. La disponibilidad real de cada gestor
@@ -128,7 +128,7 @@ muestra las actualizaciones disponibles.
 - Si `config.yml` no tiene la clave `gems` (valor `null`), cada gem queda
   activada según su propio `is_default_enabled()`: `True` para `arch`,
   `flatpak` y `eopkg` (esta última solo si `can_work()` encuentra el binario
-  `eopkg`); `False` para `appimage`, `debian`, `snap`, `web` y `github`.
+  `eopkg`); `False` para `appimage`, `web` y `github`.
 - Si `gems` es una lista, se activan exactamente las que aparecen en ella.
   La pestaña `Tipos de aplicaciones` de Ajustes escribe esa lista.
 
@@ -341,9 +341,7 @@ restantes encapsulan consultas, comandos, workers, configuración o UI propia.
 | `eopkg/` | Sí (si hay `eopkg`) | Propia del fork. `controller.py` adapta Solus/eopkg (búsqueda, instalados con versión, `list-upgrades`, instalar/eliminar/actualizar con `-y`; `-N` solo desactiva el color); `model.py` representa paquetes; `config.py` (`search_limit`). |
 | `github/` | No (opt-in) | Propia del fork. `controller.py` clona repositorios en `repos_dir` (por defecto `~/.local/share/gekko-bauh/github/repos`; `~/BauhRepos` es el heredado), detecta el método de build con `build_detector.py`, muestra el comando, pide confirmación y separa compilación (usuario) de instalación (root); `model.py` representa proyectos; `config.py` (`repos_dir`, `clone_only`). |
 | `appimage/` | No (opt-in) | `controller.py`, `query.py`, `util.py`, `worker.py`: ciclo de vida de AppImages desde la base de datos del upstream. |
-| `debian/` | No (opt-in) | `controller.py`, `aptitude.py`, `index.py`, `tasks.py`, `gui.py`: APT/aptitude. |
 | `flatpak/` | Sí (si hay `flatpak`) | Dentro del alcance del fork. `controller.py`, `flatpak.py`, `worker.py`, `constants.py`. |
-| `snap/` | No (opt-in) | `controller.py`, `snap.py`, `snapd.py`. |
 | `web/` | No (opt-in) | `controller.py`, `search.py`, `nativefier.py`, `environment.py`, `worker.py`: aplicaciones web empaquetadas con nativefier. |
 
 Cada gem tiene `resources/locale/` (traducciones) y, cuando aplica,
@@ -388,7 +386,6 @@ La carpeta `tests/` está organizada de forma paralela a la implementación:
 | `tests/common/` y `tests/commons/` | Utilidades, versiones, sistema y helpers de vista. |
 | `tests/gems/appimage/` | Utilidades de AppImage. |
 | `tests/gems/arch/` | AUR, Pacman, ordenación, actualizaciones y mapeo de datos. |
-| `tests/gems/debian/` | APT, índice y controlador Debian. |
 | `tests/gems/flatpak/` | Controlador, worker y operaciones Flatpak. |
 | `tests/gems/web/` | Controlador Web. |
 | `tests/view/core/` | Configuración (`test_config.py`: `custom_theme` y migración), carga de gems (`test_gems.py`) y procesamiento de temas (`test_stylesheet.py`). |

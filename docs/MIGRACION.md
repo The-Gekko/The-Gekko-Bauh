@@ -55,7 +55,7 @@ Queda registrada en el log (`gekko-bauh --logs`).
    ```
 3. Abre `gekko-bauh` desde el menú de aplicaciones. Tus ajustes y tus temas se
    copian solos. Arch, Flatpak y eopkg quedan activas; si en el oficial usabas
-   AppImage, Snap, Web o Debian, actívalas en
+   AppImage, Web o GitHub, actívalas en
    `Ajustes → Tipos de aplicaciones`. El tema cambia a Aurora solo si no tenías
    ninguno configurado.
 
