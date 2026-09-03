@@ -54,7 +54,7 @@ class AsyncDiskCacheLoader(Thread, DiskCacheLoader):
                     if ext == 'json':
                         cached_data = json.loads(file_content)
                     elif ext in {'yml', 'yaml'}:
-                        cached_data = yaml.load(file_content)
+                        cached_data = yaml.safe_load(file_content)
                     else:
                         raise Exception(f'The cached data file {data_path} has an unsupported format')
 

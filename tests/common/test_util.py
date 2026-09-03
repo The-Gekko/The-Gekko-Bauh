@@ -92,6 +92,20 @@ class SanitizeCommandInputTest(TestCase):
         res = sanitize_command_input(input_)
         self.assertEqual('abc-def ghi--jkl', res)
 
+    def test__must_cut_the_input_at_a_semicolon(self):
+        self.assertEqual('firefox', sanitize_command_input('firefox; touch /tmp/pwned'))
+
+    def test__must_cut_the_input_at_line_breaks(self):
+        self.assertEqual('firefox', sanitize_command_input('firefox\ntouch /tmp/pwned'))
+        self.assertEqual('firefox', sanitize_command_input('firefox\r\ntouch /tmp/pwned'))
+
+    def test__must_remove_backticks(self):
+        self.assertEqual('firefox touch /tmp/pwned', sanitize_command_input('firefox `touch /tmp/pwned`'))
+
+    def test__must_remove_parentheses_and_subshell_expansions(self):
+        self.assertEqual('firefox touch /tmp/pwned', sanitize_command_input('firefox $(touch /tmp/pwned)'))
+        self.assertEqual('firefox touch', sanitize_command_input('firefox (touch)'))
+
 
 class DatetimeAsMilisTest(TestCase):
 

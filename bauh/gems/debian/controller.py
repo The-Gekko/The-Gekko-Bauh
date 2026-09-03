@@ -583,7 +583,8 @@ class DebianPackageManager(SoftwareManager, SettingsController):
         return suggestions
 
     def is_default_enabled(self) -> bool:
-        return True
+        # Gem heredada del upstream: en el fork es opcional (se activa desde Ajustes > Tipos)
+        return False
 
     def launch(self, pkg: SoftwarePackage):
         if isinstance(pkg, DebianPackage):

@@ -32,7 +32,8 @@ from bauh.commons.html import bold
 from bauh.commons.system import ProcessHandler, get_dir_size, SimpleProcess
 from bauh.commons.view_utils import get_human_size_str
 from bauh.gems.web import INSTALLED_PATH, nativefier, DESKTOP_ENTRY_PATH_PATTERN, URL_FIX_PATTERN, ENV_PATH, \
-    ROOT_DIR, TEMP_PATH, FIX_FILE_PATH, ELECTRON_CACHE_DIR, UA_CHROME, get_icon_path, URL_PROPS_PATTERN
+    ROOT_DIR, TEMP_PATH, FIX_FILE_PATH, ELECTRON_CACHE_DIR, UA_CHROME, get_icon_path, URL_PROPS_PATTERN, \
+    PIPX_INJECT_COMMAND
 from bauh.gems.web.config import WebConfigManager
 from bauh.gems.web.environment import EnvironmentUpdater, EnvironmentComponent
 from bauh.gems.web.model import WebApplication
@@ -945,11 +946,14 @@ class WebApplicationManager(SoftwareManager, SettingsController):
         self.enabled = enabled
 
     def can_work(self) -> Tuple[bool, Optional[str]]:
-        if not BS4_AVAILABLE:
-            return False, self.i18n['missing_dep'].format(dep=bold('python3-beautifulsoup4'))
+        missing_deps = [name for name, available in (('beautifulsoup4', BS4_AVAILABLE), ('lxml', LXML_AVAILABLE))
+                        if not available]
 
-        if not LXML_AVAILABLE:
-            return False, self.i18n['missing_dep'].format(dep=bold('python3-lxml'))
+        if missing_deps:
+            # Se citan los nombres PyPI: bajo pipx los paquetes de la distro (python3-*) no llegan al entorno
+            # virtual del fork, así que la solución es inyectarlos en él.
+            return False, self.i18n['web.missing_python_deps'].format(deps=bold(', '.join(missing_deps)),
+                                                                        cmd=bold(PIPX_INJECT_COMMAND))
 
         config = self.configman.get_config()
         use_system_env = config['environment']['system']
@@ -1141,7 +1145,8 @@ class WebApplicationManager(SoftwareManager, SettingsController):
         pass
 
     def is_default_enabled(self) -> bool:
-        return True
+        # Gem heredada del upstream: en el fork es opcional (se activa desde Ajustes > Tipos)
+        return False
 
     def launch(self, pkg: WebApplication):
         subprocess.Popen(args=[pkg.get_command()], shell=True, env={**os.environ})

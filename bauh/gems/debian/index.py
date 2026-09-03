@@ -52,14 +52,14 @@ class ApplicationIndexer:
             return True
 
         try:
-            timestamp = datetime.fromtimestamp(float(timestamp_str))
+            timestamp = datetime.fromtimestamp(float(timestamp_str), tz=timezone.utc)
         except Exception:
             self._log.error(f'Could not parse the Debian applications index timestamp: {timestamp_str} '
                             f'({self._file_timestamp_path})')
             import logging; logging.error("Exception occurred", exc_info=True)
             return True
 
-        expired = timestamp + timedelta(minutes=exp_minutes) <= datetime.utcnow()
+        expired = timestamp + timedelta(minutes=exp_minutes) <= datetime.now(timezone.utc)
 
         if expired:
             self._log.info("Debian applications index has expired. A new one must be generated.")

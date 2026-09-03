@@ -1,4 +1,6 @@
+import logging
 import os
+import subprocess
 import traceback
 from typing import Tuple, Optional
 
@@ -8,13 +10,17 @@ from PyQt5.QtWidgets import QLineEdit, QApplication, QDialog, QPushButton, QVBox
     QSizePolicy, QToolBar, QLabel, QWidget
 
 from bauh.api.abstract.context import ApplicationContext
-from bauh.commons.system import new_subprocess
+from bauh.commons.system import gen_env
 from bauh.view.core.config import CoreConfigManager
 from bauh.view.qt.components import QtComponentsManager, new_spacer
 from bauh.view.util import util
 from bauh.view.util.translation import I18n
 
 ACTION_ASK_ROOT = 99
+
+# segundos máximos de espera a 'sudo -v': con '-S' no debería bloquearse, pero un módulo PAM lento
+# no debe dejar colgado el diálogo
+SUDO_VALIDATION_TIMEOUT = 60
 
 
 class ValidatePassword(QThread):
@@ -178,19 +184,31 @@ def is_root():
 
 
 def validate_password(password: str) -> bool:
-    clean = new_subprocess(['sudo', '-k']).stdout
-    echo = new_subprocess(['echo', password], stdin=clean).stdout
+    """Comprueba la contraseña de root con 'sudo -S -k -v'.
 
-    validate = new_subprocess(['sudo', '-S', '-v'], stdin=echo)
+    La decisión depende únicamente del código de retorno de sudo (0 = válida): una contraseña
+    incorrecta, un usuario fuera de sudoers, 'requiretty' o un segundo factor no satisfecho se
+    rechazan por igual, en vez de aceptar (y cachear durante la sesión) una contraseña inservible.
+    La contraseña viaja por la entrada estándar (nunca como argumento visible en 'ps') y '-k' evita
+    dejar credenciales de sudo en caché. La configuración regional se fija a C para que el texto de
+    sudo, usado solo para el registro, sea predecible.
+    """
+    try:
+        result = subprocess.run(['sudo', '-S', '-k', '-v'], input=f'{password}\n'.encode(),
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                env=gen_env(lang='C'), timeout=SUDO_VALIDATION_TIMEOUT, check=False)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        logging.getLogger(__name__).warning("Could not run sudo to validate the root password: %s", e)
+        return False
 
-    for o in validate.stdout:
-        pass
+    if result.returncode == 0:
+        return True
 
-    for o in validate.stderr:
-        if o:
-            line = o.decode()
+    error = result.stderr.decode(errors='replace').strip()
 
-            if 'incorrect password attempt' in line:
-                return False
+    if 'incorrect password attempt' not in error:
+        # no es una contraseña incorrecta: sudo falló por otro motivo (sudoers, requiretty, 2FA, ...)
+        logging.getLogger(__name__).warning("sudo refused to validate the root password (exit code %s): %s",
+                                            result.returncode, error)
 
-    return True
+    return False

@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Sugerir una AppImage para la base de datos / Suggest an AppImage for the database
+    url: https://github.com/vinifmor/bauh/issues/new/choose
+    about: La base de datos de AppImages la mantiene el proyecto original (vinifmor/bauh), no este fork. / The AppImage database is maintained by the original project, not by this fork.
+  - name: Errores del bauh oficial / Bugs in the official bauh
+    url: https://github.com/vinifmor/bauh/issues
+    about: Si el error también ocurre con el bauh original, repórtalo allí. / If the bug also happens with the original bauh, report it there.
+  - name: Documentación de instalación y migración / Install and migration docs
+    url: https://github.com/The-Gekko/Bauh-Fork-The-Gekko/blob/master/docs/MIGRACION.md
+    about: Convivencia con el bauh oficial y vuelta atrás. / Coexistence with the official bauh and rollback.

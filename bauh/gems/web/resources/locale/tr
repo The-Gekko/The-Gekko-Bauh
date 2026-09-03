@@ -67,6 +67,7 @@ web.install.substatus.call_nativefier={} çalışıyor
 web.install.substatus.checking_fixes=Yayınlanmış düzeltmeler olup olmadığını kontrol et
 web.install.substatus.options=Kurulum seçenekleri bekleniyor
 web.install.substatus.shortcut=Bir menü kısayolu oluşturuluyor
+web.missing_python_deps=Eksik Python bağımlılıkları: {deps}. Bunları uygulama ortamına {cmd} ile kurun
 web.settings.cache_exp=Environment settings expiration
 web.settings.cache_exp.tip=It defines the period (in HOURS) in which the stored environment settings are considered valid. Use 0 so that they are always updated.
 web.settings.electron.version.label=Electron sürümü

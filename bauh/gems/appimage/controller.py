@@ -29,7 +29,7 @@ from bauh.commons.system import SystemProcess, new_subprocess, ProcessHandler, S
 from bauh.commons.version_util import normalize_version
 from bauh.gems.appimage import query, INSTALLATION_DIR, APPIMAGE_SHARED_DIR, ROOT_DIR, \
     APPIMAGE_CONFIG_DIR, UPDATES_IGNORED_FILE, util, get_default_manual_installation_file_dir, DATABASE_APPS_FILE, \
-    DATABASE_RELEASES_FILE, APPIMAGE_CACHE_DIR, get_icon_path, DOWNLOAD_DIR
+    DATABASE_RELEASES_FILE, APPIMAGE_CACHE_DIR, get_icon_path, DOWNLOAD_DIR, APP_REPOSITORY_URL
 from bauh.gems.appimage.config import AppImageConfigManager
 from bauh.gems.appimage.model import AppImage
 from bauh.gems.appimage.util import replace_desktop_entry_exec_command
@@ -831,7 +831,8 @@ class AppImageManager(SoftwareManager, SettingsController):
                     connection.close()
 
     def is_default_enabled(self) -> bool:
-        return True
+        # Gem heredada del upstream: en el fork es opcional (se activa desde Ajustes > Tipos)
+        return False
 
     def launch(self, pkg: AppImage):
         installation_dir = pkg.get_disk_cache_path()
@@ -1092,7 +1093,9 @@ class AppImageManager(SoftwareManager, SettingsController):
     @property
     def app_repository(self) -> str:
         if self._app_repository is None:
-            self._app_repository = f"https://github.com/vinifmor/{self.context.app_name}"
+            # Repositorio del fork: si algún día se distribuye como AppImage, la auto-instalación debe registrarlo
+            # bajo el fork y no bajo vinifmor/bauh (que ofrecería un 'downgrade' al bauh original).
+            self._app_repository = APP_REPOSITORY_URL
 
         return self._app_repository
 

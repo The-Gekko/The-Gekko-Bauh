@@ -1,6 +1,6 @@
 import os
 import traceback
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from logging import Logger
 from pathlib import Path
 from threading import Thread
@@ -10,7 +10,7 @@ from bauh.api.abstract.handler import TaskManager
 from bauh.api.abstract.model import SuggestionPriority
 from bauh.api.http import HttpClient
 from bauh.commons.suggestions import parse
-from bauh.gems.debian import DEBIAN_ICON_PATH, DEBIAN_CACHE_DIR
+from bauh.gems.debian import DEBIAN_ICON_PATH, DEBIAN_CACHE_DIR, URL_SUGGESTIONS_FILE
 from bauh.view.util.translation import I18n
 
 
@@ -44,7 +44,7 @@ class DebianSuggestionsDownloader(Thread):
         if file_url:
             self._file_url = file_url
         else:
-            self._file_url = 'https://raw.githubusercontent.com/vinifmor/bauh-files/master/debian/suggestions_v1.txt'
+            self._file_url = URL_SUGGESTIONS_FILE
 
         self.task_id = 'debian.suggs'
 
@@ -87,21 +87,21 @@ class DebianSuggestionsDownloader(Thread):
             self._log.info(f"'{self.file_suggestions()}' not found. It must be downloaded")
             return True
 
-        if not os.path.exists(self.file_suggestions()):
-            self._log.info(f"'{self.file_suggestions()}' not found. The suggestions file must be downloaded.")
+        if not os.path.exists(self.file_suggestions_timestamp()):
+            self._log.info(f"'{self.file_suggestions_timestamp()}' not found. The suggestions file must be downloaded.")
             return True
 
         with open(self.file_suggestions_timestamp()) as f:
             timestamp_str = f.read()
 
         try:
-            suggestions_timestamp = datetime.fromtimestamp(float(timestamp_str))
+            suggestions_timestamp = datetime.fromtimestamp(float(timestamp_str), tz=timezone.utc)
         except Exception:
             self._log.error(f'Could not parse the Debian cached suggestions timestamp: {timestamp_str}')
             import logging; logging.error("Exception occurred", exc_info=True)
             return True
 
-        update = suggestions_timestamp + timedelta(hours=exp_hours) <= datetime.utcnow()
+        update = suggestions_timestamp + timedelta(hours=exp_hours) <= datetime.now(timezone.utc)
         return update
 
     def _save(self, text: str, timestamp: float):
@@ -184,7 +184,7 @@ class DebianSuggestionsDownloader(Thread):
             suggestions = parse(res.text, self._log, 'Debian')
 
             if suggestions:
-                self._save(text=res.text, timestamp=datetime.utcnow().timestamp())
+                self._save(text=res.text, timestamp=datetime.now(timezone.utc).timestamp())
             else:
                 self._log.warning("No Debian suggestions to cache")
         else:

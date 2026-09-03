@@ -20,7 +20,7 @@ from bauh.commons.html import bold
 from bauh.commons.system import SystemProcess, ProcessHandler, new_root_subprocess
 from bauh.commons.view_utils import new_select, get_human_size_str
 from bauh.gems.snap import snap, URL_CATEGORIES_FILE, CATEGORIES_FILE_PATH, \
-    get_icon_path, snapd
+    get_icon_path, snapd, URL_SUGGESTIONS_FILE
 from bauh.gems.snap.config import SnapConfigManager
 from bauh.gems.snap.model import SnapApplication
 from bauh.gems.snap.snapd import SnapdClient
@@ -448,7 +448,8 @@ class SnapManager(SoftwareManager, SettingsController):
         return res
 
     def is_default_enabled(self) -> bool:
-        return True
+        # Gem heredada del upstream: en el fork es opcional (se activa desde Ajustes > Tipos)
+        return False
 
     def launch(self, pkg: SnapApplication):
         commands = SnapdClient(self.logger).list_commands(pkg.name)
@@ -560,7 +561,7 @@ class SnapManager(SoftwareManager, SettingsController):
             file_url = self.context.get_suggestion_url(self.__module__)
 
             if not file_url:
-                file_url = 'https://raw.githubusercontent.com/vinifmor/bauh-files/master/snap/suggestions.txt'
+                file_url = URL_SUGGESTIONS_FILE
 
             self._suggestions_url = file_url
 

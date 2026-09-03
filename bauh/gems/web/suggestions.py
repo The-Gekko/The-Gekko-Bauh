@@ -1,6 +1,6 @@
 import os
 import traceback
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from logging import Logger
 from pathlib import Path
 from typing import Optional
@@ -10,7 +10,7 @@ import yaml
 
 from bauh.api.http import HttpClient
 from bauh.commons.util import map_timestamp_file
-from bauh.gems.web import WEB_CACHE_DIR
+from bauh.gems.web import WEB_CACHE_DIR, URL_SUGGESTIONS_FILE
 from bauh.view.util.translation import I18n
 
 
@@ -23,7 +23,7 @@ class SuggestionsManager:
         if file_url:
             self._file_url = file_url
         else:
-            self._file_url = "https://raw.githubusercontent.com/vinifmor/bauh-files/master/web/env/v2/suggestions.yml"
+            self._file_url = URL_SUGGESTIONS_FILE
         self._cached_file_path = f'{WEB_CACHE_DIR}/suggestions.yml'
         self._cached_file_ts_path = map_timestamp_file(self._cached_file_path)
 
@@ -68,12 +68,12 @@ class SuggestionsManager:
             timestamp_str = f.read()
 
         try:
-            sugs_timestamp = datetime.fromtimestamp(float(timestamp_str))
+            sugs_timestamp = datetime.fromtimestamp(float(timestamp_str), tz=timezone.utc)
         except Exception:
             self.logger.error(f"Could not parse the cached suggestions file timestamp: {timestamp_str}")
             return True
 
-        expired = sugs_timestamp + timedelta(days=exp) <= datetime.utcnow()
+        expired = sugs_timestamp + timedelta(days=exp) <= datetime.now(timezone.utc)
 
         if expired:
             self.logger.info("Cached suggestions file has expired.")

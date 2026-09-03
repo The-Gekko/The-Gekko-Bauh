@@ -67,6 +67,7 @@ web.install.substatus.call_nativefier=Работает {}
 web.install.substatus.checking_fixes=Проверка опубликованных исправлений
 web.install.substatus.options=Ожидание опций установки
 web.install.substatus.shortcut=Создается ярлык в меню
+web.missing_python_deps=Отсутствуют зависимости Python: {deps}. Установите их в окружение приложения командой {cmd}
 web.settings.cache_exp=Срок действия настроек среды
 web.settings.cache_exp.tip=Определяет период (в часах), в течение которого сохраненные настройки среды считаются действительными. Используйте 0, чтобы они всегда обновлялись.
 web.settings.electron.version.label=Версия Electron

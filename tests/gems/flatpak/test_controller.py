@@ -10,6 +10,11 @@ class FlatpakManagerSortUpdateOrderTest(TestCase):
     def setUp(self):
         self.manager = FlatpakManager(Mock())
 
+    def test_is_default_enabled__must_be_true_because_flatpak_is_in_scope(self):
+        # Flatpak forma parte del alcance oficial del fork (Arch/AUR/Chaotic AUR, Flatpak y
+        # Solus/eopkg), a diferencia de las gems heredadas que son opcionales.
+        self.assertTrue(self.manager.is_default_enabled())
+
     def test__sort_deps__only_apps(self):
         pkgs = [
             FlatpakApplication(id="org.gnome.gedit", name='Gedit', runtime=False),

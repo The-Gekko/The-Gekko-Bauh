@@ -1,6 +1,7 @@
 import inspect
 import os
 import importlib.util
+import sys
 from logging import Logger
 from typing import List, Generator
 
@@ -51,12 +52,20 @@ def load_managers(locale: str, context: ApplicationContext, config: dict, defaul
 
             spec = importlib.util.find_spec(f'bauh.gems.{f.name}.controller')
             if spec and spec.loader:
-                try:
+                module = sys.modules.get(spec.name)
+
+                if module is None:
                     module = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(module)
-                except Exception:
-                    logger.exception(f"gem '{f.name}' could not be loaded")
-                    continue
+                    # Se registra antes de ejecutarlo (como hace el import normal) para que cualquier
+                    # 'import bauh.gems.<gem>.controller' posterior reutilice esta misma copia del módulo.
+                    sys.modules[spec.name] = module
+
+                    try:
+                        spec.loader.exec_module(module)
+                    except Exception:
+                        sys.modules.pop(spec.name, None)
+                        logger.exception(f"gem '{f.name}' could not be loaded")
+                        continue
 
                 manager_class = find_manager(module)
 

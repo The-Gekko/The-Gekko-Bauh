@@ -1,35 +1,90 @@
 ---
-name: Bug report
-about: Create a report to help us improve
+name: Reporte de error / Bug report
+about: Algo no funciona en bauh Gekko Edition / Something is broken in bauh Gekko Edition
 title: ''
-labels: ''
+labels: bug
 assignees: ''
 
 ---
 
-**Before opening a new issue**
-Install the **staging** branch and check if the unexpected behavior is happening there as well.
-If you are on ArchLinux-based distro, you can install it through AUR (**bauh-staging**). Otherwise, you have
-to clone the repository and install it with pip:
+<!--
+ES: Este repositorio es un fork de vinifmor/bauh. Si el mismo error ocurre con el
+    bauh oficial, repórtalo también allí (https://github.com/vinifmor/bauh/issues)
+    y enlaza ambos issues. Las sugerencias de nuevas AppImages para la base de
+    datos van al upstream, no aquí.
+EN: This repository is a fork of vinifmor/bauh. If the same bug happens with the
+    official bauh, please report it there too (https://github.com/vinifmor/bauh/issues)
+    and link both issues. AppImage database suggestions belong to the upstream.
+-->
+
+## Antes de abrir el issue / Before opening the issue
+
+- [ ] **ES**: He actualizado a la versión actual de `master` y el error sigue ocurriendo.
+      **EN**: I updated to the current `master` and the bug still happens.
+      ```bash
+      curl -fsSL https://raw.githubusercontent.com/The-Gekko/Bauh-Fork-The-Gekko/master/install.sh | bash -s -- --force
+      ```
+- [ ] **ES**: He buscado issues abiertos y cerrados con el mismo problema.
+      **EN**: I searched open and closed issues for the same problem.
+
+## Descripción / Description
+
+<!-- ES: Qué ocurre, de forma clara y concisa. EN: What happens, clearly and concisely. -->
+
+## Pasos para reproducir / Steps to reproduce
+
+1.
+2.
+3.
+
+## Comportamiento esperado / Expected behavior
+
+## Comportamiento real / Actual behavior
+
+<!-- ES: Capturas de pantalla si ayudan. EN: Screenshots if they help. -->
+
+## Entorno / Environment
+
+<!-- ES: Pega la salida de estos comandos. EN: Paste the output of these commands. -->
+
+```bash
+# Versión y commit instalados / Installed version and commit
+pipx list | grep -i bauh
+cat "$(pipx environment --value PIPX_LOCAL_VENVS)/bauh-gekko/.gekko-source-ref" 2>/dev/null
+python3 --version
+
+# Distribución y sesión gráfica / Distro and graphical session
+cat /etc/os-release | grep -E '^(NAME|VERSION_ID)='
+echo "$XDG_CURRENT_DESKTOP / $XDG_SESSION_TYPE"
 ```
-git clone https://github.com/vinifmor/bauh.git -b staging --depth=1
-cd bauh
-python3 -m venv venv
-venv/bin/pip install pip --upgrade
-venv/bin/pip install setuptools --upgrade
-venv/bin/pip install -r requirements.txt
-venv/bin/pip install .
-venv/bin/bauh  # or venv/bin/bauh-tray
+
+- **Distribución / Distro**:
+- **Entorno de escritorio o compositor / Desktop environment or compositor** (KDE, GNOME, Hyprland, Niri, ...):
+- **Sesión / Session**: Wayland | X11
+- **Método de instalación / Install method**: `install.sh` | pipx manual | venv | otro
+- **Gems activas / Enabled gems** (`Ajustes → Tipos de aplicaciones`): arch, eopkg, github, ...
+- **Tema / Theme** (`ui.theme` en `~/.config/bauh/config.yml`):
+
+## Logs
+
+<!--
+ES: Ejecuta bauh desde un terminal con `bauh --logs`, reproduce el error y pega
+    aquí la salida completa (o adjúntala como archivo). Revisa que no contenga
+    contraseñas ni datos personales.
+EN: Run bauh from a terminal with `bauh --logs`, reproduce the bug and paste the
+    full output here (or attach it as a file). Make sure it contains no passwords
+    or personal data.
+-->
+
+```text
+
 ```
- 
-**Describe the bug**
-A clear and concise description of what the bug is.
 
-**Software Environment**
-bauh version: 
-O.S: name and version 
-Python version:
-Installation method: pip | distro package manager (e.g: pacman)
+## Información adicional / Additional context
 
-
-P.S: these instructions and the template must be respected, otherwise your issue will be closed.
+<!--
+ES: ¿Ocurre también con el bauh oficial? ¿Tienes repositorios adicionales de
+    pacman (p. ej. chaotic-aur)? ¿Empezó tras una actualización concreta?
+EN: Does it happen with the official bauh too? Any extra pacman repositories
+    (e.g. chaotic-aur)? Did it start after a specific update?
+-->

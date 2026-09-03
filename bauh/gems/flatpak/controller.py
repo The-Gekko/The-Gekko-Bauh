@@ -22,7 +22,7 @@ from bauh.commons.html import strip_html, bold
 from bauh.commons.system import ProcessHandler
 from bauh.gems.flatpak import flatpak, CONFIG_FILE, UPDATES_IGNORED_FILE, FLATPAK_CONFIG_DIR, \
     EXPORTS_PATH, \
-    get_icon_path, VERSION_1_5, VERSION_1_2, VERSION_1_12
+    get_icon_path, VERSION_1_5, VERSION_1_2, VERSION_1_12, URL_SUGGESTIONS_FILE
 from bauh.gems.flatpak.config import FlatpakConfigManager
 from bauh.gems.flatpak.constants import FLATHUB_API_URL
 from bauh.gems.flatpak.model import FlatpakApplication
@@ -680,6 +680,8 @@ class FlatpakManager(SoftwareManager, SettingsController):
         return res
 
     def is_default_enabled(self) -> bool:
+        # Flatpak forma parte del alcance oficial del fork (junto a Arch/AUR/Chaotic AUR y
+        # Solus/eopkg), por lo que se mantiene habilitada por defecto.
         return True
 
     def launch(self, pkg: FlatpakApplication):
@@ -856,7 +858,7 @@ class FlatpakManager(SoftwareManager, SettingsController):
             file_url = self.context.get_suggestion_url(self.__module__)
 
             if not file_url:
-                file_url = 'https://raw.githubusercontent.com/vinifmor/bauh-files/master/flatpak/suggestions.txt'
+                file_url = URL_SUGGESTIONS_FILE
 
             self._suggestions_file_url = file_url
 

@@ -13,6 +13,9 @@ class DebianPackageManagerTest(TestCase):
         self.controller = DebianPackageManager(MagicMock())
         self.controller._apps_index = {}
 
+    def test_is_default_enabled__must_be_false_for_legacy_gems(self):
+        self.assertFalse(self.controller.is_default_enabled())
+
     @patch(f'{__app_name__}.gems.debian.controller.Aptitude.read_installed', return_value=iter((
         DebianPackage(name='gir1.2-javascriptcoregtk-4.0', version='2.34.1-0distro0.20.04.1',
                       latest_version='2.34.1-0distro0.20.04.1',

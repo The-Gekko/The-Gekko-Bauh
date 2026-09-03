@@ -4,6 +4,150 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.10.8+gekko.1] 2026-09-03
+
+Primera versión etiquetada de **bauh Gekko Edition** (etiqueta git `v0.10.8-gekko.1`),
+fork de [vinifmor/bauh](https://github.com/vinifmor/bauh) mantenido por
+[The-Gekko](https://github.com/The-Gekko/Bauh-Fork-The-Gekko).
+
+**Base upstream**: rama `staging` en `3a38a666` (0.10.8 sin publicar, incluye
+todo `master` hasta `b1ea479a`) más la rama `fix-qt-wayland-crash`. Los cambios
+del upstream integrados se listan en «Contributions (upstream)» y, con más
+detalle, en la sección `## NEXT` del propio upstream que se conserva más abajo.
+El esquema de versiones del fork es `<versión upstream>+gekko.N`
+(ver `docs/SINCRONIZACION_UPSTREAM.md`).
+
+### Features
+- Tema **Aurora** (oscuro), ahora tema por defecto.
+- Temas dinámicos **GTK 3/4** y **Matugen**: toman los colores de
+  `~/.config/gtk-3.0/gtk.css`, `~/.config/gtk-4.0/gtk.css` o
+  `~/.cache/matugen/colors-gtk.css` y se recargan al cambiar esos archivos.
+  Botón «Matugen» en la ventana principal para aplicarlo con un clic.
+- Pestaña **Personalización** en Ajustes (color de fondo, texto, acento,
+  opacidad e imagen de fondo; clave `custom_theme` de `config.yml`).
+- Gem **eopkg** (Solus): búsqueda, instalados, instalación, desinstalación y
+  actualizaciones. Se activa cuando existe el binario `eopkg`.
+- Gem **GitHub** (opt-in): clona un repositorio, detecta el método de build
+  (PKGBUILD, `setup.py`/`pyproject`, Cargo, ...), muestra el comando exacto,
+  pide confirmación antes de ejecutarlo y separa la compilación (usuario) de
+  la instalación (privilegios). Clones en `~/BauhRepos` (`repos_dir` en
+  `github.yml`).
+- Arch: acción **«Cambiar al binario del repositorio»** para paquetes AUR
+  instalados que existen en un repositorio de pacman habilitado (por ejemplo
+  Chaotic AUR); la tabla muestra el repositorio disponible.
+- `install.sh`: instalador y desinstalador por `curl` basado en `pipx`, con
+  detección del bauh oficial, icono, `.desktop` y refresco de cachés.
+- Diálogo de contraseña (`RootDialog`) modal a nivel de aplicación, con campo
+  enmascarado, foco automático y confirmación con `Enter`.
+- Manejo de `SIGINT`/`SIGTERM` (cierre ordenado) y `sys.excepthook` propio
+  (las excepciones no controladas quedan en el log).
+
+### Improvements
+- Gems heredadas **AppImage, Flatpak, Snap, Web y Debian desactivadas por
+  defecto** (opt-in en `Ajustes → Tipos de aplicaciones`). La gem GitHub
+  también es opt-in.
+- Arch: `get_databases` reconoce repositorios con guion o guion bajo
+  (`chaotic-aur`, `arcolinux_repo`, ...); la búsqueda deduplica un mismo
+  paquete presente en un repositorio y en AUR prefiriendo el binario.
+- Identidad: nombre visible «bauh Gekko Edition»; el diálogo «Acerca de»
+  enlaza al fork y al proyecto original; el aviso de nueva versión consulta
+  las releases del fork.
+- Hilos Qt consolidados en un único `bauh/view/qt/thread.py` (desaparece
+  `bauh/view/qt/threads/`); eliminados los módulos fósiles
+  `bauh/view/qt/window.py` y `bauh/view/qt/components.py`; los mixins de la
+  ventana principal (`window/mixins/`) tienen imports limpios y docstrings con
+  su contrato.
+- La ventana principal no se puede cerrar mientras hay una transacción en
+  curso.
+- Temas: el vigilante de archivos (`QFileSystemWatcher`) solo se instala con
+  los temas `gtk` y `matugen` y agrupa cambios rápidos (debounce); el estado
+  del botón Matugen persiste entre sesiones.
+- Tabla de paquetes: repintado suspendido mientras se rellena
+  (`setUpdatesEnabled(False)`), sin parpadeo.
+- Compatibilidad con Python 3.13 y 3.14.
+- Documentación reescrita en español y verificable: `README.md`
+  (qué añade el fork frente a lo heredado), `CONTRIBUTING.md` (entorno, tests,
+  lint, traducciones, commits), `CREDITS.md`, `docs/MIGRACION.md`,
+  `docs/SINCRONIZACION_UPSTREAM.md`, `DOCUMENTACION_PROYECTO.md` y plantillas
+  de issues/pull requests bilingües.
+
+### Fixes
+- eopkg: los paquetes instalados muestran su versión real y la lista de
+  actualizaciones funciona (antes ambas quedaban vacías). Aclarado que `-N`
+  es `--no-color`; el modo no interactivo lo da `-y`.
+- Temas: `gtk` y `matugen` vuelven a aparecer en el selector de temas de
+  Ajustes.
+- Arch: los repositorios con guion ya no se ignoran al leer `/etc/pacman.conf`.
+- Wayland: integrado el arreglo del upstream (`fix-qt-wayland-crash`) que
+  fuerza `QT_QPA_PLATFORM=wayland` en sesiones Wayland con una configuración
+  Qt incompleta.
+- Gem GitHub: retirada la afirmación de «protección anti-scripts», que no
+  tenía respaldo en el código.
+
+### Security
+- La contraseña de administrador se entrega por `stdin` a `sudo -S -k` y
+  nunca como argumento; el éxito se valida por código de retorno.
+- Directorios temporales bajo `$XDG_RUNTIME_DIR` con permisos `0700`.
+- Comandos de pacman construidos como listas de argumentos (sin shell) y
+  saneado de entrada reforzado.
+- Gem GitHub: ningún comando de build se ejecuta sin mostrarlo y pedir
+  confirmación; la compilación corre con el usuario y solo la instalación
+  (cuando el método lo exige) con privilegios.
+- `install.sh --yes` ya no autoriza acciones con `sudo`; hay flags explícitos
+  `--remove-system-bauh` e `--install-pipx`.
+
+### Packaging
+- Nombre de distribución **`bauh-gekko`** (paquete importable `bauh`;
+  binarios `bauh`, `bauh-tray`, `bauh-cli` sin cambios) y versión PEP 440
+  `0.10.8+gekko.1`.
+- `pyproject.toml` con la sección `[project]` completa (el upstream la
+  introdujo en 0.10.6 solo como `[build-system]`); `setup.py` reducido a un
+  shim; `requirements-dev.txt` para desarrollo.
+- CI en GitHub Actions: tests en Python 3.9/3.12/3.14 con Qt offscreen,
+  `ruff`, `shellcheck`, `python -m build` y paridad de traducciones
+  (`tools/check_locales.py`).
+- `install.sh`: instala el commit exacto que resuelve (no la punta de `master`
+  en el instante de la descarga), pasa `--python` a pipx, migra el entorno
+  pipx `bauh` de versiones anteriores a `bauh-gekko`, instala iconos por
+  tamaño (`pictures/icons/gekko-bauh-<N>.png`, N = 16…512) y un `.desktop`
+  con traducciones y `StartupWMClass=bauh`; `uninstall --purge` borra
+  configuración, caché, datos y temporales y ofrece restablecer `ui.theme`
+  para volver al bauh oficial.
+
+### Known issues
+- En compositores Wayland que solo implementan `xdg-shell` (Hyprland, Niri,
+  Sway, ...) el diálogo de contraseña no puede garantizar quedar «siempre al
+  frente» ni tomar el foco; ver la regla de ventana de ejemplo en `README.md`.
+- Python 3.8 sigue declarado como mínimo pero está fuera de soporte; se
+  mantiene «best effort» y se retirará en una versión futura.
+- La acción «Cambiar al binario del repositorio» requiere que el repositorio
+  esté habilitado en `/etc/pacman.conf`; bauh no añade repositorios.
+- La gem GitHub ejecuta comandos de build de terceros tras tu confirmación:
+  revisa el repositorio antes de aceptar.
+- La gem eopkg se ha probado en un conjunto reducido de paquetes de Solus.
+
+### Contributions (upstream)
+Cambios del upstream `vinifmor/bauh` integrados en esta versión y sus
+autores:
+- Mantenimiento, 0.10.8 en `staging`, etiquetas de dependencias opcionales y
+  arreglo `fix-qt-wayland-crash` ([vinifmor](https://github.com/vinifmor)).
+- Traducciones al italiano ([albanobattistella](https://github.com/albanobattistella)).
+- Traducciones al ruso ([KoromeloDev](https://github.com/KoromeloDev)).
+- Traducción al chino simplificado ([antipeth](https://github.com/antipeth)).
+- Detección de sistemas basados en Arch mediante `/etc/os-release`
+  ([Boria138](https://github.com/Boria138)).
+- Eliminación de espacios sobrantes en las traducciones inglesas
+  ([EGYT5453](https://github.com/EGYT5453)).
+- Arch: marcar/desmarcar todas las dependencias opcionales de una vez
+  ([NoobKozlegeny](https://github.com/NoobKozlegeny)).
+
+---
+
+_Las entradas siguientes proceden del `CHANGELOG.md` del upstream
+[vinifmor/bauh](https://github.com/vinifmor/bauh) y se conservan tal cual
+(en inglés). `## NEXT` es la sección de 0.10.8 aún sin publicar por el
+upstream, ya incluida en `0.10.8+gekko.1`._
+
 ## NEXT
 
 ### Fixes

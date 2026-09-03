@@ -5,7 +5,9 @@ from datetime import datetime, timezone
 from logging import Logger
 from typing import Optional, Union
 
-re_command_forbidden_symbols = re.compile(r'[\'\"%$#*<>]')
+# metacaracteres de la shell que se eliminan de una entrada de usuario antes de usarla en un comando
+# (incluye ` ( ) para neutralizar sustituciones de comandos como $(...) o `...`)
+re_command_forbidden_symbols = re.compile(r'[\'\"%$#*<>`()]')
 re_several_spaces = re.compile(r'\s+')
 re_command_parameter = re.compile(r'(^|\s)-+\w+')
 
@@ -78,10 +80,17 @@ def map_timestamp_file(file_path: str) -> str:
     return '/'.join(path_split[0:-1]) + '/' + path_split[-1].split('.')[0] + '.ts'
 
 
+# operadores que separan comandos en la shell: la entrada se corta en el primero que aparezca
+command_separators = ('|', '&', ';', '\n', '\r')
+
+
 def sanitize_command_input(input_: str) -> str:
+    """Sanea una entrada de usuario destinada a formar parte de una línea de comandos:
+    corta en el primer separador de comandos (| & ; salto de línea), elimina los metacaracteres de la
+    shell (comillas, $ # % * < > ` ( )) y los parámetros con guion, y normaliza los espacios."""
     final_input = input_
 
-    for op in ('|', '&'):
+    for op in command_separators:
         final_input = final_input.split(op)[0]
 
     for remove_re in (re_command_forbidden_symbols, re_command_parameter):

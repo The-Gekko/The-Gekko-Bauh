@@ -5,7 +5,7 @@ import os
 import tarfile
 import time
 import traceback
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Thread
 from typing import Optional, Generator
@@ -17,9 +17,49 @@ from bauh.api.http import HttpClient
 from bauh.commons.boot import CreateConfigFile
 from bauh.commons.html import bold
 from bauh.gems.appimage import get_icon_path, INSTALLATION_DIR, SYMLINKS_DIR, util, DATABASES_TS_FILE, \
-    APPIMAGE_CACHE_DIR, DATABASE_APPS_FILE, DATABASE_RELEASES_FILE, URL_COMPRESSED_DATABASES
+    APPIMAGE_CACHE_DIR, DATABASE_APPS_FILE, DATABASE_RELEASES_FILE, URL_COMPRESSED_DATABASES, URL_SUGGESTIONS_FILE
 from bauh.gems.appimage.model import AppImage
 from bauh.view.util.translation import I18n
+
+
+def validate_tar_members(tar: tarfile.TarFile, destination: str) -> None:
+    """
+    Comprueba que ningún miembro del tar escape del directorio destino (tar-slip, CVE-2007-4559): rechaza rutas
+    absolutas, componentes '..', enlaces (simbólicos o duros) que apunten fuera del destino y tipos especiales
+    (dispositivos, FIFOs). Lanza tarfile.TarError si encuentra un miembro inseguro.
+    """
+    dest_real = os.path.realpath(destination)
+
+    def is_inside(relative_path: str) -> bool:
+        resolved = os.path.realpath(os.path.join(dest_real, relative_path))
+        return resolved == dest_real or resolved.startswith(dest_real + os.sep)
+
+    for member in tar.getmembers():
+        if os.path.isabs(member.name) or not is_inside(member.name):
+            raise tarfile.TarError(f"unsafe path in tar member: {member.name}")
+
+        if member.issym():
+            link_target = os.path.join(os.path.dirname(member.name), member.linkname)
+
+            if os.path.isabs(member.linkname) or not is_inside(link_target):
+                raise tarfile.TarError(f"symlink outside destination in tar member: {member.name} -> {member.linkname}")
+        elif member.islnk():
+            if os.path.isabs(member.linkname) or not is_inside(member.linkname):
+                raise tarfile.TarError(f"hard link outside destination in tar member: {member.name} -> {member.linkname}")
+        elif not (member.isfile() or member.isdir()):
+            raise tarfile.TarError(f"unsupported tar member type: {member.name}")
+
+
+def extract_tar_safely(tar: tarfile.TarFile, destination: str) -> None:
+    """
+    Extrae el tar en 'destination'. En Python >= 3.12 delega en el filtro 'data' de tarfile; en versiones anteriores
+    valida manualmente los miembros con validate_tar_members() antes de extraer.
+    """
+    if hasattr(tarfile, 'data_filter'):
+        tar.extractall(destination, filter='data')
+    else:
+        validate_tar_members(tar, destination)
+        tar.extractall(destination)
 
 
 class DatabaseUpdater(Thread):
@@ -73,13 +113,13 @@ class DatabaseUpdater(Thread):
             dbs_ts_str = f.read()
 
         try:
-            dbs_timestamp = datetime.fromtimestamp(float(dbs_ts_str))
+            dbs_timestamp = datetime.fromtimestamp(float(dbs_ts_str), tz=timezone.utc)
         except Exception:
             self.logger.error('Could not parse the databases timestamp: {}'.format(dbs_ts_str))
             import logging; logging.error("Exception occurred", exc_info=True)
             return True
 
-        update = dbs_timestamp + timedelta(minutes=db_exp) <= datetime.utcnow()
+        update = dbs_timestamp + timedelta(minutes=db_exp) <= datetime.now(timezone.utc)
         self.logger.info('Finished. Took {0:.2f} seconds'.format(time.time() - ti))
         return update
 
@@ -93,7 +133,7 @@ class DatabaseUpdater(Thread):
         self._update_task_progress(10, self.i18n['appimage.update_database.downloading'])
         self.logger.info('Retrieving AppImage databases')
 
-        database_timestamp = datetime.utcnow().timestamp()
+        database_timestamp = datetime.now(timezone.utc).timestamp()
         try:
             res = self.http_client.get(URL_COMPRESSED_DATABASES, session=False)
         except Exception as e:
@@ -125,8 +165,9 @@ class DatabaseUpdater(Thread):
         self.logger.info('Uncompressing {}'.format(self.COMPRESS_FILE_PATH))
 
         try:
-            tf = tarfile.open(self.COMPRESS_FILE_PATH)
-            tf.extractall(APPIMAGE_CACHE_DIR)
+            with tarfile.open(self.COMPRESS_FILE_PATH) as tf:
+                extract_tar_safely(tf, APPIMAGE_CACHE_DIR)
+
             self.logger.info('Successfully uncompressed file {}'.format(self.COMPRESS_FILE_PATH))
         except Exception:
             self.logger.error('Could not extract file {}'.format(self.COMPRESS_FILE_PATH))
@@ -302,7 +343,7 @@ class AppImageSuggestionsDownloader(Thread):
         if file_url:
             self._file_url = file_url
         else:
-            self._file_url = f'https://raw.githubusercontent.com/vinifmor/bauh-files/master/appimage/suggestions.txt'
+            self._file_url = URL_SUGGESTIONS_FILE
 
     @property
     def cached_file_path(self) -> str:
@@ -356,13 +397,13 @@ class AppImageSuggestionsDownloader(Thread):
             timestamp_str = f.read()
 
         try:
-            suggestions_timestamp = datetime.fromtimestamp(float(timestamp_str))
+            suggestions_timestamp = datetime.fromtimestamp(float(timestamp_str), tz=timezone.utc)
         except Exception:
             self.logger.error(f'Could not parse the cached AppImage suggestions timestamp: {timestamp_str}')
             import logging; logging.error("Exception occurred", exc_info=True)
             return True
 
-        update = suggestions_timestamp + timedelta(hours=exp_hours) <= datetime.utcnow()
+        update = suggestions_timestamp + timedelta(hours=exp_hours) <= datetime.now(timezone.utc)
         return update
 
     def read(self) -> Generator[str, None, None]:
@@ -372,7 +413,7 @@ class AppImageSuggestionsDownloader(Thread):
 
         self.logger.info("Checking if AppImage suggestions should be downloaded")
         if self.should_download(self.config):
-            suggestions_timestamp = datetime.utcnow().timestamp()
+            suggestions_timestamp = datetime.now(timezone.utc).timestamp()
             suggestions_str = self.download()
 
             Thread(target=self.cache_suggestions, args=(suggestions_str, suggestions_timestamp), daemon=True).start()
@@ -466,7 +507,7 @@ class AppImageSuggestionsDownloader(Thread):
 
             try:
                 if should_download:
-                    suggestions_timestamp = datetime.utcnow().timestamp()
+                    suggestions_timestamp = datetime.now(timezone.utc).timestamp()
                     suggestions_str = self.download()
                     self.taskman.update_progress(self.task_id, 70, None)
 

@@ -13,7 +13,12 @@ CONFIG_FILE = f'{CONFIG_DIR}/appimage.yml'
 APPIMAGE_CONFIG_DIR = f'{CONFIG_DIR}/appimage'
 UPDATES_IGNORED_FILE = f'{APPIMAGE_CONFIG_DIR}/updates_ignored.txt'
 SYMLINKS_DIR = BINARIES_DIR
-URL_COMPRESSED_DATABASES = f'https://raw.githubusercontent.com/vinifmor/{__app_name__}-files/master/appimage/dbs.tar.gz'
+# Host de los ficheros de datos (índices, sugerencias). Centralizado para poder cambiarlo de sitio en el futuro.
+URL_BAUH_FILES = 'https://raw.githubusercontent.com/vinifmor/bauh-files/master'
+URL_COMPRESSED_DATABASES = f'{URL_BAUH_FILES}/appimage/dbs.tar.gz'
+URL_SUGGESTIONS_FILE = f'{URL_BAUH_FILES}/appimage/suggestions.txt'
+# Repositorio del fork: lo usa la auto-instalación cuando la app se ejecuta como AppImage
+APP_REPOSITORY_URL = 'https://github.com/The-Gekko/Bauh-Fork-The-Gekko'
 APPIMAGE_CACHE_DIR = f'{CACHE_DIR}/appimage'
 DATABASE_APPS_FILE = f'{APPIMAGE_CACHE_DIR}/apps.db'
 DATABASE_RELEASES_FILE = f'{APPIMAGE_CACHE_DIR}/releases.db'

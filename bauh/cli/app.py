@@ -23,13 +23,17 @@ def main():
     if not os.getenv('PYTHONUNBUFFERED'):
         os.environ['PYTHONUNBUFFERED'] = '1'
 
-    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
     args = cli_args.read()
     logger = logs.new_logger(__app_name__, False)
 
     app_config = CoreConfigManager().get_config()
-    http_client = HttpClient(logger)
+    check_ssl = bool(app_config['download']['check_ssl'])
+
+    if not check_ssl:
+        # Solo se silencian los avisos de urllib3 cuando el usuario ha desactivado la verificación TLS
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+    http_client = HttpClient(logger, check_ssl=check_ssl)
 
     i18n = generate_i18n(app_config, resource.get_path('locale'))
 

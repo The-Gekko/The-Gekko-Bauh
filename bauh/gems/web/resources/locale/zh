@@ -67,6 +67,7 @@ web.install.substatus.call_nativefier=运行 {}
 web.install.substatus.checking_fixes=检查是否有发布的修复
 web.install.substatus.options=等待安装选项
 web.install.substatus.shortcut=生成菜单快捷方式
+web.missing_python_deps=缺少 Python 依赖：{deps}。请使用 {cmd} 将其安装到应用程序环境中
 web.settings.cache_exp=环境设置过期时间
 web.settings.cache_exp.tip=它定义了存储的环境设置在初始化过程中被视为有效的时间段(以小时为单位)。使用 0 使其始终更新。
 web.settings.electron.version.label=Electron 版本

@@ -67,6 +67,7 @@ web.install.substatus.call_nativefier=Ausführen {}
 web.install.substatus.checking_fixes=Prüfen, ob es veröffentlichte Fehlerbehebungen gibt
 web.install.substatus.options=Warten auf die Installationsoptionen
 web.install.substatus.shortcut=Erzeugen einer Menüverknüpfung
+web.missing_python_deps=Fehlende Python-Abhängigkeiten: {deps}. Installieren Sie sie in der Anwendungsumgebung mit {cmd}
 web.settings.cache_exp=Gültigkeitszeitraum der Umgebungseinstellungen
 web.settings.cache_exp.tip=Legt den Gültigkeitszeitraum (in Stunden) fest, in dem die gespeicherten Umgebungseinstellungen als gültig angesehen werden. Verwenden Sie 0, damit sie immer aktualisiert werden.
 web.settings.electron.version.label=Electron-Version

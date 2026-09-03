@@ -16,6 +16,9 @@ VERSION_1_3 = map_str_version("1.3")
 VERSION_1_4 = map_str_version("1.4")
 VERSION_1_5 = map_str_version("1.5")
 VERSION_1_12 = map_str_version("1.12")
+# Host de los ficheros de datos (sugerencias). Centralizado para poder cambiarlo de sitio en el futuro.
+URL_BAUH_FILES = 'https://raw.githubusercontent.com/vinifmor/bauh-files/master'
+URL_SUGGESTIONS_FILE = f'{URL_BAUH_FILES}/flatpak/suggestions.txt'
 
 
 def get_icon_path() -> str:

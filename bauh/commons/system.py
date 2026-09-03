@@ -1,5 +1,6 @@
 import os
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -25,6 +26,29 @@ USE_GLOBAL_INTERPRETER = bool(os.getenv('VIRTUAL_ENV'))
 
 RE_SUDO_OUTPUT = re.compile(r'[sudo]\s*[\w\s]+:\s*')
 
+# '-S' lee la contraseña de la entrada estándar; '-k' obliga a autenticar cada operación e impide que sudo
+# guarde credenciales en caché reutilizables por otros procesos del usuario (ver 'man sudo').
+SUDO_ARGS = ('sudo', '-S', '-k')
+
+
+def feed_root_password(proc: subprocess.Popen, root_password: str) -> None:
+    """Escribe la contraseña de root en la entrada estándar de un proceso 'sudo -S' y la cierra.
+
+    La contraseña nunca forma parte de la línea de comandos de ningún proceso (sería legible por
+    cualquier usuario local en 'ps' o en /proc/<pid>/cmdline). Si sudo terminó antes de leerla
+    (p. ej. regla NOPASSWD o error inmediato) la tubería rota se ignora.
+    """
+    try:
+        proc.stdin.write(f'{root_password}\n'.encode())
+        proc.stdin.flush()
+    except OSError:  # incluye BrokenPipeError
+        pass
+    finally:
+        try:
+            proc.stdin.close()
+        except OSError:
+            pass
+
 
 def gen_env(global_interpreter: bool = USE_GLOBAL_INTERPRETER, lang: Optional[str] = DEFAULT_LANG,
             extra_paths: Optional[Set[str]] = None) -> dict:
@@ -32,7 +56,12 @@ def gen_env(global_interpreter: bool = USE_GLOBAL_INTERPRETER, lang: Optional[st
     custom_env = dict(os.environ)
 
     if lang is not None:
+        # LC_ALL tiene prioridad sobre LANG y sobre cualquier LC_* exportada por el usuario, y LANGUAGE
+        # (gettext) sobre ambas: se fuerzan también para que la salida de los comandos sea parseable.
+        # Un valor vacío ('') equivale a la configuración regional C.
         custom_env['LANG'] = lang
+        custom_env['LC_ALL'] = lang if lang else 'C'
+        custom_env.pop('LANGUAGE', None)
 
     if global_interpreter:  # to avoid subprocess calls to the virtualenv python interpreter instead of the global one.
         custom_env['PATH'] = GLOBAL_INTERPRETER_PATH
@@ -79,18 +108,22 @@ class SimpleProcess:
         if custom_user:
             final_cmd.extend(['runuser', '-u', custom_user, '--'])
         elif isinstance(root_password, str):
-            final_cmd.extend(['sudo', '-S'])
+            final_cmd.extend(SUDO_ARGS)
 
             if preserve_env:
                 for var in preserve_env:
                     final_cmd.append(f'--preserve-env={var}')
 
-            pwdin = self._new(['echo', root_password], cwd, global_interpreter, lang).stdout
+            pwdin = subprocess.PIPE  # la contraseña se escribe desde Python (feed_root_password)
 
         final_cmd.extend(cmd)
 
         self.instance = self._new(final_cmd, cwd, global_interpreter, lang=lang, stdin=pwdin,
                                   extra_paths=extra_paths, extra_env=extra_env)
+
+        if pwdin is subprocess.PIPE:
+            feed_root_password(self.instance, root_password)
+
         self.expected_code = expected_code
         self.error_phrases = error_phrases
         self.wrong_error_phrases = wrong_error_phrases
@@ -115,7 +148,9 @@ class SimpleProcess:
             "shell": self.shell
         }
 
-        return subprocess.Popen(args=[' '.join(cmd)] if self.shell else cmd, **args)
+        # con shell=True cada argumento se entrecomilla: los espacios o metacaracteres de un token
+        # (rutas, nombres) no se reinterpretan como sintaxis de la shell
+        return subprocess.Popen(args=[shlex.join(cmd)] if self.shell else cmd, **args)
 
 
 class ProcessHandler:
@@ -265,7 +300,7 @@ def run_cmd(cmd: str, expected_code: int = 0, ignore_return_code: bool = False, 
     if not print_error:
         args["stderr"] = subprocess.DEVNULL
 
-    final_cmd = f"runuser -u {custom_user} -- {cmd}" if custom_user else cmd
+    final_cmd = f"runuser -u {shlex.quote(custom_user)} -- {cmd}" if custom_user else cmd
     res = subprocess.run(final_cmd, **args)
 
     if ignore_return_code or res.returncode == expected_code:
@@ -297,20 +332,36 @@ def new_root_subprocess(cmd: Iterable[str], root_password: Optional[str], cwd: s
     pwdin, final_cmd = subprocess.DEVNULL, []
 
     if isinstance(root_password, str):
-        final_cmd.extend(['sudo', '-S'])
-        pwdin = new_subprocess(['echo', root_password], global_interpreter=global_interpreter, lang=lang).stdout
+        final_cmd.extend(SUDO_ARGS)
+        pwdin = subprocess.PIPE  # la contraseña se escribe desde Python (feed_root_password)
 
     final_cmd.extend(cmd)
 
     if shell:
-        final_cmd = ' '.join(final_cmd)
+        final_cmd = shlex.join(final_cmd)
 
-    return subprocess.Popen(final_cmd, stdin=pwdin, stdout=PIPE, stderr=PIPE, cwd=cwd,
+    proc = subprocess.Popen(final_cmd, stdin=pwdin, stdout=PIPE, stderr=PIPE, cwd=cwd,
                             env=gen_env(global_interpreter, lang, extra_paths), shell=shell)
+
+    if pwdin is subprocess.PIPE:
+        feed_root_password(proc, root_password)
+
+    return proc
 
 
 def notify_user(msg: str, app_name: str, icon_path: str):
-    os.system("notify-send -a {} {} '{}'".format(app_name, "-i {}".format(icon_path) if icon_path else '', msg))
+    # sin shell: un apóstrofo u otro metacarácter en el mensaje no rompe ni reinterpreta el comando
+    cmd = ['notify-send', '-a', app_name]
+
+    if icon_path:
+        cmd.extend(('-i', icon_path))
+
+    cmd.append(msg)
+
+    try:
+        subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    except OSError:  # notify-send no instalado
+        pass
 
 
 def get_dir_size(start_path='.'):
@@ -338,7 +389,7 @@ def run(cmd: List[str], success_code: int = 0, custom_user: Optional[str] = None
 
 
 def check_active_services(*names: str) -> Dict[str, bool]:
-    output = run_cmd('systemctl is-active {}'.format(' '.join(names)), print_error=False)
+    output = run_cmd(f'systemctl is-active {shlex.join(names)}', print_error=False)
 
     if not output:
         return {n: False for n in names}
@@ -348,7 +399,7 @@ def check_active_services(*names: str) -> Dict[str, bool]:
 
 
 def check_enabled_services(*names: str) -> Dict[str, bool]:
-    output = run_cmd('systemctl is-enabled {}'.format(' '.join(names)), print_error=False)
+    output = run_cmd(f'systemctl is-enabled {shlex.join(names)}', print_error=False)
 
     if not output:
         return {n: False for n in names}
@@ -360,7 +411,11 @@ def check_enabled_services(*names: str) -> Dict[str, bool]:
 def execute(cmd: str, shell: bool = False, cwd: Optional[str] = None, output: bool = True, custom_env: Optional[dict] = None,
             stdin: bool = True, custom_user: Optional[str] = None) -> Tuple[int, Optional[str]]:
 
-    final_cmd = f"runuser -u {custom_user} -- {cmd}" if custom_user else cmd
+    if custom_user:
+        # sin shell la línea se divide por espacios, así que solo se entrecomilla en la rama de shell
+        final_cmd = f"runuser -u {shlex.quote(custom_user) if shell else custom_user} -- {cmd}"
+    else:
+        final_cmd = cmd
 
     params = {
         'args': final_cmd.split(' ') if not shell else [final_cmd],

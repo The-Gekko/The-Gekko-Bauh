@@ -67,6 +67,7 @@ web.install.substatus.call_nativefier=Running {}
 web.install.substatus.checking_fixes=Checking if there are published fixes
 web.install.substatus.options=Waiting for the installation options
 web.install.substatus.shortcut=Generating a menu shortcut
+web.missing_python_deps=Missing Python dependencies: {deps}. Install them in the application environment with {cmd}
 web.settings.cache_exp=Environment settings expiration
 web.settings.cache_exp.tip=It defines the period (in HOURS) in which the stored environment settings are considered valid. Use 0 so that they are always updated.
 web.settings.electron.version.label=Electron version

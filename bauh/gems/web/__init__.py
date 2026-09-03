@@ -18,11 +18,18 @@ NPM_BIN_PATH = f'{NODE_DIR_PATH}/bin/npm'
 NODE_MODULES_PATH = f'{ENV_PATH}/node_modules'
 NATIVEFIER_BIN_PATH = f'{NODE_MODULES_PATH}/.bin/nativefier'
 ELECTRON_CACHE_DIR = f'{ENV_PATH}/electron'
-URL_ENVIRONMENT_SETTINGS = f'https://raw.githubusercontent.com/vinifmor/bauh-files/master/web/env/v2/environment.yml'
+# Host de los ficheros de datos (entorno, parches, sugerencias). Centralizado para poder cambiarlo de sitio en el futuro.
+URL_BAUH_FILES = 'https://raw.githubusercontent.com/vinifmor/bauh-files/master'
+URL_ENVIRONMENT_SETTINGS = f'{URL_BAUH_FILES}/web/env/v2/environment.yml'
+URL_SUGGESTIONS_FILE = f'{URL_BAUH_FILES}/web/env/v2/suggestions.yml'
 DESKTOP_ENTRY_PATH_PATTERN = f'{DESKTOP_ENTRIES_DIR}/{__app_name__}.web.' + '{name}.desktop'
-URL_FIX_PATTERN = "https://raw.githubusercontent.com/vinifmor/bauh-files/master/web/env/v2/fix/{domain}/{electron_branch}/fix.js"
-URL_PROPS_PATTERN = "https://raw.githubusercontent.com/vinifmor/bauh-files/master/web/env/v2/fix/{domain}/{electron_branch}/properties"
-UA_CHROME = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36'
+URL_FIX_PATTERN = URL_BAUH_FILES + "/web/env/v2/fix/{domain}/{electron_branch}/fix.js"
+URL_PROPS_PATTERN = URL_BAUH_FILES + "/web/env/v2/fix/{domain}/{electron_branch}/properties"
+# User-Agent de un Chrome reciente (formato reducido 'major.0.0.0' que usa Chrome desde la v101):
+# muchos sitios sirven desafíos o versiones degradadas a navegadores de hace años.
+UA_CHROME = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'
+# Comando sugerido cuando faltan las dependencias Python de la gem (nombres PyPI, no de paquetes de distro)
+PIPX_INJECT_COMMAND = 'pipx inject bauh-gekko beautifulsoup4 lxml'
 TEMP_PATH = f'{TEMP_DIR}/web'
 SEARCH_INDEX_FILE = f'{WEB_CACHE_DIR}/index.yml'
 CONFIG_FILE = f'{CONFIG_DIR}/web.yml'

@@ -529,7 +529,23 @@ class GenericSoftwareManager(SoftwareManager, SettingsController):
         man = action.manager if action.manager else self._get_manager_for(pkg)
 
         if man:
-            return eval(f"man.{action.manager_method}({'pkg=pkg, ' if pkg else ''}root_password=root_password, watcher=watcher)")
+            method_name = action.manager_method
+
+            # Solo se aceptan nombres de método públicos válidos: evita ejecutar expresiones arbitrarias
+            if not isinstance(method_name, str) or not method_name.isidentifier() or method_name.startswith('_'):
+                raise ValueError(f"Invalid custom action method name: {method_name!r}")
+
+            method = getattr(man, method_name, None)
+
+            if not callable(method):
+                raise AttributeError(f"{man.__class__.__name__} has no callable method '{method_name}'")
+
+            kwargs = {'root_password': root_password, 'watcher': watcher}
+
+            if pkg:
+                kwargs['pkg'] = pkg
+
+            return method(**kwargs)
 
     def is_default_enabled(self) -> bool:
         return True

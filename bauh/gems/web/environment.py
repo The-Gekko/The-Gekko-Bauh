@@ -4,7 +4,7 @@ import os
 import shutil
 import tarfile
 import traceback
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Thread
 from typing import Dict, List, Optional
@@ -24,6 +24,46 @@ from bauh.gems.web import ENV_PATH, NODE_DIR_PATH, NODE_BIN_PATH, NODE_MODULES_P
     nativefier, ENVIRONMENT_SETTINGS_CACHED_FILE, ENVIRONMENT_SETTINGS_TS_FILE, get_icon_path
 from bauh.gems.web.model import WebApplication
 from bauh.view.util.translation import I18n
+
+
+def validate_tar_members(tar: tarfile.TarFile, destination: str) -> None:
+    """
+    Comprueba que ningún miembro del tar escape del directorio destino (tar-slip, CVE-2007-4559): rechaza rutas
+    absolutas, componentes '..', enlaces (simbólicos o duros) que apunten fuera del destino y tipos especiales
+    (dispositivos, FIFOs). Lanza tarfile.TarError si encuentra un miembro inseguro.
+    """
+    dest_real = os.path.realpath(destination)
+
+    def is_inside(relative_path: str) -> bool:
+        resolved = os.path.realpath(os.path.join(dest_real, relative_path))
+        return resolved == dest_real or resolved.startswith(dest_real + os.sep)
+
+    for member in tar.getmembers():
+        if os.path.isabs(member.name) or not is_inside(member.name):
+            raise tarfile.TarError(f"unsafe path in tar member: {member.name}")
+
+        if member.issym():
+            link_target = os.path.join(os.path.dirname(member.name), member.linkname)
+
+            if os.path.isabs(member.linkname) or not is_inside(link_target):
+                raise tarfile.TarError(f"symlink outside destination in tar member: {member.name} -> {member.linkname}")
+        elif member.islnk():
+            if os.path.isabs(member.linkname) or not is_inside(member.linkname):
+                raise tarfile.TarError(f"hard link outside destination in tar member: {member.name} -> {member.linkname}")
+        elif not (member.isfile() or member.isdir()):
+            raise tarfile.TarError(f"unsupported tar member type: {member.name}")
+
+
+def extract_tar_safely(tar: tarfile.TarFile, destination: str) -> None:
+    """
+    Extrae el tar en 'destination'. En Python >= 3.12 delega en el filtro 'data' de tarfile; en versiones anteriores
+    valida manualmente los miembros con validate_tar_members() antes de extraer.
+    """
+    if hasattr(tarfile, 'data_filter'):
+        tar.extractall(destination, filter='data')
+    else:
+        validate_tar_members(tar, destination)
+        tar.extractall(destination)
 
 
 class EnvironmentComponent:
@@ -59,10 +99,9 @@ class EnvironmentUpdater:
             return False
         else:
             try:
-                tf = tarfile.open(tarf_path)
-                tf.extractall(path=ENV_PATH)
-
-                extracted_file = f'{ENV_PATH}/{tf.getnames()[0]}'
+                with tarfile.open(tarf_path) as tf:
+                    extract_tar_safely(tf, ENV_PATH)
+                    extracted_file = f'{ENV_PATH}/{tf.getnames()[0]}'
 
                 if os.path.exists(NODE_DIR_PATH):
                     self.logger.info(f"Removing old NodeJS version installation dir -> {NODE_DIR_PATH}")
@@ -245,12 +284,12 @@ class EnvironmentUpdater:
             env_ts_str = f.read()
 
         try:
-            env_timestamp = datetime.fromtimestamp(float(env_ts_str))
+            env_timestamp = datetime.fromtimestamp(float(env_ts_str), tz=timezone.utc)
         except Exception:
             self.logger.error(f"Could not parse environment settings file timestamp: {env_ts_str}")
             return True
 
-        expired = env_timestamp + timedelta(hours=settings_exp) <= datetime.utcnow()
+        expired = env_timestamp + timedelta(hours=settings_exp) <= datetime.now(timezone.utc)
 
         if expired:
             self.logger.info("Environment settings file has expired. It should be re-downloaded")
@@ -314,7 +353,7 @@ class EnvironmentUpdater:
                 self._finish_task_download_settings()
                 return
 
-            cache_timestamp = datetime.utcnow().timestamp()
+            cache_timestamp = datetime.now(timezone.utc).timestamp()
             with open(ENVIRONMENT_SETTINGS_CACHED_FILE, 'w+') as f:
                 f.write(yaml.safe_dump(settings))
 

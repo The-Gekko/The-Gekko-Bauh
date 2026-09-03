@@ -67,6 +67,7 @@ web.install.substatus.call_nativefier=In esecuzione {}
 web.install.substatus.checking_fixes=Verifica se sono presenti correzioni pubblicate
 web.install.substatus.options=In attesa delle opzioni di installazione
 web.install.substatus.shortcut=Generazione di un collegamento al menu
+web.missing_python_deps=Dipendenze Python mancanti: {deps}. Installale nell'ambiente dell'applicazione con {cmd}
 web.settings.cache_exp=Scadenza delle impostazioni dell'ambiente
 web.settings.cache_exp.tip=Definisce il periodo (in ORE) in cui le impostazioni dell'ambiente memorizzate sono considerate valide. Utilizzare 0 in modo che siano sempre aggiornate.
 web.settings.electron.version.label=Versione di electron

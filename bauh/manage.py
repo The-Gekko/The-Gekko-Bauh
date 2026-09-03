@@ -1,4 +1,5 @@
 import logging
+import sys
 from argparse import Namespace
 from typing import Tuple
 
@@ -28,7 +29,7 @@ def new_manage_panel(app_args: Namespace, app_config: dict, logger: logging.Logg
     cache_factory = DefaultMemoryCacheFactory(expiration_time=int(app_config['memory_cache']['data_expiration']))
     icon_cache = cache_factory.new(int(app_config['memory_cache']['icon_expiration']))
 
-    http_client = HttpClient(logger)
+    http_client = HttpClient(logger, check_ssl=bool(app_config['download']['check_ssl']))
 
     downloader = AdaptableFileDownloader(logger=logger, multithread_enabled=app_config['download']['multithreaded'],
                                          multithread_client=app_config['download']['multithreaded_client'],
@@ -54,8 +55,11 @@ def new_manage_panel(app_args: Namespace, app_config: dict, logger: logging.Logg
                                   default_locale=DEFAULT_I18N_KEY, logger=logger)
 
     if app_args.reset:
+        # Los gems deben estar instanciados: cada uno borra sus propios ficheros en clear_data()
+        # (p. ej. el entorno de la gem Web fuera de CACHE/CONFIG/TEMP). Por eso el reset no puede
+        # adelantarse a load_managers(), pero sí evita crear la QApplication y las ventanas.
         util.clean_app_files(managers)
-        exit(0)
+        sys.exit(0)
 
     force_suggestions = bool(app_args.suggestions)
     manager = GenericSoftwareManager(managers, context=context, config=app_config, force_suggestions=force_suggestions)

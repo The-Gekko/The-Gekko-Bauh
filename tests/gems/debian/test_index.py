@@ -1,5 +1,10 @@
 import json
+import os
 import os.path
+import time
+import unittest
+from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 from unittest import TestCase
 from unittest.mock import Mock, patch, call
 
@@ -7,6 +12,22 @@ from bauh import __app_name__
 from bauh.gems.debian.index import ApplicationsMapper, ApplicationIndexer
 from bauh.gems.debian.model import DebianApplication
 from tests.gems.debian import DEBIAN_TESTS_DIR
+
+
+@contextmanager
+def local_timezone(posix_tz: str):
+    """Cambia temporalmente la zona horaria del proceso (formato POSIX, no requiere tzdata)."""
+    previous = os.environ.get('TZ')
+    os.environ['TZ'] = posix_tz
+    time.tzset()
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop('TZ', None)
+        else:
+            os.environ['TZ'] = previous
+        time.tzset()
 
 
 def mock_read_file(fpath: str):
@@ -155,9 +176,58 @@ class ApplicationIndexerTest(TestCase):
             ts_str = f.read()
 
         try:
-            float(ts_str)
+            timestamp = float(ts_str)
         except ValueError:
-            self.assertFalse(False, "index timestamp must be a float number")
+            self.fail(f"index timestamp must be a float number: {ts_str!r}")
+
+        # el timestamp guardado debe ser un epoch UTC real (no desplazado por la zona horaria local)
+        self.assertAlmostEqual(datetime.now(timezone.utc).timestamp(), timestamp, delta=60)
+
+    def _write_index(self, timestamp):
+        with open(self.update_idx_file_path, 'w') as f:
+            f.write('{}')
+
+        with open(self.update_idx_ts_file_path, 'w') as f:
+            f.write(str(timestamp))
+
+    def test_is_expired__must_return_true_when_expiration_is_disabled_or_invalid(self):
+        self._write_index(datetime.now(timezone.utc).timestamp())
+        self.assertTrue(self.app_indexer.is_expired({'index_apps.exp': 0}))
+        self.assertTrue(self.app_indexer.is_expired({'index_apps.exp': 'abc'}))
+
+    def test_is_expired__must_return_true_when_index_or_timestamp_are_missing(self):
+        self.assertTrue(self.app_indexer.is_expired({'index_apps.exp': 60}))
+
+        with open(self.update_idx_file_path, 'w') as f:
+            f.write('{}')
+
+        self.assertTrue(self.app_indexer.is_expired({'index_apps.exp': 60}))
+
+    def test_is_expired__must_return_true_when_timestamp_is_invalid(self):
+        self._write_index('not-a-number')
+        self.assertTrue(self.app_indexer.is_expired({'index_apps.exp': 60}))
+
+    def test_is_expired__must_return_false_when_index_is_recent(self):
+        self._write_index((datetime.now(timezone.utc) - timedelta(minutes=59)).timestamp())
+        self.assertFalse(self.app_indexer.is_expired({'index_apps.exp': 60}))
+
+    def test_is_expired__must_return_true_when_index_is_older_than_expiration(self):
+        self._write_index((datetime.now(timezone.utc) - timedelta(minutes=61)).timestamp())
+        self.assertTrue(self.app_indexer.is_expired({'index_apps.exp': 60}))
+
+    @unittest.skipUnless(hasattr(time, 'tzset'), 'time.tzset no disponible')
+    def test_is_expired__must_not_depend_on_the_local_timezone(self):
+        apps = {DebianApplication(name='firefox', exe_path='firefox %u', icon_path='firefox', categories=None)}
+
+        # 'WST3' = UTC-3 y 'EST-9' = UTC+9 en notación POSIX
+        for tz in ('WST3', 'EST-9', 'UTC0'):
+            with local_timezone(tz):
+                self.app_indexer.update_index(apps)
+                # recién generado: nunca debe considerarse expirado por culpa del desfase horario
+                self.assertFalse(self.app_indexer.is_expired({'index_apps.exp': 60}), tz)
+
+                self._write_index((datetime.now(timezone.utc) - timedelta(minutes=61)).timestamp())
+                self.assertTrue(self.app_indexer.is_expired({'index_apps.exp': 60}), tz)
 
     def test_read_index(self):
         self.app_indexer._file_path = f'{DEBIAN_TESTS_DIR}/resources/app_idx_full.json'
