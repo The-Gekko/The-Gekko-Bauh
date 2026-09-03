@@ -3,6 +3,7 @@ from typing import List, Set, Optional, Iterable, Tuple
 from bauh.api.abstract.model import SoftwarePackage, CustomSoftwareAction
 from bauh.commons import resource
 from bauh.gems.arch import ROOT_DIR, ARCH_CACHE_DIR
+from bauh.gems.arch import variants
 from bauh.view.util.translation import I18n
 
 
@@ -250,8 +251,51 @@ class ArchPackage(SoftwarePackage):
     def has_screenshots(self) -> bool:
         return False
 
+    @property
+    def repository_label(self) -> str:
+        """Etiqueta legible y traducible del origen del paquete.
+
+        Devuelve el nombre del repositorio tal cual ('core', 'extra', 'multilib',
+        'chaotic-aur'...), 'AUR' traducido para los paquetes de AUR y la etiqueta
+        de desconocido cuando el origen no se ha podido determinar.
+        """
+        # ojo: I18n hereda de dict y esta vacio como dict, asi que hay que
+        # comprobarlo con 'is not None' y no por veracidad
+        if self.repository == 'aur':
+            return self.i18n['arch.origin.aur'] if self.i18n is not None else 'AUR'
+
+        if self.repository:
+            return self.repository
+
+        return self.i18n['unknown'] if self.i18n is not None else 'unknown'
+
+    @property
+    def variant_type(self) -> Optional[str]:
+        """Tipo de variante deducido del nombre ('binary', 'development' o None).
+
+        La heuristica y sus limites estan documentados en 'bauh.gems.arch.variants'.
+        """
+        return variants.get_variant_type(self.name)
+
+    @property
+    def variant_base(self) -> Optional[str]:
+        """Nombre del programa base del que este paquete es una variante.
+
+        Coincide con el propio nombre cuando el paquete no es una variante.
+        """
+        return variants.get_base_package_name(self.name)
+
+    def get_variant_label(self) -> Optional[str]:
+        """Texto traducido que describe la variante, o None si no lo es."""
+        variant_type = self.variant_type
+
+        if not variant_type or self.i18n is None:
+            return None
+
+        return self.i18n[f'arch.variant.{variant_type}'].format(self.variant_base)
+
     def get_name_tooltip(self) -> str:
-        tooltip = '{} ( {}: {} )'.format(self.name, self.i18n['repository'], self.repository)
+        tooltip = '{} ( {}: {} )'.format(self.name, self.i18n['repository'], self.repository_label)
 
         if self.repo_available:
             tooltip += ' [{}: {}]'.format(self.i18n['arch.package.repo_available'], self.repo_available)

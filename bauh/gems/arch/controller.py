@@ -37,8 +37,9 @@ from bauh.commons.view_utils import new_select
 from bauh.gems.arch import aur, pacman, message, confirmation, disk, git, \
     gpg, URL_CATEGORIES_FILE, CATEGORIES_FILE_PATH, CUSTOM_MAKEPKG_FILE, \
     get_icon_path, database, mirrors, sorting, cpu_manager, UPDATES_IGNORED_FILE, \
-    ARCH_CONFIG_DIR, EDITABLE_PKGBUILDS_FILE, URL_GPG_SERVERS, rebuild_detector, makepkg, sshell, \
+    ARCH_CONFIG_DIR, EDITABLE_PKGBUILDS_FILE, rebuild_detector, makepkg, sshell, \
     get_repo_icon_path, AUR_BUILDER_USER
+from bauh.gems.arch import data as arch_data
 from bauh.gems.arch.aur import AURClient
 from bauh.gems.arch.config import get_build_dir, ArchConfigManager
 from bauh.gems.arch.confirmation import confirm_missing_deps
@@ -425,6 +426,8 @@ class ArchManager(SoftwareManager, SettingsController):
             for pkgname, apidata in search_output['aur'].items():
                 res.new.append(self.aur_mapper.map_api_data(apidata, None, self.categories))
 
+        self._annotate_search_variants(res)
+
         res.update_total()
         return res
 
@@ -481,6 +484,32 @@ class ArchManager(SoftwareManager, SettingsController):
             return
 
         self.fill_repository_availability(pkgs, repository_map)
+
+    def _annotate_search_variants(self, result: SearchResult):
+        """Marca en la descripcion las variantes '-bin' / '-git' de AUR.
+
+        Solo se anota cuando el programa base aparece tambien entre los resultados
+        (en un repositorio o en AUR), que es justo el caso en el que el usuario ve
+        varias filas parecidas y no sabe cual elegir. La heuristica de nombres y
+        sus limites estan documentados en 'bauh.gems.arch.variants'.
+
+        Nunca se elimina ni se renombra un paquete: solo se le anade una nota.
+        """
+        known_names = {p.name for p in (*result.new, *result.installed) if p.name}
+
+        for pkg in result.new:
+            if pkg.repository != 'aur' or pkg.variant_base not in known_names:
+                continue
+
+            label = pkg.get_variant_label()
+
+            if not label:
+                continue
+
+            if not pkg.description:
+                pkg.description = label
+            elif label not in pkg.description:
+                pkg.description = f'{pkg.description} [{label}]'
 
     def _fill_aur_pkgs_offline(self, aur_pkgs: dict, arch_config: dict, output: List[ArchPackage], disk_loader: Optional[DiskCacheLoader]):
         self.logger.info("Reading cached data from installed AUR packages")
@@ -1776,6 +1805,18 @@ class ArchManager(SoftwareManager, SettingsController):
         else:
             info = self._get_info_repo_pkg(pkg)
 
+        if info is None:
+            info = {}
+
+        # el origen (core, extra, multilib, chaotic-aur, AUR...) siempre visible
+        info.pop('repository', None)
+        info['02_repository'] = pkg.repository_label
+
+        variant_label = pkg.get_variant_label()
+
+        if variant_label:
+            info['02_variant'] = variant_label
+
         if pkg.is_application():
             info['04_exec'] = pkg.command
 
@@ -2402,8 +2443,10 @@ class ArchManager(SoftwareManager, SettingsController):
                     context.watcher.change_substatus(self.i18n['arch.aur.install.unknown_key.status'].format(bold(check_res['gpg_key'])))
                     self.logger.info("Importing GPG key {}".format(check_res['gpg_key']))
 
-                    gpg_res = self.context.http_client.get(URL_GPG_SERVERS)
-                    gpg_server = gpg_res.text.split('\n')[0] if gpg_res else None
+                    # cache local -> copia vendorizada -> refresco remoto:
+                    # un fallo de red ya no deja la instalacion sin servidor de claves
+                    gpg_server = arch_data.get_first_gpg_server(http_client=self.context.http_client,
+                                                                logger=self.logger)
 
                     if not context.handler.handle(gpg.receive_key(check_res['gpg_key'], gpg_server)):
                         self.logger.error("An error occurred while importing the GPG key {}".format(check_res['gpg_key']))
@@ -2800,6 +2843,68 @@ class ArchManager(SoftwareManager, SettingsController):
             watcher.change_substatus(self.i18n['arch.makepkg.optimizing'])
             ArchCompilationOptimizer(i18n=self.i18n, logger=self.context.logger, taskman=TaskManager()).optimize()
 
+    def find_repository_binary(self, pkgname: str) -> Optional[str]:
+        """Repositorio habilitado que ofrece un binario con ese nombre exacto.
+
+        Devuelve None cuando ningun repositorio habilitado lo sirve. Se apoya en
+        'pacman -Si', asi que solo ve los repositorios activos en pacman.conf
+        (incluido chaotic-aur si el usuario lo tiene configurado).
+        """
+        if not pkgname:
+            return None
+
+        try:
+            repository = pacman.map_repositories({pkgname}).get(pkgname)
+        except Exception:
+            self.logger.error(f"Could not determine the repository of the package '{pkgname}'")
+            return None
+
+        return repository if repository and repository != 'aur' else None
+
+    def switch_to_repository_binary(self, pkg: ArchPackage, context: TransactionContext,
+                                    watcher: Optional[ProcessWatcher]) -> bool:
+        """Sustituye la compilacion desde AUR por el binario de un repositorio.
+
+        Solo actua cuando el ajuste 'prefer_repository_binary' esta activo (por
+        defecto no lo esta), los repositorios estan habilitados, el paquete viene
+        de AUR, no esta instalado y existe un binario con el mismo nombre exacto
+        en un repositorio habilitado. Ademas se pide confirmacion al usuario:
+        nunca se cambia lo que se va a instalar sin avisar.
+        """
+        if pkg.repository != 'aur' or pkg.installed:
+            return False
+
+        config = context.config or {}
+
+        if not config.get('prefer_repository_binary') or not config.get('repositories'):
+            return False
+
+        repository = self.find_repository_binary(pkg.name)
+
+        if not repository:
+            return False
+
+        if watcher and not watcher.request_confirmation(
+                title=self.i18n['arch.install.repository_binary.title'],
+                body=self.i18n['arch.install.repository_binary.body'].format(bold(pkg.name), bold(repository)),
+                confirmation_label=self.i18n['yes'].capitalize(),
+                deny_label=self.i18n['no'].capitalize()):
+            return False
+
+        self.logger.info(f"Installing '{pkg.name}' from the repository '{repository}' instead of building it from AUR")
+
+        pkg.repository = repository
+        pkg.maintainer = repository
+        pkg.package_base = None
+        pkg.url_download = None
+        pkg.pkgbuild = None
+
+        context.repository = repository
+        context.maintainer = repository
+        context.base = pkg.name
+        context.update_aur_index = False
+        return True
+
     def install(self, pkg: ArchPackage, root_password: Optional[str], disk_loader: Optional[DiskCacheLoader], watcher: ProcessWatcher, context: TransactionContext = None) -> TransactionResult:
         if not self.check_action_allowed(pkg, watcher):
             return TransactionResult.fail()
@@ -2822,6 +2927,11 @@ class ArchManager(SoftwareManager, SettingsController):
 
         self._sync_databases(arch_config=install_context.config, aur_supported=install_context.aur_supported,
                              root_password=root_password, handler=handler)
+
+        if context is None:
+            # solo para instalaciones iniciadas por el usuario, nunca para
+            # dependencias ni para sub-transacciones ya en curso
+            self.switch_to_repository_binary(pkg=pkg, context=install_context, watcher=watcher)
 
         if pkg.repository == 'aur':
             pkg_installed = self._install_from_aur(install_context)
@@ -2912,15 +3022,31 @@ class ArchManager(SoftwareManager, SettingsController):
 
         return action != SoftwareAction.SEARCH
 
+    def _ensure_categories(self):
+        """Garantiza que siempre haya categorias disponibles.
+
+        Se resuelven en el orden cache local descargada -> copia vendorizada, de
+        forma que un fallo de red o la desaparicion del repositorio de origen no
+        deje la aplicacion sin categorias. La descarga remota sigue ocurriendo en
+        segundo plano y solo sirve para refrescar la cache.
+        """
+        if not self.categories:
+            self.categories = arch_data.read_categories(logger=self.logger)
+
     def _start_category_task(self, taskman: TaskManager, create_config: CreateConfigFile, downloader: CategoriesDownloader):
         taskman.update_progress('arch_aur_cats', 0, self.i18n['task.waiting_task'].format(bold(create_config.task_name)))
         create_config.join()
         arch_config = create_config.config
 
+        # las categorias locales quedan disponibles desde el primer momento,
+        # incluso mientras se intenta la descarga remota
+        self._ensure_categories()
+
         downloader.expiration = arch_config['categories_exp'] if isinstance(arch_config['categories_exp'], int) else None
         taskman.update_progress('arch_aur_cats', 50, None)
 
     def _finish_category_task(self, taskman: TaskManager):
+        self._ensure_categories()
         taskman.update_progress('arch_aur_cats', 100, None)
         taskman.finish_task('arch_aur_cats')
 
@@ -3037,6 +3163,11 @@ class ArchManager(SoftwareManager, SettingsController):
                                     label_key='arch.config.prefer_repository_provider',
                                     tooltip_key='arch.config.prefer_repository_provider.tip',
                                     value=bool(arch_config['prefer_repository_provider']),
+                                    tooltip_params=['AUR']),
+            self._gen_bool_selector(id_='prefer_repo_binary',
+                                    label_key='arch.config.prefer_repository_binary',
+                                    tooltip_key='arch.config.prefer_repository_binary.tip',
+                                    value=bool(arch_config.get('prefer_repository_binary')),
                                     tooltip_params=['AUR']),
             self._gen_bool_selector(id_='check_dependency_breakage',
                                     label_key='arch.config.check_dependency_breakage',
@@ -3186,6 +3317,9 @@ class ArchManager(SoftwareManager, SettingsController):
 
         prefer_repo_provider = form.get_component('prefer_repo_provider', SingleSelectComponent).get_selected()
         arch_config['prefer_repository_provider'] = prefer_repo_provider
+
+        prefer_repo_binary = form.get_component('prefer_repo_binary', SingleSelectComponent).get_selected()
+        arch_config['prefer_repository_binary'] = prefer_repo_binary
 
         check_dep_break = form.get_component('check_dependency_breakage', SingleSelectComponent).get_selected()
         arch_config['check_dependency_breakage'] = check_dep_break

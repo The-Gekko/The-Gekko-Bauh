@@ -26,7 +26,9 @@ RE_REMOVE_TRANSITIVE_DEPS = re.compile(r'removing\s([\w\-_]+)\s.+required\sby\s(
 RE_AVAILABLE_MIRRORS = re.compile(r'.+\s+OK\s+.+\s+(\d+:\d+)\s+.+(http.+)')
 RE_PACMAN_SYNC_FIRST = re.compile(r'SyncFirst\s*=\s*(.+)')
 RE_DESKTOP_FILES = re.compile(r'\n?([\w\-_]+)\s+(/usr/share/.+\.desktop)')
-# secciones de repositorio de pacman.conf: admite guiones ([chaotic-aur], [core-testing]...)
+# Secciones de repositorio de pacman.conf. El nombre admite guiones y puntos ('chaotic-aur',
+# 'multilib-testing', 'endeavouros'...), así que no vale con '\w+'. Las secciones comentadas
+# ('#[core-testing]') se ignoran porque la línea no empieza por '['.
 RE_PACMAN_REPOSITORY_SECTION = re.compile(r'^[ \t]*\[([^]\s]+)][ \t]*$', re.MULTILINE)
 # linea de resultado de 'pacman -Ss': "repositorio/paquete version"
 RE_SEARCH_RESULT_LINE = re.compile(r'^([^/\s]+)/(\S+)\s')
@@ -639,11 +641,10 @@ def search(words: str) -> Dict[str, dict]:
 
 
 def get_databases(file_path: str = '/etc/pacman.conf') -> Set[str]:
-    """
-    Devuelve los repositorios declarados en pacman.conf.
+    """Repositorios declarados en pacman.conf.
 
-    Reconoce nombres con guion como [chaotic-aur], [core-testing] o [multilib-testing]:
-    la expresion anterior solo aceptaba caracteres de palabra y los descartaba.
+    Reconoce nombres con guion como [chaotic-aur], [core-testing] o [multilib-testing]: la
+    expresión anterior solo aceptaba caracteres de palabra y los descartaba en silencio.
     """
     try:
         with open(file_path) as f:

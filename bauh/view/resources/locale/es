@@ -456,6 +456,7 @@ manage_window.close.transaction.body=Hay una operación en curso. Cerrar ahora p
 manage_window.close.transaction.title=Operación en curso
 manage_window.columns.installed=Instaladas
 manage_window.columns.latest_version=Versión más reciente
+manage_window.columns.origin=Origen
 manage_window.columns.update=¿Quiere actualizar?
 manage_window.error.unexpected.body=Se ha producido un error inesperado. Ejecuta la aplicación con --logs para más detalles.
 manage_window.info.no_info=No hay información disponible para {}

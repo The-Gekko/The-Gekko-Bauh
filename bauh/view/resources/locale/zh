@@ -451,6 +451,7 @@ manage_window.close.transaction.body=有一个操作正在进行。现在关闭�
 manage_window.close.transaction.title=操作进行中
 manage_window.columns.installed=已安装
 manage_window.columns.latest_version=最新版本
+manage_window.columns.origin=来源
 manage_window.columns.update=升级？
 manage_window.error.unexpected.body=发生了意外错误。请使用 --logs 运行应用程序以查看更多细节。
 manage_window.info.no_info=没有可用于 {} 的信息

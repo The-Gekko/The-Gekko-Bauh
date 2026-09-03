@@ -105,7 +105,8 @@ class PacmanDatabasesTest(TestCase):
     def test_get_databases__recognizes_repositories_with_hyphen(self):
         dbs = pacman.get_databases(f'{FILE_DIR}/resources/pacman_chaotic.conf')
 
-        self.assertEqual({'core-testing', 'core', 'extra', 'multilib', 'chaotic-aur', 'mi_repo-local'}, dbs)
+        self.assertEqual({'core-testing', 'core', 'extra', 'multilib', 'chaotic-aur',
+                          'endeavouros', 'mi_repo-local'}, dbs)
 
     def test_get_databases__ignores_options_and_commented_sections(self):
         dbs = pacman.get_databases(f'{FILE_DIR}/resources/pacman_chaotic.conf')

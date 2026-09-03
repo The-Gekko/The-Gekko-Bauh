@@ -1,0 +1,10 @@
+# Servidores de claves GPG para la gem Arch (copia vendorizada).
+#
+# Origen: https://raw.githubusercontent.com/vinifmor/bauh-files/master/arch/gpgservers.txt
+# Fecha de la copia: 2026-08-23
+# Licencia: zlib/libpng - Copyright (c) 2019-2023 Vinicius Moreira
+#           (https://github.com/vinifmor/bauh-files/blob/master/LICENSE)
+#
+# Formato: un servidor por linea, en orden de preferencia.
+# Las lineas vacias y las que empiezan por '#' se ignoran.
+keyserver.ubuntu.com

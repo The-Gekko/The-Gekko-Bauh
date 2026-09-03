@@ -1,0 +1,227 @@
+name: release
+
+# Se dispara al empujar una etiqueta «v*» (por ejemplo v0.10.8-gekko.1).
+#
+# Lo que hace, en orden:
+#   1. comprueba que la etiqueta y bauh.__version__ dicen lo mismo;
+#   2. comprueba que el PKGBUILD del AUR va con esa misma versión;
+#   3. construye el wheel y el sdist con `python -m build`;
+#   4. los valida con `twine check`;
+#   5. descarga el tarball que GitHub genera para esa etiqueta —el mismo que se
+#      baja el PKGBUILD del AUR— y calcula su suma;
+#   6. publica en la release los artefactos y un fichero SHA256SUMS con las
+#      sumas de los tres ficheros.
+#
+# El procedimiento completo, incluido el paso manual de actualizar el AUR, está
+# en docs/DISTRIBUCION.md.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  # Permite repetir la publicación de una etiqueta ya existente sin tener que
+  # borrarla y volver a crearla.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Etiqueta ya existente que se quiere (re)publicar, p. ej. v0.10.8-gekko.1'
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+# Necesario para crear la release y subirle ficheros con `gh`.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: construir, sumar SHA256 y publicar
+    runs-on: ubuntu-latest
+
+    steps:
+      # Las acciones van fijadas por versión mayor, igual que en ci.yml. Si algún
+      # día se quiere endurecer más, se pueden fijar por SHA completo
+      # (uses: actions/checkout@<sha de 40 caracteres>  # v4.2.2).
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar herramientas de empaquetado
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+
+      # ── Puerta 1: la etiqueta y el código tienen que decir lo mismo ────────
+      #
+      # La etiqueta usa «-gekko.N» y bauh.__version__ usa «+gekko.N» porque
+      # pacman prohíbe el guion en pkgver (ver packaging/aur/gekko-bauh/PKGBUILD
+      # y docs/DISTRIBUCION.md). Aquí se comprueba justo esa equivalencia, para
+      # que no se pueda publicar una etiqueta que no corresponde al código.
+      - name: Comprobar que la etiqueta coincide con bauh.__version__
+        id: version
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          python - <<'PY'
+          import os
+          import pathlib
+          import re
+          import sys
+
+          tag = os.environ['RELEASE_TAG']
+          primera = pathlib.Path('bauh/__init__.py').read_text(encoding='utf-8').splitlines()[0]
+          encontrado = re.search(r"__version__\s*=\s*'([^']+)'", primera)
+          if not encontrado:
+              sys.exit(f'No se pudo leer __version__ de la primera linea: {primera!r}')
+
+          version = encontrado.group(1)
+          esperada = f"v{version.replace('+', '-')}"
+          if tag != esperada:
+              sys.exit(
+                  f'La etiqueta {tag!r} no corresponde a __version__ {version!r}; '
+                  f'se esperaba {esperada!r}.'
+              )
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as salida:
+              salida.write(f'version={version}\n')
+              salida.write(f'tag={tag}\n')
+
+          print(f'OK: etiqueta {tag} == version {version}')
+          PY
+
+      # ── Puerta 2: el PKGBUILD del AUR va con esta misma versión ────────────
+      #
+      # Es un despiste habitual: se etiqueta la versión nueva y el PKGBUILD se
+      # queda con la anterior. Mejor cortar aquí que descubrirlo en el AUR.
+      - name: Comprobar que el PKGBUILD del AUR va con esta versión
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          python - <<'PY'
+          import os
+          import pathlib
+          import re
+          import sys
+
+          esperada = os.environ['RELEASE_VERSION']
+          pkgbuild = pathlib.Path('packaging/aur/gekko-bauh/PKGBUILD').read_text(encoding='utf-8')
+          encontrado = re.search(r'^pkgver=(.+)$', pkgbuild, re.MULTILINE)
+          if not encontrado:
+              sys.exit('No se encontró pkgver en packaging/aur/gekko-bauh/PKGBUILD')
+
+          pkgver = encontrado.group(1).strip()
+          if pkgver != esperada:
+              sys.exit(f'pkgver del PKGBUILD es {pkgver!r} y la versión publicada es {esperada!r}')
+
+          print(f'OK: pkgver={pkgver}')
+          PY
+
+      - name: Construir wheel y sdist
+        run: python -m build
+
+      - name: twine check
+        run: twine check dist/*
+
+      # El tarball que se baja el PKGBUILD del AUR es el que genera GitHub a
+      # partir de la etiqueta. Se descarga con el MISMO nombre con el que lo
+      # guarda makepkg («$pkgname-$pkgver.tar.gz») para que la línea de
+      # SHA256SUMS valga tal cual dentro del directorio del paquete del AUR.
+      #
+      # Aviso: estos tarballs los regenera GitHub bajo demanda y, aunque en la
+      # práctica son estables, en 2023 hubo un episodio en el que cambió su
+      # compresión. Publicar aquí la suma es justo lo que permite detectarlo.
+      - name: Descargar el tarball de la etiqueta y calcular su suma
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          curl --fail --silent --show-error --location \
+            -o "dist/gekko-bauh-${RELEASE_VERSION}.tar.gz" \
+            "https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${RELEASE_TAG}.tar.gz"
+          ls -l dist
+
+      # SHA256SUMS lleva las tres sumas (wheel, sdist y tarball de la etiqueta).
+      # Como quien descarga normalmente solo se lleva una parte, en la
+      # documentación la comprobación se explica con `--ignore-missing`.
+      - name: Generar SHA256SUMS
+        working-directory: dist
+        run: |
+          sha256sum -- *.whl *.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+          sha256sum --check SHA256SUMS
+
+      # Copia de los artefactos accesible aunque la publicación falle.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+      - name: Preparar las notas de la release
+        run: |
+          cat > "$RUNNER_TEMP/notas-release.md" <<'NOTAS'
+          ## Verificación
+
+          Descarga `SHA256SUMS` junto con los ficheros que te lleves y comprueba:
+
+              sha256sum --check --ignore-missing SHA256SUMS
+
+          `SHA256SUMS` cubre el wheel, el sdist y el tarball de código fuente de
+          esta etiqueta (el que usa el paquete del AUR).
+
+          El procedimiento completo de publicación e instalación está en
+          `docs/DISTRIBUCION.md`.
+          NOTAS
+          cat "$RUNNER_TEMP/notas-release.md"
+
+      # Se usa la CLI `gh`, que viene instalada en los runners de GitHub, en vez
+      # de una acción de terceros. Si la release ya existe (por ejemplo al
+      # relanzar el workflow a mano) se le añaden los ficheros en vez de fallar.
+      #
+      # `--generate-notes` junto con `--notes-file` hace que gh ponga primero el
+      # texto del fichero y detrás el registro de cambios que genera solo. Si
+      # alguna versión futura de gh rechazara la combinación, basta con quitar
+      # `--generate-notes`: el fichero de notas ya es autosuficiente.
+      - name: Publicar la release con sus artefactos
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "La release $RELEASE_TAG ya existe: se actualizan sus ficheros."
+            gh release upload "$RELEASE_TAG" dist/* --clobber
+          else
+            gh release create "$RELEASE_TAG" dist/* \
+              --title "$RELEASE_TAG" \
+              --generate-notes \
+              --notes-file "$RUNNER_TEMP/notas-release.md"
+          fi
+
+      # ── PyPI: DESACTIVADO A PROPÓSITO ─────────────────────────────────────
+      #
+      # No se publica en PyPI: la decisión es del dueño del proyecto. Hay dos
+      # cosas que resolver ANTES de activar el paso de abajo:
+      #
+      #   1. PyPI RECHAZA las «local versions» de PEP 440, y 0.10.8+gekko.N es
+      #      exactamente eso. Habría que cambiar el esquema de versión (por
+      #      ejemplo a 0.10.8.post1) y, con él, la etiqueta y el pkgver del AUR.
+      #   2. Hay que reservar el nombre «gekko-bauh» en PyPI y dar de alta un
+      #      publicador de confianza (OIDC) en
+      #      https://pypi.org/manage/account/publishing/
+      #      Con eso no hace falta guardar ningún token en el repositorio, pero
+      #      el trabajo sí necesitaría añadir `id-token: write` a `permissions`.
+      #
+      # Además habría que subir solo el wheel y el sdist: en dist/ también están
+      # el tarball de la etiqueta y el SHA256SUMS, que PyPI no acepta.
+      #
+      # - name: Publicar en PyPI
+      #   uses: pypa/gh-action-pypi-publish@release/v1
+      #   with:
+      #     packages-dir: dist-pypi/

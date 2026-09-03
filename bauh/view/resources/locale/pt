@@ -455,6 +455,7 @@ manage_window.close.transaction.body=Há uma operação em andamento. Fechar ago
 manage_window.close.transaction.title=Operação em andamento
 manage_window.columns.installed=Instalado
 manage_window.columns.latest_version=Última Versão
+manage_window.columns.origin=Origem
 manage_window.columns.update=Atualizar ?
 manage_window.error.unexpected.body=Ocorreu um erro inesperado. Execute a aplicação com --logs para mais detalhes.
 manage_window.info.no_info=Não há informação disponível para {}

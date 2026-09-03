@@ -456,6 +456,7 @@ manage_window.close.transaction.body=Hi ha una operació en curs. Tancar ara pot
 manage_window.close.transaction.title=Operació en curs
 manage_window.columns.installed=Installed
 manage_window.columns.latest_version=Versió més recent
+manage_window.columns.origin=Origen
 manage_window.columns.update=Voleu actualitzar?
 manage_window.error.unexpected.body=S'ha produït un error inesperat. Executeu l'aplicació amb --logs per a més detalls.
 manage_window.info.no_info=There is no information available for {}

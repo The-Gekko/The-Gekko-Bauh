@@ -451,6 +451,7 @@ manage_window.close.transaction.body=Es läuft gerade ein Vorgang. Jetzt zu schl
 manage_window.close.transaction.title=Vorgang läuft
 manage_window.columns.installed=Installiert
 manage_window.columns.latest_version=Neueste Version
+manage_window.columns.origin=Herkunft
 manage_window.columns.update=Upgraden?
 manage_window.error.unexpected.body=Ein unerwarteter Fehler ist aufgetreten. Starten Sie die Anwendung mit --logs für weitere Details.
 manage_window.info.no_info=Es sind keine Informationen verfügbar für {}

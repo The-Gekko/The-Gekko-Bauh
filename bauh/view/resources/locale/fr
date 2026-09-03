@@ -456,6 +456,7 @@ manage_window.close.transaction.body=Une opération est en cours. Fermer mainten
 manage_window.close.transaction.title=Opération en cours
 manage_window.columns.installed=Installé
 manage_window.columns.latest_version=Dernière Version
+manage_window.columns.origin=Origine
 manage_window.columns.update=Mettre à jour ?
 manage_window.error.unexpected.body=Une erreur inattendue s'est produite. Lancez l'application avec --logs pour plus de détails.
 manage_window.info.no_info=There is no information available for {}

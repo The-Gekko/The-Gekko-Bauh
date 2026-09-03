@@ -234,6 +234,35 @@ curl -fsSL https://raw.githubusercontent.com/The-Gekko/Bauh-Fork-The-Gekko/maste
 
 La lista completa y actualizada de opciones está en `install.sh --help`.
 
+### Desde el AUR (Arch, Garuda, EndeavourOS…)
+
+El proyecto se publica en el AUR como `gekko-bauh` (versión estable, construida
+desde la etiqueta) y `gekko-bauh-git` (compila la rama `master`):
+
+```bash
+# con un ayudante del AUR
+paru -S gekko-bauh      # o: yay -S gekko-bauh
+
+# a mano
+git clone https://aur.archlinux.org/gekko-bauh.git
+cd gekko-bauh
+makepkg -si
+```
+
+El paquete **convive con el `bauh` original**: los ejecutables (`gekko-bauh`,
+`gekko-bauh-tray`, `gekko-bauh-cli`), el icono, los lanzadores y la
+configuración (`~/.config/gekko-bauh`) llevan nombres propios, y el código se
+instala en `/usr/share/gekko-bauh` en vez de en `site-packages`, así que pacman
+no ve ni un fichero compartido. Puedes tener los dos a la vez.
+
+Instala además lo que vayas a usar de sus dependencias opcionales: `flatpak`,
+`git` y `base-devel` (gem de GitHub y compilación de paquetes del AUR),
+`timeshift` (copias de seguridad), y `python-lxml` con `python-beautifulsoup4`
+(gem web).
+
+La receta vive en [`packaging/aur/`](packaging/aur) y el procedimiento de
+publicación, en [`docs/DISTRIBUCION.md`](docs/DISTRIBUCION.md).
+
 ### Desde un checkout (contribuidores)
 
 ```bash
@@ -272,6 +301,29 @@ todos modos.
 
 Desde la propia aplicación, el aviso de «nueva versión disponible» consulta
 las releases de este repositorio.
+
+### Verificar las descargas (SHA256)
+
+Cada release publica un fichero `SHA256SUMS` con las sumas del wheel, del sdist
+y del tarball de código fuente de esa etiqueta. Descárgalo junto a lo que te
+lleves y comprueba antes de instalar:
+
+```bash
+sha256sum --check --ignore-missing SHA256SUMS
+```
+
+`--ignore-missing` hace que se comprueben solo los ficheros que hayas
+descargado, sin fallar por los que no.
+
+La instalación **por curl no usa ese fichero**: `install.sh` resuelve la
+referencia que le pidas contra la API de GitHub, obtiene el SHA-1 del commit
+exacto y descarga e instala ese commit, dejando la marca dentro del entorno de
+pipx. La integridad viene ahí del identificador del commit y de HTTPS. Si
+prefieres una comprobación explícita, instala desde el AUR (donde `makepkg`
+valida la suma declarada en el PKGBUILD) o desde la release.
+
+Los detalles están en
+[`docs/DISTRIBUCION.md`](docs/DISTRIBUCION.md#6-verificar-las-sumas-antes-de-instalar).
 
 ## Desinstalación
 

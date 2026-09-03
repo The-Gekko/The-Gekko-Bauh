@@ -1,0 +1,175 @@
+# Maintainer: The-Gekko <https://github.com/The-Gekko>
+# Contributor: Vinicius Moreira <vinicius_fmoreira@hotmail.com> (proyecto original «bauh»)
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  gekko-bauh-git — paquete del AUR construido desde la rama principal
+#
+#  Misma receta que el paquete estable (packaging/aur/gekko-bauh/PKGBUILD); solo
+#  cambian el origen (la rama «master» en vez de una etiqueta) y la forma de
+#  calcular pkgver. Todo lo demás —convivencia con «bauh», reubicación fuera de
+#  site-packages, lanzadores, iconos— es idéntico y está explicado allí.
+#
+#  ── pkgver EN UN PAQUETE -git ──────────────────────────────────────────────
+#  El valor escrito abajo es solo un marcador: pkgver() lo recalcula en cada
+#  construcción a partir de la copia ya descargada, con la forma
+#
+#      <versión>.r<número de commits>.g<sha corto>
+#      p. ej.  0.10.8+gekko.1.r412.g1a2b3c4
+#
+#  La <versión> sale de la primera línea de bauh/__init__.py, así que sigue el
+#  mismo esquema «+gekko.N» que el paquete estable. Por si alguna vez llevara un
+#  guion —que makepkg prohíbe en pkgver— se convierte a «+», igual que hace el
+#  paquete estable al traducir la etiqueta v0.10.8-gekko.1 a 0.10.8+gekko.1.
+#
+#  Tras la primera construcción, `makepkg --printsrcinfo > .SRCINFO` deja en el
+#  .SRCINFO el pkgver ya resuelto.
+# ─────────────────────────────────────────────────────────────────────────────
+
+pkgname=gekko-bauh-git
+pkgver=0.10.8+gekko.1.r0.g0000000
+pkgrel=1
+pkgdesc="Graphical package manager for Arch/AUR, Chaotic AUR, Flatpak and Solus (eopkg) - development version"
+arch=('any')
+url="https://github.com/The-Gekko/Bauh-Fork-The-Gekko"
+license=('custom:zlib')
+depends=(
+  'python'
+  'python-pyqt5'
+  'python-requests'
+  'python-yaml'
+  'python-colorama'
+  'python-dateutil'
+  # Ver la nota del paquete estable: los iconos de la interfaz son SVG.
+  'qt5-svg'
+)
+makedepends=(
+  'git'
+  'python-build'
+  'python-installer'
+  'python-setuptools'
+  'python-wheel'
+)
+optdepends=(
+  'flatpak: manage Flatpak applications'
+  'git: required by the GitHub gem and to build AUR packages'
+  'base-devel: required to build AUR packages and by the GitHub gem'
+  'timeshift: system snapshots before installing or upgrading packages'
+  'python-lxml: required by the optional web gem'
+  'python-beautifulsoup4: required by the optional web gem'
+)
+# Las dos variantes instalan los mismos ficheros, así que sí se excluyen entre
+# ellas. Con «bauh» se sigue sin declarar nada: son proyectos que conviven.
+provides=("gekko-bauh=$pkgver")
+conflicts=('gekko-bauh')
+options=('!debug')
+
+# Nombre del programa: los ejecutables, el icono y /usr/share/<programa> son los
+# mismos que instala el paquete estable, no llevan el sufijo «-git».
+_program='gekko-bauh'
+_gh_user='The-Gekko'
+_gh_repo='Bauh-Fork-The-Gekko'
+_branch='master'
+_srcdir="$_gh_repo"
+
+source=("$_srcdir::git+https://github.com/$_gh_user/$_gh_repo.git#branch=$_branch")
+# 'SKIP' es lo correcto en una fuente VCS: el commit ya identifica el contenido.
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$srcdir/$_srcdir"
+
+  local _version _commits _sha
+  # La versión vive en la primera línea de bauh/__init__.py, entre comillas.
+  _version="$(sed -n "1s/^__version__ *= *'\\([^']*\\)'.*/\\1/p" bauh/__init__.py)"
+  if [[ -z "$_version" ]]; then
+    echo 'gekko-bauh-git: no se pudo leer __version__ de bauh/__init__.py' >&2
+    return 1
+  fi
+
+  # makepkg no admite guiones en pkgver (ni dos puntos, barras o espacios).
+  _version="${_version//-/+}"
+
+  _commits="$(git rev-list --count HEAD)"
+  _sha="$(git rev-parse --short=7 HEAD)"
+
+  printf '%s.r%s.g%s' "$_version" "$_commits" "$_sha"
+}
+
+build() {
+  cd "$srcdir/$_srcdir"
+
+  python -m build --wheel --no-isolation
+}
+
+check() {
+  cd "$srcdir/$_srcdir"
+
+  QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests
+}
+
+package() {
+  cd "$srcdir/$_srcdir"
+
+  # Ver packaging/aur/gekko-bauh/PKGBUILD: el paquete importable se llama
+  # «bauh», así que no puede ir a site-packages si queremos convivir con el
+  # paquete «bauh» del AUR.
+  local _stage="$srcdir/stage"
+  rm -rf "$_stage"
+  python -m installer --destdir="$_stage" dist/*.whl
+
+  local _site
+  _site="$(find "$_stage" -type d -name site-packages -print -quit)"
+  if [[ ! -d "$_site" ]]; then
+    echo 'gekko-bauh-git: python-installer no creó ningún site-packages' >&2
+    return 1
+  fi
+
+  install -d "$pkgdir/usr/share/$_program"
+  cp -a "$_site/." "$pkgdir/usr/share/$_program/"
+
+  install -d "$pkgdir/usr/bin"
+  _write_launcher 'gekko-bauh' 'bauh.app' 'main'
+  _write_launcher 'gekko-bauh-tray' 'bauh.app' 'tray'
+  _write_launcher 'gekko-bauh-cli' 'bauh.cli.app' 'main'
+
+  install -Dm644 bauh/desktop/gekko-bauh.desktop \
+    "$pkgdir/usr/share/applications/gekko-bauh.desktop"
+  install -Dm644 bauh/desktop/gekko-bauh-tray.desktop \
+    "$pkgdir/usr/share/applications/gekko-bauh-tray.desktop"
+
+  local _size
+  for _size in 16 32 48 64 128 256 512; do
+    install -Dm644 "pictures/icons/gekko-bauh-$_size.png" \
+      "$pkgdir/usr/share/icons/hicolor/${_size}x${_size}/apps/gekko-bauh.png"
+  done
+
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -Dm644 CHANGELOG.md "$pkgdir/usr/share/doc/$pkgname/CHANGELOG.md"
+}
+
+# Idéntica a la del paquete estable: escribe un lanzador que antepone
+# /usr/share/gekko-bauh a sys.path.
+_write_launcher() {
+  local _name="$1" _module="$2" _func="$3"
+
+  cat > "$pkgdir/usr/bin/$_name" <<EOF
+#!/usr/bin/python
+# Lanzador de $_name generado por el PKGBUILD de gekko-bauh-git.
+#
+# El paquete importable se llama «bauh», igual que el del proyecto original, así
+# que NO se instala en site-packages: vive en /usr/share/$_program y se añade
+# aquí al principio de sys.path. Gracias a eso este paquete y el paquete «bauh»
+# del AUR no comparten ni un fichero y se pueden tener instalados a la vez.
+import sys
+
+sys.path.insert(0, '/usr/share/$_program')
+
+from $_module import $_func
+
+if __name__ == '__main__':
+    sys.exit($_func())
+EOF
+
+  chmod 755 "$pkgdir/usr/bin/$_name"
+}

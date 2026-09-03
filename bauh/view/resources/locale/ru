@@ -455,6 +455,7 @@ manage_window.close.transaction.body=Выполняется операция. З
 manage_window.close.transaction.title=Выполняется операция
 manage_window.columns.installed=Установленно
 manage_window.columns.latest_version=Последняя версия
+manage_window.columns.origin=Источник
 manage_window.columns.update=Обновить?
 manage_window.error.unexpected.body=Произошла непредвиденная ошибка. Запустите приложение с --logs для подробностей.
 manage_window.info.no_info=Информация не доступна для {}
