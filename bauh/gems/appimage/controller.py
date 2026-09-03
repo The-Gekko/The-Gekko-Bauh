@@ -12,6 +12,7 @@ from typing import Set, Type, List, Tuple, Optional, Iterable, Generator
 
 from colorama import Fore
 
+from bauh import __app_name__
 from bauh.api.abstract.context import ApplicationContext
 from bauh.api.abstract.controller import SoftwareManager, SearchResult, UpgradeRequirements, UpgradeRequirement, \
     TransactionResult, SoftwareAction, SettingsView, SettingsController
@@ -856,7 +857,7 @@ class AppImageManager(SoftwareManager, SettingsController):
         for f in glob.glob(f'{APPIMAGE_SHARED_DIR}/*.db'):
             try:
                 if logs:
-                    print(f'[bauh][appimage] Deleting {f}')
+                    print(f'[{__app_name__}][appimage] Deleting {f}')
                 os.remove(f)
 
                 if logs:

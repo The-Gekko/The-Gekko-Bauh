@@ -15,6 +15,7 @@ import yaml
 from colorama import Fore
 from requests import Response
 
+from bauh import __app_name__
 from bauh.api.abstract.context import ApplicationContext
 from bauh.api.abstract.controller import SoftwareManager, SearchResult, UpgradeRequirements, TransactionResult, \
     SoftwareAction, SettingsView, SettingsController
@@ -1154,7 +1155,7 @@ class WebApplicationManager(SoftwareManager, SettingsController):
     def clear_data(self, logs: bool = True):
         if os.path.exists(ENV_PATH):
             if logs:
-                print('[bauh][web] Deleting directory {}'.format(ENV_PATH))
+                print(f'[{__app_name__}][web] Deleting directory {ENV_PATH}')
 
             try:
                 shutil.rmtree(ENV_PATH)

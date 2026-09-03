@@ -198,6 +198,10 @@ jobs:
               'bauh/gems/arch/resources/locale/en',
               'bauh/gems/flatpak/resources/locale/en',
               'bauh/gems/eopkg/resources/locale/en',
+              # copias vendorizadas: sin ellas la gem Arch depende de la red para tener
+              # categorias y servidores de claves GPG
+              'bauh/gems/arch/resources/data/categories.txt',
+              'bauh/gems/arch/resources/data/gpgservers.txt',
           ]
           missing = [p for p in required if not any(n.startswith(p) for n in names)]
           if missing:
