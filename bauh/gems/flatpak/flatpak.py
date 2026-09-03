@@ -8,7 +8,7 @@ from typing import List, Dict, Sequence, Set, Iterable, Optional, Tuple
 
 from bauh.api.exception import NoInternetException
 from bauh.commons import system
-from bauh.commons.system import new_subprocess, SimpleProcess, ProcessHandler, DEFAULT_LANG
+from bauh.commons.system import SimpleProcess, ProcessHandler, DEFAULT_LANG
 from bauh.commons.util import size_to_byte
 from bauh.commons.version_util import map_str_version
 from bauh.gems.flatpak import EXPORTS_PATH, VERSION_1_3, VERSION_1_2, VERSION_1_5, VERSION_1_12
@@ -87,12 +87,17 @@ def get_fields(app_id: str, branch: str, fields: List[str]) -> List[str]:
     if branch:
         cmd.append(branch)
 
-    info = new_subprocess(cmd).stdout
+    # antes se encadenaba un 'grep' por una tubería y ninguno de los dos procesos se esperaba:
+    # cada consulta dejaba dos hijos zombi durante toda la sesión
+    output = _run(cmd) or ''
+    pattern = re.compile('({}):(.+)'.format('|'.join(re.escape(f) for f in fields)))
 
     res = []
-    for o in new_subprocess(('grep', '-E', '({}):.+'.format('|'.join(fields)), '-o'), stdin=info).stdout:
-        if o:
-            res.append(o.decode().split(':')[-1].strip())
+    for line in output.split('\n'):
+        match = pattern.search(line)
+
+        if match:
+            res.append(match.group(2).strip())
 
     return res
 
@@ -128,11 +133,9 @@ def list_installed(version: Tuple[str, ...]) -> List[dict]:
     apps = []
 
     if version < VERSION_1_2:
-        app_list = new_subprocess(('flatpak', 'list', '-d'), lang=None)
-
-        for o in app_list.stdout:
-            if o:
-                data = o.decode().strip().split('\t')
+        for line in (_run(('flatpak', 'list', '-d'), lang=None) or '').split('\n'):
+            if line:
+                data = line.strip().split('\t')
                 ref_split = data[0].split('/')
                 runtime = 'runtime' in data[5]
 
@@ -152,11 +155,9 @@ def list_installed(version: Tuple[str, ...]) -> List[dict]:
     else:
         name_col = '' if version < VERSION_1_3 else 'name,'
         cols = f'application,ref,arch,branch,description,origin,options,{name_col}version'
-        app_list = new_subprocess(('flatpak', 'list', f'--columns={cols}'), lang=None)
-
-        for o in app_list.stdout:
-            if o:
-                data = o.decode().strip().split('\t')
+        for line in (_run(('flatpak', 'list', f'--columns={cols}'), lang=None) or '').split('\n'):
+            if line:
+                data = line.strip().split('\t')
                 runtime = 'runtime' in data[6]
 
                 if version < VERSION_1_3:
@@ -268,14 +269,17 @@ def fill_updates(version: Tuple[str, ...], installation: str, res: Dict[str, Set
         except Exception:
             import logging; logging.error("Exception occurred", exc_info=True)
     else:
-        updates = new_subprocess(('flatpak', 'update', f'--{installation}', '--no-deps')).stdout
-
-        reg = r'[0-9]+\.\s+.+'
+        # sin tubería con 'grep': encadenarlos dejaba los dos procesos sin recoger
+        updates_output = _run(('flatpak', 'update', f'--{installation}', '--no-deps'),
+                              ignore_return_code=True) or ''
+        reg = re.compile(r'[0-9]+\.\s+.+')
 
         try:
-            for o in new_subprocess(('grep', '-E', reg, '-o', '--color=never'), stdin=updates).stdout:
-                if o:
-                    line_split = o.decode().strip().split('\t')
+            for line in updates_output.split('\n'):
+                match = reg.search(line)
+
+                if match:
+                    line_split = match.group(0).strip().split('\t')
 
                     if len(line_split) >= 5:
                         if version >= VERSION_1_5:

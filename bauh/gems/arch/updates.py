@@ -309,7 +309,7 @@ class UpdatesSummarizer:
                         self.logger.warning("No version declared in SRCINFO of '{}'".format(pkg_data[0]))
                 else:
                     self.logger.warning("Could not retrieve the SRCINFO for '{}'".format(pkg_data[0]))
-            except:
+            except Exception:
                 self.logger.warning("Could not retrieve the SRCINFO for '{}'".format(pkg_data[0]))
         else:
             version = pacman.get_version_for_not_installed(pkg_data[0])
@@ -895,7 +895,7 @@ class UpdatesSummarizer:
                                                               required_version=dep_split[1]):
                                         version_match = True
                                         break
-                                except:
+                                except Exception:
                                     self.logger.error(f"Error when comparing versions {v} (provided) and "
                                                       f"{dep_split[1]} (required)")
                                     import logging; logging.error("Exception occurred", exc_info=True)

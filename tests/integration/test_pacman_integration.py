@@ -5,6 +5,7 @@ El cambio de `shell=True` a listas de argumentos es invisible para los tests que
 así que un nombre de paquete con metacaracteres tiene que llegar literal al binario.
 """
 
+import os
 import unittest
 
 from bauh.gems.arch import pacman
@@ -102,3 +103,61 @@ class PacmanOutputIntegrationTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class PacmanProcessReapingTest(unittest.TestCase):
+    """Los procesos que se lanzan se recogen: ninguno queda como zombi."""
+
+    @staticmethod
+    def _own_zombies() -> int:
+        count = 0
+
+        for entry in os.listdir('/proc'):
+            if not entry.isdigit():
+                continue
+
+            try:
+                with open(f'/proc/{entry}/stat') as f:
+                    fields = f.read().rsplit(')', 1)[1].split()
+            except OSError:
+                continue
+
+            if fields and fields[0] == 'Z' and int(fields[1]) == os.getpid():
+                count += 1
+
+        return count
+
+    def test_repeated_queries_leave_no_zombies(self):
+        # antes cada consulta hacía `new_subprocess(...)` y recorría su salida sin esperar
+        # nunca al hijo: veinte consultas dejaban veinte entradas en la tabla de procesos
+        # durante toda la sesión, cada una ocupando un PID
+        responses = {'pacman': {'*': {'stdout': 'core/zlib 1.3-1\n    Compression library\n'}}}
+        before = self._own_zombies()
+
+        with FakeBinaries(responses):
+            for _ in range(20):
+                pacman.get_repositories(('zlib',))
+
+        self.assertEqual(before, self._own_zombies())
+
+    def test_reading_dependencies_leaves_no_zombies(self):
+        responses = {'pacman': {'*': {'stdout': 'Depends On     : glibc  gcc-libs\n'}}}
+        before = self._own_zombies()
+
+        with FakeBinaries(responses):
+            for _ in range(10):
+                deps = pacman.read_dependencies('firefox')
+
+        self.assertEqual({'glibc', 'gcc-libs'}, deps)
+        self.assertEqual(before, self._own_zombies())
+
+    def test_provides_and_missing_are_read_without_a_grep_pipeline(self):
+        responses = {'pacman': {'*': {'stdout': 'Provides       : libzlib.so  zlib-compat\n'}}}
+
+        with FakeBinaries(responses) as fakes:
+            provides = pacman.read_provides('zlib')
+            calls = fakes.calls()
+
+        self.assertEqual({'zlib', 'libzlib.so', 'zlib-compat'}, provides)
+        # una sola llamada, sin encadenar un 'grep' por una tubería
+        self.assertEqual([['-Si', 'zlib']], calls)

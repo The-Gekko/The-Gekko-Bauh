@@ -157,14 +157,12 @@ class PacmanRepositoriesTest(TestCase):
     """Asociacion paquete -> repositorio (F76 y F16)."""
 
     @patch(f'{__package_name__}.gems.arch.pacman.guess_repository', return_value=None)
-    @patch(f'{__package_name__}.gems.arch.pacman.new_subprocess')
-    def test_get_repositories__does_not_match_by_substring(self, new_subprocess: Mock, guess_repository: Mock):
-        proc = Mock()
-        proc.stdout = [b'core/zlib 1.3-1\n',
-                       b'    Compression library\n',
-                       b'extra/zlib-ng 2.1-1\n',
-                       b'    zlib replacement\n']
-        new_subprocess.return_value = proc
+    @patch(f'{__package_name__}.gems.arch.pacman._run_capturing')
+    def test_get_repositories__does_not_match_by_substring(self, run: Mock, guess_repository: Mock):
+        run.return_value = (0, 'core/zlib 1.3-1\n'
+                               '    Compression library\n'
+                               'extra/zlib-ng 2.1-1\n'
+                               '    zlib replacement\n', '')
 
         res = pacman.get_repositories(('zlib', 'zlib-ng'))
 
@@ -172,11 +170,9 @@ class PacmanRepositoriesTest(TestCase):
         guess_repository.assert_not_called()
 
     @patch(f'{__package_name__}.gems.arch.pacman.guess_repository', return_value=None)
-    @patch(f'{__package_name__}.gems.arch.pacman.new_subprocess')
-    def test_get_repositories__only_the_longer_name_available(self, new_subprocess: Mock, guess_repository: Mock):
-        proc = Mock()
-        proc.stdout = [b'extra/zlib-ng 2.1-1\n', b'    zlib replacement\n']
-        new_subprocess.return_value = proc
+    @patch(f'{__package_name__}.gems.arch.pacman._run_capturing')
+    def test_get_repositories__only_the_longer_name_available(self, run: Mock, guess_repository: Mock):
+        run.return_value = (0, 'extra/zlib-ng 2.1-1\n    zlib replacement\n', '')
 
         res = pacman.get_repositories(('zlib', 'zlib-ng'))
 

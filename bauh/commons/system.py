@@ -6,7 +6,7 @@ import sys
 import time
 from io import StringIO
 from subprocess import PIPE
-from typing import List, Tuple, Set, Dict, Optional, Iterable, Union, IO, Any
+from typing import List, Sequence, Tuple, Set, Dict, Optional, Iterable, Union, IO, Any
 
 # default environment variables for subprocesses.
 from bauh.api.abstract.handler import ProcessWatcher
@@ -412,6 +412,46 @@ def check_enabled_services(*names: str) -> Dict[str, bool]:
     else:
         status = output.split('\n')
         return {s: status[i].strip().lower() == 'enabled' for i, s in enumerate(names) if s}
+
+
+def execute_args(args: Sequence[str], cwd: Optional[str] = None, output: bool = True,
+                 custom_env: Optional[dict] = None, stdin: bool = True,
+                 custom_user: Optional[str] = None) -> Tuple[int, Optional[str]]:
+    """Ejecuta un comando como lista de argumentos y devuelve (código de salida, salida).
+
+    Alternativa a `execute` para cuando alguno de los argumentos puede llevar espacios o
+    metacaracteres: aquella recibe una cadena y, sin shell, la parte por espacios, de modo que
+    una ruta con un espacio se convertía en dos argumentos; con shell, cualquier comilla o
+    « $ » en la ruta cambiaba la orden.
+    """
+    final_args = ['runuser', '-u', custom_user, '--', *args] if custom_user else list(args)
+
+    params = {
+        'args': final_args,
+        'stdout': subprocess.PIPE if output else subprocess.DEVNULL,
+        'stderr': subprocess.STDOUT if output else subprocess.DEVNULL,
+        'shell': False
+    }
+
+    if not stdin:
+        params['stdin'] = subprocess.DEVNULL
+
+    if cwd is not None:
+        params['cwd'] = cwd
+
+    if custom_env is not None:
+        params['env'] = custom_env
+
+    proc = subprocess.run(**params, check=False)
+
+    decoded = None
+    if proc.stdout:
+        try:
+            decoded = proc.stdout.decode()
+        except UnicodeDecodeError:
+            decoded = None
+
+    return proc.returncode, decoded
 
 
 def execute(cmd: str, shell: bool = False, cwd: Optional[str] = None, output: bool = True, custom_env: Optional[dict] = None,

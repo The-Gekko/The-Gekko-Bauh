@@ -1,5 +1,4 @@
 import shutil
-from io import StringIO
 from logging import Logger
 from typing import List, Tuple, Optional
 
@@ -15,13 +14,13 @@ def list_commits(proj_dir: str, limit: int = -1, logger: Optional[Logger] = None
     if limit == 0:
         return
 
-    cmd = StringIO()
-    cmd.write('git log --format="%H %ct"')
+    args = ['git', 'log', '--format=%H %ct']
 
     if limit > 0:
-        cmd.write(f' -{limit}')
+        args.append(f'-{limit}')
 
-    code, output = system.execute(cmd.getvalue(), cwd=proj_dir, shell=True)
+    # sin shell: 'proj_dir' es un directorio de compilación cuya ruta puede llevar espacios
+    code, output = system.execute_args(args, cwd=proj_dir)
 
     if code == 0 and output:
         commits = []

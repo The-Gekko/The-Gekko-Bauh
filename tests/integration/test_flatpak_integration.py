@@ -95,3 +95,53 @@ class FlatpakOutputIntegrationTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class FlatpakProcessReapingTest(unittest.TestCase):
+    """Las consultas no dejan procesos zombi."""
+
+    LIST_OUTPUT = (
+        "org.mozilla.firefox\tapp/org.mozilla.firefox/x86_64/stable\tx86_64\tstable"
+        "\tWeb browser\tflathub\tsystem\tFirefox\t121.0\n"
+    )
+
+    @staticmethod
+    def _own_zombies() -> int:
+        count = 0
+
+        for entry in os.listdir('/proc'):
+            if not entry.isdigit():
+                continue
+
+            try:
+                with open(f'/proc/{entry}/stat') as f:
+                    fields = f.read().rsplit(')', 1)[1].split()
+            except OSError:
+                continue
+
+            if fields and fields[0] == 'Z' and int(fields[1]) == os.getpid():
+                count += 1
+
+        return count
+
+    def test_listing_installed_apps_leaves_no_zombies(self):
+        before = self._own_zombies()
+
+        with FakeBinaries({'flatpak': {'*': {'stdout': self.LIST_OUTPUT}}}):
+            for _ in range(15):
+                installed = flatpak.list_installed(('1', '14'))
+
+        self.assertEqual(1, len(installed))
+        self.assertEqual('org.mozilla.firefox', installed[0]['id'])
+        self.assertEqual(before, self._own_zombies())
+
+    def test_reading_fields_uses_a_single_process(self):
+        info = 'ID: org.mozilla.firefox\nVersion: 121.0\nArch: x86_64\n'
+
+        with FakeBinaries({'flatpak': {'*': {'stdout': info}}}) as fakes:
+            fields = flatpak.get_fields('org.mozilla.firefox', 'stable', ['ID', 'Version'])
+            calls = fakes.calls()
+
+        self.assertEqual(['org.mozilla.firefox', '121.0'], fields)
+        # antes se encadenaba un «grep» por una tubería: dos procesos, ninguno recogido
+        self.assertEqual([['info', 'org.mozilla.firefox', 'stable']], calls)

@@ -10,7 +10,7 @@ from typing import List, Sequence, Set, Tuple, Dict, Iterable, Optional, Any, Pa
 from colorama import Fore
 
 from bauh.commons import system
-from bauh.commons.system import new_subprocess, new_root_subprocess, SystemProcess, SimpleProcess
+from bauh.commons.system import new_root_subprocess, SystemProcess, SimpleProcess
 from bauh.commons.util import size_to_byte
 from bauh.gems.arch.exceptions import PackageNotFoundException, PackageInHoldException
 
@@ -36,6 +36,8 @@ RE_SEARCH_RESULT_LINE = re.compile(r'^([^/\s]+)/(\S+)\s')
 RE_CONFLICTING_FILE = re.compile(r'^\s*[^\s:]+:\s+(/\S+)\s+exists in filesystem')
 RE_INFO_NAME = re.compile(r'^Name\s*:\s*(\S+)\s*$')
 RE_INFO_REPOSITORY = re.compile(r'^Repository\s*:\s*(\S+)\s*$')
+RE_INFO_PROVIDES = re.compile(r'^Provides\s+:\s(.+)$')
+RE_INFO_DEPENDS_ON = re.compile(r'^Depends\s+On\s+:\s(.+)$')
 RE_IGNORED_PACKAGES: Optional[Pattern] = None
 
 
@@ -68,6 +70,33 @@ def _run(args: Sequence[str], expected_code: int = 0, ignore_return_code: bool =
             return res.stdout.decode()
         except UnicodeDecodeError:
             return None
+
+
+def _run_capturing(args: Sequence[str]) -> Tuple[int, str, str]:
+    """Ejecuta un comando y devuelve (código, salida estándar, salida de error).
+
+    Se usa donde antes se hacía `new_subprocess(...)` y se recorría su salida sin esperar
+    nunca al proceso: cada consulta dejaba un hijo zombi en la tabla de procesos durante toda
+    la sesión (comprobado: 20 consultas, 20 zombis). `subprocess.run` espera y recoge.
+    """
+    final_args = [a for a in args if a]
+
+    if not final_args:
+        return 1, '', ''
+
+    try:
+        res = subprocess.run(final_args, capture_output=True, shell=False, cwd='.',
+                             env=system.gen_env(), check=False)
+    except OSError:
+        return 1, '', ''
+
+    def decode(raw: bytes) -> str:
+        try:
+            return raw.decode()
+        except UnicodeDecodeError:
+            return ''
+
+    return res.returncode, decode(res.stdout), decode(res.stderr)
 
 
 def _execute(args: Sequence[str], custom_env: Optional[dict] = None) -> Tuple[int, Optional[str]]:
@@ -276,15 +305,13 @@ def get_repositories(pkgs: Iterable[str]) -> dict:
     wanted = {*pkgnames}
     repositories = {}
 
-    for line in new_subprocess(['pacman', '-Ss', pkgre]).stdout:
-        if line:
-            try:
-                match = RE_SEARCH_RESULT_LINE.match(line.decode())
-            except UnicodeDecodeError:
-                continue
+    _, output, _ = _run_capturing(['pacman', '-Ss', pkgre])
 
-            if match and match.group(2) in wanted:
-                repositories[match.group(2)] = match.group(1)
+    for line in output.split('\n'):
+        match = RE_SEARCH_RESULT_LINE.match(line)
+
+        if match and match.group(2) in wanted:
+            repositories[match.group(2)] = match.group(1)
 
     not_found = {pkg for pkg in pkgnames if pkg not in repositories}
 
@@ -471,15 +498,11 @@ def list_installed_files(pkgname: str) -> List[str]:
 
 
 def verify_pgp_key(key: str) -> bool:
-    list_key = new_subprocess(['pacman-key', '-l']).stdout
+    """Indica si pacman-key ya tiene importada la clave indicada."""
+    # antes se encadenaba un 'grep' por una tubería y ninguno de los dos procesos se recogía
+    _, output, _ = _run_capturing(['pacman-key', '-l'])
 
-    for out in new_subprocess(['grep', " " + key], stdin=list_key).stdout:
-        if out:
-            line = out.decode().strip()
-            if line and key in line:
-                return True
-
-    return False
+    return any(key in line for line in output.split('\n') if line.strip())
 
 
 def receive_key(key: str, root_password: Optional[str]) -> SystemProcess:
@@ -516,44 +539,24 @@ def list_ignored_packages(config_path: str = '/etc/pacman.conf') -> Set[str]:
 
 
 def check_missing(names: Set[str]) -> Set[str]:
-    installed = new_subprocess(['pacman', '-Qq', *names])
+    _, _, error = _run_capturing(['pacman', '-Qq', *names])
 
-    not_installed = set()
-
-    for o in installed.stderr:
-        if o:
-            err_line = o.decode()
-
-            if err_line:
-                not_found = [n for n in RE_DEP_NOTFOUND.findall(err_line) if n]
-
-                if not_found:
-                    not_installed.update(not_found)
-
-    return not_installed
+    return {n for n in RE_DEP_NOTFOUND.findall(error) if n}
 
 
 def read_repository_from_info(name: str) -> Optional[str]:
-    info = new_subprocess(['pacman', '-Si', name])
+    _, output, error = _run_capturing(['pacman', '-Si', name])
 
-    not_found = False
-    for o in info.stderr:
-        if o:
-            err_line = o.decode()
-            if RE_DEP_NOTFOUND.findall(err_line):
-                not_found = True
-
-    if not_found:
-        return
+    if RE_DEP_NOTFOUND.findall(error):
+        return None
 
     repository = None
 
-    for o in new_subprocess(['grep', '-Po', r"Repository\s+:\s+\K.+"], stdin=info.stdout).stdout:
-        if o:
-            line = o.decode().strip()
+    for line in output.split('\n'):
+        match = RE_INFO_REPOSITORY.match(line.strip())
 
-            if line:
-                repository = line
+        if match:
+            repository = match.group(1)
 
     return repository
 
@@ -584,58 +587,46 @@ def guess_repository(name: str) -> Tuple[str, str]:
 
 
 def read_provides(name: str) -> Set[str]:
-    dep_info = new_subprocess(['pacman', '-Si', name])
+    _, output, error = _run_capturing(['pacman', '-Si', name])
 
-    not_found = False
-
-    for o in dep_info.stderr:
-        if o:
-            err_line = o.decode()
-
-            if err_line:
-                if RE_DEP_NOTFOUND.findall(err_line):
-                    not_found = True
-
-    if not_found:
+    if RE_DEP_NOTFOUND.findall(error):
         raise PackageNotFoundException(name)
 
     provides = None
 
-    for out in new_subprocess(['grep', '-Po', r'Provides\s+:\s\K(.+)'], stdin=dep_info.stdout).stdout:
-        if out:
-            provided_names = [p.strip() for p in out.decode().strip().split(' ') if p]
+    for line in output.split('\n'):
+        match = RE_INFO_PROVIDES.match(line)
 
-            if provided_names[0].lower() == 'none':
-                provides = {name}
-            else:
-                provides = {name, *provided_names}
+        if not match:
+            continue
+
+        provided_names = [p.strip() for p in match.group(1).strip().split(' ') if p]
+
+        if not provided_names:
+            continue
+
+        if provided_names[0].lower() == 'none':
+            provides = {name}
+        else:
+            provides = {name, *provided_names}
 
     return provides
 
 
 def read_dependencies(name: str) -> Set[str]:
-    dep_info = new_subprocess(['pacman', '-Si', name])
+    _, output, error = _run_capturing(['pacman', '-Si', name])
 
-    not_found = False
-
-    for o in dep_info.stderr:
-        if o:
-            err_line = o.decode()
-
-            if err_line:
-                if RE_DEP_NOTFOUND.findall(err_line):
-                    not_found = True
-
-    if not_found:
+    if RE_DEP_NOTFOUND.findall(error):
         raise PackageNotFoundException(name)
 
     depends_on = set()
-    for out in new_subprocess(['grep', '-Po', r'Depends\s+On\s+:\s\K(.+)'], stdin=dep_info.stdout).stdout:
-        if out:
-            line = out.decode().strip()
 
-            if line:
-                depends_on.update([d for d in line.split(' ') if d and d.lower() != 'none'])
+    for line in output.split('\n'):
+        match = RE_INFO_DEPENDS_ON.match(line)
+
+        if match:
+            depends_on.update(d for d in match.group(1).strip().split(' ')
+                              if d and d.lower() != 'none')
 
     return depends_on
 
