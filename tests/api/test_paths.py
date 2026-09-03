@@ -5,6 +5,7 @@ import unittest
 from getpass import getuser
 
 from bauh import __app_name__
+from bauh.gems.arch import AUR_BUILDER_USER
 from bauh.api import paths
 
 
@@ -108,7 +109,9 @@ class TempDirConstantsTest(unittest.TestCase):
         self.assertEqual(paths.TEMP_DIR, paths.get_temp_dir(getuser()))
 
     def test__get_temp_dir_must_keep_the_legacy_path_for_other_users(self):
-        self.assertEqual(f'/tmp/{__app_name__}@{__app_name__}-aur', paths.get_temp_dir(f'{__app_name__}-aur'))
+        # El usuario que compila los paquetes de AUR cuando la aplicación corre como root
+        # necesita poder crear él mismo su directorio, así que conserva la ruta histórica.
+        self.assertEqual(f'/tmp/{__app_name__}@{AUR_BUILDER_USER}', paths.get_temp_dir(AUR_BUILDER_USER))
 
     def test__logs_dir_must_live_under_the_user_cache_dir(self):
         self.assertEqual(f'{paths.CACHE_DIR}/logs', paths.LOGS_DIR)

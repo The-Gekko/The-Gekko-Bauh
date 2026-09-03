@@ -11,8 +11,12 @@ tecnología a los contratos comunes definidos en `bauh/api/abstract/`.
 Este repositorio es **bauh Gekko Edition**, fork de
 [vinifmor/bauh](https://github.com/vinifmor/bauh). La versión declarada en
 `bauh/__init__.py` es `0.10.8+gekko.1` (PEP 440 con etiqueta local; etiqueta
-git `v0.10.8-gekko.1`). El nombre de distribución es `bauh-gekko`; el paquete
-importable sigue siendo `bauh` y los binarios `bauh`, `bauh-tray` y `bauh-cli`.
+git `v0.10.8-gekko.1`). El nombre de distribución y los ejecutables son propios
+(`gekko-bauh`, `gekko-bauh-tray`, `gekko-bauh-cli`); el paquete Python importable
+sigue siendo `bauh`, heredado del proyecto original, para poder integrar sus
+correcciones sin reescribir cada import. La constante `__app_name__` es el
+identificador de la aplicación (`gekko-bauh`) y `__package_name__` el del paquete
+(`bauh`); confundirlas rompe tanto las rutas como los `mock.patch` de los tests.
 El punto de entrada principal es `bauh.app:main`; también existen una
 aplicación para la bandeja del sistema y una interfaz de línea de comandos
 limitada a la consulta de actualizaciones.
@@ -82,7 +86,7 @@ que debe modificarse está en `bauh/` y las pruebas en `tests/`.
 | `LICENSE` | Texto íntegro de la licencia zlib/libpng, sin modificar. |
 | `install.sh` | Instala/actualiza/desinstala el fork con pipx; ver sección 6. |
 | `requirements.txt` / `requirements-dev.txt` | Dependencias de ejecución / de desarrollo (ruff, build, twine, lxml, beautifulsoup4). |
-| `pyproject.toml` | Sección `[project]` completa (nombre `bauh-gekko`, versión dinámica, dependencias, scripts, clasificadores) y `[build-system]` con setuptools. |
+| `pyproject.toml` | Sección `[project]` completa (nombre `gekko-bauh`, versión dinámica, dependencias, scripts, clasificadores) y `[build-system]` con setuptools. |
 | `setup.py` | Shim mínimo para herramientas que aún lo invocan; no contiene metadatos propios. |
 | `setup.cfg` | Metadatos residuales de setuptools. |
 | `MANIFEST.in` | Archivos adicionales incluidos en la distribución fuente. |
@@ -159,10 +163,13 @@ mientras hay una transacción en curso.
   `aurora`), `custom_theme` (colores, opacidad e imagen de la pestaña
   Personalización), descargas, cachés, sugerencias, copias de seguridad y
   opciones de UI. Migra la clave antigua `ui.custom_theme` a la raíz.
-- `bauh/api/paths.py` define las rutas: `~/.config/bauh` (configuración),
-  `~/.cache/bauh` (caché), `~/.local/share/bauh` (datos y `themes/`),
-  `$XDG_RUNTIME_DIR/bauh` (temporales y logs, con permisos `0700`; como
-  root, rutas del sistema equivalentes).
+- `bauh/api/paths.py` define las rutas a partir de `__app_name__`:
+  `~/.config/gekko-bauh` (configuración), `~/.cache/gekko-bauh` (caché y logs),
+  `~/.local/share/gekko-bauh` (datos y `themes/`) y un temporal privado con
+  permisos `0700`; como root, las rutas del sistema equivalentes.
+- `bauh/migration.py` copia, en el primer arranque, la configuración y los datos
+  heredados de `~/.config/bauh` y `~/.local/share/bauh` a las rutas propias. Solo
+  si el destino no existe, sin borrar ni modificar el origen y sin copiar la caché.
 - `ApplicationContext` transporta dependencias compartidas: HTTP, i18n,
   descargador, cachés, logger, distribución, conectividad y privilegios.
 - `view/util/cache.py` mantiene cachés en memoria; `view/util/disk.py` carga
@@ -404,7 +411,7 @@ tienen un archivo de prueba dedicado.
 
 ### Metadatos y comandos
 
-`pyproject.toml` contiene la sección `[project]` (nombre `bauh-gekko`, versión
+`pyproject.toml` contiene la sección `[project]` (nombre `gekko-bauh`, versión
 leída de `bauh/__init__.py`, `requires-python`, dependencias, clasificadores,
 URLs del fork y del upstream, licencia zlib/libpng) y registra los comandos:
 
@@ -425,18 +432,20 @@ Instalador y desinstalador en bash pensado para `curl ... | bash`:
 - Comprueba `curl`, la versión de Python (`PYTHON_BIN`) y `pipx` (lo instala
   con el gestor del sistema solo con `--install-pipx`).
 - Resuelve el commit exacto de `master`, descarga ese commit y lo instala con
-  `pipx install --python ... --force` en el entorno `bauh-gekko`; guarda el
+  `pipx install --python ... --force` en el entorno `gekko-bauh`; guarda el
   commit en `.gekko-source-ref` dentro del entorno para saltarse
   reconstrucciones innecesarias (`--force` las obliga). Migra el entorno
-  `bauh` de versiones anteriores del fork.
+  `bauh` de versiones anteriores de este proyecto.
 - Detecta el paquete `bauh` del sistema y solo lo desinstala con
   `--remove-system-bauh`. `--yes` responde a las preguntas sin `sudo`.
 - Instala `pictures/icons/gekko-bauh-<N>.png` en `hicolor` y un `.desktop`
-  traducido con `StartupWMClass=bauh`; refresca las cachés del escritorio.
+  traducido con `StartupWMClass=gekko-bauh` (que coincide con el
+  `setDesktopFileName` de `bauh/context.py`); refresca las cachés del escritorio.
 - `uninstall` elimina el entorno, el `.desktop` y los iconos;
-  `uninstall --purge` borra además `~/.config/bauh`, `~/.cache/bauh`,
-  `~/.local/share/bauh` y el directorio temporal, y ofrece restablecer
-  `ui.theme` para volver al bauh oficial.
+  `uninstall --purge` borra además `~/.config/gekko-bauh`, `~/.cache/gekko-bauh`,
+  `~/.local/share/gekko-bauh` y el directorio temporal. No toca `~/.config/bauh`,
+  que pertenece al bauh oficial, pero sí ofrece restablecer su `ui.theme` si una
+  versión anterior de este proyecto lo dejó en un tema que el oficial no conoce.
 
 ### Ejemplos de uso
 

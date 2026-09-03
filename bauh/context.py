@@ -168,6 +168,11 @@ def new_qt_application(app_config: dict, logger: Logger, quit_on_last_closed: bo
     app.setQuitOnLastWindowClosed(quit_on_last_closed)  # otherwise windows opened through the tray icon kill the application when closed
     app.setApplicationName(name if name else __app_name__)
     app.setApplicationVersion(__version__)
+
+    # Enlaza la ventana con su lanzador .desktop. Sin esto los compositores que agrupan
+    # por WM_CLASS (GNOME, Plasma, Hyprland, Niri) muestran la ventana como aplicación
+    # desconocida, sin icono ni nombre, y las reglas por clase del usuario no funcionan.
+    app.setDesktopFileName(__app_name__)
     app.setWindowIcon(util.get_default_icon()[1])
 
     if app_config['ui']['qt_style']:

@@ -3,10 +3,11 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-# Nombre de distribución propio del fork para no colisionar con el paquete
-# «bauh» de PyPI/AUR; el paquete importable y los binarios siguen llamándose
-# «bauh» (ver [tool.setuptools] y [project.scripts]).
-name = "bauh-gekko"
+# Nombre de distribución propio, igual que los ejecutables y el directorio de
+# configuración. Debe coincidir con PKG_NAME de install.sh, porque pipx crea el
+# entorno con el nombre de la distribución. El paquete importable sigue siendo
+# «bauh» (ver [tool.setuptools]).
+name = "gekko-bauh"
 description = "Interfaz gráfica para gestionar aplicaciones en Linux (Arch/AUR, Chaotic AUR, Flatpak y Solus/eopkg)"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -84,9 +85,12 @@ test = [
 ]
 
 [project.scripts]
-bauh = "bauh.app:main"
-bauh-tray = "bauh.app:tray"
-bauh-cli = "bauh.cli.app:main"
+# Ejecutables propios del proyecto. El paquete importable sigue siendo «bauh» (ver
+# [tool.setuptools]), pero los binarios llevan el nombre del proyecto para poder
+# convivir con una instalación del proyecto original.
+gekko-bauh = "bauh.app:main"
+gekko-bauh-tray = "bauh.app:tray"
+gekko-bauh-cli = "bauh.cli.app:main"
 
 [project.urls]
 Homepage = "https://github.com/The-Gekko/Bauh-Fork-The-Gekko"

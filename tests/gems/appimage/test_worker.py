@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
-from bauh import __app_name__
+from bauh import __package_name__
 from bauh.gems.appimage import (
     URL_BAUH_FILES,
     URL_COMPRESSED_DATABASES,
@@ -109,7 +109,7 @@ class DatabaseUpdaterShouldUpdateTest(TestCase):
 
         for name, value in (('APPIMAGE_CACHE_DIR', self.cache_dir), ('DATABASES_TS_FILE', self.ts_file),
                             ('DATABASE_APPS_FILE', self.apps_db), ('DATABASE_RELEASES_FILE', self.releases_db)):
-            patcher = patch(f'{__app_name__}.gems.appimage.worker.{name}', value)
+            patcher = patch(f'{__package_name__}.gems.appimage.worker.{name}', value)
             patcher.start()
             self.addCleanup(patcher.stop)
 

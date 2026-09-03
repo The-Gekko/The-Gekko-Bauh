@@ -1,6 +1,5 @@
 import os
 
-from bauh import __app_name__
 from bauh.api.paths import DESKTOP_ENTRIES_DIR, CONFIG_DIR, TEMP_DIR, CACHE_DIR, SHARED_FILES_DIR
 from bauh.commons import resource
 from bauh.commons.util import map_timestamp_file
@@ -22,7 +21,11 @@ ELECTRON_CACHE_DIR = f'{ENV_PATH}/electron'
 URL_BAUH_FILES = 'https://raw.githubusercontent.com/vinifmor/bauh-files/master'
 URL_ENVIRONMENT_SETTINGS = f'{URL_BAUH_FILES}/web/env/v2/environment.yml'
 URL_SUGGESTIONS_FILE = f'{URL_BAUH_FILES}/web/env/v2/suggestions.yml'
-DESKTOP_ENTRY_PATH_PATTERN = f'{DESKTOP_ENTRIES_DIR}/{__app_name__}.web.' + '{name}.desktop'
+# Prefijo literal y estable de las entradas de escritorio de las aplicaciones web. No se
+# deriva de __app_name__: al renombrar la aplicación, las entradas ya instaladas dejarían
+# de encontrarse y quedarían huérfanas en el menú del usuario.
+DESKTOP_ENTRY_PREFIX = 'bauh.web'
+DESKTOP_ENTRY_PATH_PATTERN = f'{DESKTOP_ENTRIES_DIR}/{DESKTOP_ENTRY_PREFIX}.' + '{name}.desktop'
 URL_FIX_PATTERN = URL_BAUH_FILES + "/web/env/v2/fix/{domain}/{electron_branch}/fix.js"
 URL_PROPS_PATTERN = URL_BAUH_FILES + "/web/env/v2/fix/{domain}/{electron_branch}/properties"
 # User-Agent de un Chrome reciente (formato reducido 'major.0.0.0' que usa Chrome desde la v101):

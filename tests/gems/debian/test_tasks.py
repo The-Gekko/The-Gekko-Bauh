@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
-from bauh import __app_name__
+from bauh import __package_name__
 from bauh.gems.debian.tasks import SynchronizePackages
 
 
@@ -14,7 +14,7 @@ class SynchronizePackagesShouldSynchronizeTest(TestCase):
         self.addCleanup(self.tmp_dir.cleanup)
         self.ts_file = f'{self.tmp_dir.name}/sync_pkgs.ts'
 
-        patcher = patch(f'{__app_name__}.gems.debian.tasks.PACKAGE_SYNC_TIMESTAMP_FILE', self.ts_file)
+        patcher = patch(f'{__package_name__}.gems.debian.tasks.PACKAGE_SYNC_TIMESTAMP_FILE', self.ts_file)
         patcher.start()
         self.addCleanup(patcher.stop)
 

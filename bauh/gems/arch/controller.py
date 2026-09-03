@@ -15,7 +15,6 @@ from typing import List, Set, Type, Tuple, Dict, Iterable, Optional, Collection,
 
 from dateutil.parser import parse as parse_date
 
-from bauh import __app_name__
 from bauh.api.abstract.controller import SearchResult, SoftwareManager, ApplicationContext, UpgradeRequirements, \
     TransactionResult, SoftwareAction, SettingsView, SettingsController
 from bauh.api.abstract.disk import DiskCacheLoader
@@ -38,7 +37,8 @@ from bauh.commons.view_utils import new_select
 from bauh.gems.arch import aur, pacman, message, confirmation, disk, git, \
     gpg, URL_CATEGORIES_FILE, CATEGORIES_FILE_PATH, CUSTOM_MAKEPKG_FILE, \
     get_icon_path, database, mirrors, sorting, cpu_manager, UPDATES_IGNORED_FILE, \
-    ARCH_CONFIG_DIR, EDITABLE_PKGBUILDS_FILE, URL_GPG_SERVERS, rebuild_detector, makepkg, sshell, get_repo_icon_path
+    ARCH_CONFIG_DIR, EDITABLE_PKGBUILDS_FILE, URL_GPG_SERVERS, rebuild_detector, makepkg, sshell, \
+    get_repo_icon_path, AUR_BUILDER_USER
 from bauh.gems.arch.aur import AURClient
 from bauh.gems.arch.config import get_build_dir, ArchConfigManager
 from bauh.gems.arch.confirmation import confirm_missing_deps
@@ -216,7 +216,11 @@ class ArchManager(SoftwareManager, SettingsController):
         self.index_aur = None
         self.re_file_conflict = re.compile(r'[\w\d\-_.]+:')
         self.disk_cache_updater = disk_cache_updater
-        self.pkgbuilder_user: Optional[str] = f'{__app_name__}-aur' if context.root_user else None
+        # Usuario del sistema sin privilegios que compila los paquetes de AUR cuando la
+        # aplicación se ejecuta como root. El nombre es literal y estable a propósito: si
+        # se derivara de __app_name__, al renombrar la aplicación se crearía un segundo
+        # usuario y se abandonarían los directorios de compilación del anterior.
+        self.pkgbuilder_user: Optional[str] = AUR_BUILDER_USER if context.root_user else None
         self._suggestions_downloader: Optional[RepositorySuggestionsDownloader] = None
 
     def refresh_mirrors(self, root_password: Optional[str], watcher: ProcessWatcher) -> bool:

@@ -2,11 +2,12 @@ import os
 
 import urllib3
 
-from bauh import ROOT_DIR, __version__
+from bauh import ROOT_DIR, __version__, __app_name__ as APP_NAME
 from bauh.api import user
 from bauh.api.abstract.context import ApplicationContext
 from bauh.api.http import HttpClient
 from bauh.cli import __app_name__, cli_args
+from bauh.migration import migrate_legacy_user_data
 from bauh.cli.controller import CLIManager
 from bauh.commons.internet import InternetChecker
 from bauh.context import generate_i18n, DEFAULT_I18N_KEY
@@ -25,6 +26,11 @@ def main():
 
     args = cli_args.read()
     logger = logs.new_logger(__app_name__, False)
+
+    # Primera ejecución tras el cambio de nombre: se recuperan los ajustes heredados.
+    # Se usa el nombre de la aplicación, no el de la CLI (que lleva el sufijo «-cli» y
+    # no corresponde a ningún directorio de datos).
+    migrate_legacy_user_data(APP_NAME, logger)
 
     app_config = CoreConfigManager().get_config()
     check_ssl = bool(app_config['download']['check_ssl'])

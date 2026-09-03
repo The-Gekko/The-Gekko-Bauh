@@ -1,7 +1,7 @@
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
-from bauh import __app_name__
+from bauh import __package_name__
 from bauh.gems.web import PIPX_INJECT_COMMAND
 from bauh.gems.web.controller import DEFAULT_LANGUAGE_HEADER
 from bauh.gems.web.controller import WebApplicationManager
@@ -22,8 +22,8 @@ class WebApplicationManagerTest(TestCase):
     def test_is_default_enabled__must_be_false_for_legacy_gems(self):
         self.assertFalse(self.manager.is_default_enabled())
 
-    @patch(f'{__app_name__}.gems.web.controller.BS4_AVAILABLE', False)
-    @patch(f'{__app_name__}.gems.web.controller.LXML_AVAILABLE', False)
+    @patch(f'{__package_name__}.gems.web.controller.BS4_AVAILABLE', False)
+    @patch(f'{__package_name__}.gems.web.controller.LXML_AVAILABLE', False)
     def test_can_work__must_report_missing_pypi_dependencies_with_a_pipx_hint(self):
         can_work, reason = self.manager.can_work()
 
@@ -35,8 +35,8 @@ class WebApplicationManagerTest(TestCase):
         # no deben citarse paquetes de Debian: bajo pipx no sirven
         self.assertNotIn('python3-', reason)
 
-    @patch(f'{__app_name__}.gems.web.controller.BS4_AVAILABLE', True)
-    @patch(f'{__app_name__}.gems.web.controller.LXML_AVAILABLE', False)
+    @patch(f'{__package_name__}.gems.web.controller.BS4_AVAILABLE', True)
+    @patch(f'{__package_name__}.gems.web.controller.LXML_AVAILABLE', False)
     def test_can_work__must_only_report_the_dependencies_actually_missing(self):
         can_work, reason = self.manager.can_work()
 

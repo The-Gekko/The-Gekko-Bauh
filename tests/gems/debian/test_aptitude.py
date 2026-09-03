@@ -1,7 +1,7 @@
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
-from bauh import __app_name__
+from bauh import __package_name__
 from bauh.commons import system
 from bauh.commons.system import USE_GLOBAL_INTERPRETER
 from bauh.gems.debian.aptitude import Aptitude, map_package_name
@@ -25,7 +25,7 @@ class AptitudeTest(TestCase):
     def setUp(self):
         self.aptitude = Aptitude(Mock())
 
-    @patch(f'{__app_name__}.gems.debian.aptitude.system.execute', return_value=(0, """
+    @patch(f'{__package_name__}.gems.debian.aptitude.system.execute', return_value=(0, """
 gimp-cbmplugs^<none>^1.2.2-1build1^Distro Developers <distro-devel-discuss@lists.distro.com>^universe/graphics^plugins for The GIMP to import/export Commodore 64 files
 gimp-gmic^2.4.5-1.0^2.4.5-1.1^Distro Developers <distro-devel-discuss@lists.distro.com>^plugin^GREYC's Magic for Image Computing - GIMP Plugin
 gimp-gutenprint^5.3.3-4^5.3.3-4^Distro Developers <distro-devel-discuss@lists.distro.com>^plugin^print plugin for the GIMP
@@ -57,7 +57,7 @@ gimp-help^<none>^<none>^<none>^^
 
         self.assertEqual([p.__dict__ for p in exp], [p.__dict__ for p in res])
 
-    @patch(f'{__app_name__}.gems.debian.aptitude.system.execute', return_value=(0, """
+    @patch(f'{__package_name__}.gems.debian.aptitude.system.execute', return_value=(0, """
 Package: firefox
 Version: 97.0+distro1+una
 State: installed (95.0.1+distro1.1+una), upgrade available (97.0+distro1+una)
@@ -139,7 +139,7 @@ Description: GNU C compiler
 
         self.assertEqual(expected, info)
 
-    @patch(f'{__app_name__}.gems.debian.aptitude.system.execute', return_value=(0, """
+    @patch(f'{__package_name__}.gems.debian.aptitude.system.execute', return_value=(0, """
         gir1.2-javascriptcoregtk-4.0^2.34.1-0distro0.20.04.1^2.34.4-0distro0.20.04.1^Distro Developers <distro-devel-discuss@lists.distro.com>^library^JavaScript engine library from WebKitGTK - GObject introspection data
         gir1.2-nm-1.0^1.22.10-1distro2.2^1.22.10-1distro2.3^Distro Developers <distro-devel-discuss@lists.distro.com>^library^GObject introspection data for the libnm library
         xwayland^2:1.20.13-1distro1~20.04.2^2:1.20.13-1distro1~20.04.2^Distro X-SWAT <distro-x@lists.distro.com>^X11^Xwayland X server

@@ -18,7 +18,7 @@ considera enviarlo **también** al proyecto original
 
 - Actualiza primero a la versión actual de `master`
   (`install.sh --force`) y comprueba que el error sigue ocurriendo.
-- Indica el commit instalado (`cat "$(pipx environment --value PIPX_LOCAL_VENVS)/bauh-gekko/.gekko-source-ref"`),
+- Indica el commit instalado (`cat "$(pipx environment --value PIPX_LOCAL_VENVS)/gekko-bauh/.gekko-source-ref"`),
   la salida de `pipx list`, la distribución, el entorno de escritorio o
   compositor (X11/Wayland) y la versión de Python.
 - Adjunta la salida de `bauh --logs` reproduciendo el problema.

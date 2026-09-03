@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from typing import Iterable, Optional, Tuple
 
-from bauh import __app_name__, __version__
+from bauh import __display_name__, __version__
 from bauh.api.http import HttpClient
 from bauh.api.paths import CACHE_DIR
 from bauh.commons.html import bold, link
@@ -124,9 +124,11 @@ def check_for_update(logger: logging.Logger, http_client: HttpClient, i18n: I18n
                         logger.error("An error occurred while trying to create the update notification file: {}".format(release_file))
 
                     if tray:
-                        return i18n['tray.warning.update_available'].format(__app_name__, tag_name)
+                        # se usa el nombre visible, no el identificador técnico: es texto para el usuario
+                        return i18n['tray.warning.update_available'].format(__display_name__, tag_name)
                     else:
-                        return i18n['warning.update_available'].format(bold(__app_name__), bold(tag_name), link(latest.get('html_url', '?')))
+                        return i18n['warning.update_available'].format(bold(__display_name__), bold(tag_name),
+                                                                      link(latest.get('html_url', '?')))
                 else:
                     logger.info("No updates available")
             else:

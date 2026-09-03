@@ -32,9 +32,9 @@ RAW_BASE="https://raw.githubusercontent.com/$REPO"
 ARCHIVE_BASE="https://github.com/$REPO/archive"
 API_BASE="https://api.github.com/repos/$REPO"
 
-# Nombre de la distribución en pipx. Es distinto del paquete importable («bauh»)
-# y de los binarios (bauh, bauh-tray, bauh-cli), que no cambian.
-PKG_NAME="bauh-gekko"
+# Nombre de la distribución en pipx y de los ejecutables que instala. El paquete
+# importable sigue siendo «bauh», heredado del proyecto original.
+PKG_NAME="gekko-bauh"
 
 # Versiones anteriores de este instalador registraban el venv como «bauh». Se
 # migra, pero solo si la marca de origen confirma que lo instalamos nosotros:
@@ -48,9 +48,9 @@ REF_STAMP_NAME=".gekko-source-ref"
 
 # Identificadores propios del escritorio. NO se usa «bauh.desktop» ni el icono
 # «bauh» para no tapar por precedencia XDG al paquete oficial si conviven.
-DESKTOP_ID="bauh-gekko"
-TRAY_DESKTOP_ID="bauh-gekko-tray"
-ICON_NAME="bauh-gekko"
+DESKTOP_ID="gekko-bauh"
+TRAY_DESKTOP_ID="gekko-bauh-tray"
+ICON_NAME="gekko-bauh"
 ICON_SIZES=(16 32 48 64 128 256 512)
 
 # Dependencias que deben llegar como wheel. No se incluye el propio paquete:
@@ -96,7 +96,7 @@ Uso: install.sh [ACCIÓN] [OPCIONES]
 
 Ejecutado por curl (modo remoto) resuelve el commit exacto de la referencia
 pedida en GitHub, descarga ese commit y lo instala aislado con pipx bajo el
-nombre de distribución «bauh-gekko». Desde un checkout del repositorio también
+nombre de distribución «gekko-bauh». Desde un checkout del repositorio también
 sirve como instalador local.
 
 Acciones:
@@ -459,7 +459,10 @@ remove_legacy_launcher() {
 # y, como los iconos de los botones vienen del QSS, la ventana aparece «rota»
 # sin ningún aviso en el log (F123).
 reset_fork_theme() {
-    local config_file="$HOME/.config/bauh/config.yml"
+    # Se revisa el directorio heredado: es el que escribían las versiones anteriores
+    # de este proyecto y el que leerá el bauh oficial. El directorio propio se borra
+    # entero con --purge, así que no necesita reparación.
+    local config_file="$HOME/.config/$LEGACY_PKG_NAME/config.yml"
     [[ -f "$config_file" ]] || return 0
 
     # Solo interesa el `theme:` que cuelga del bloque `ui:` de primer nivel.
@@ -509,7 +512,8 @@ remove_venv_manually() {
 
     [[ -d "$venvs/$name" ]] || return 1
 
-    for bin in bauh bauh-tray bauh-cli; do
+    # Ejecutables propios y los del nombre heredado, que instalaban versiones anteriores.
+    for bin in "$PKG_NAME" "$PKG_NAME-tray" "$PKG_NAME-cli" bauh bauh-tray bauh-cli; do
         target="$bins/$bin"
         # Solo se retira el lanzador si apunta al venv que estamos borrando.
         if [[ -L "$target" ]]; then
@@ -528,19 +532,22 @@ purge_user_data() {
     local user_name
     user_name="$(id -un)"
 
-    # Se cubren tanto las rutas fijas que usa bauh (Path.home()/.config, .cache…)
-    # como sus variantes XDG, porque conviven según la versión instalada. Los
-    # duplicados no molestan: solo se borra lo que existe.
+    # Solo se borran las rutas propias ("$PKG_NAME"). El directorio heredado
+    # "$LEGACY_PKG_NAME" pertenece ahora al proyecto original: aunque versiones
+    # anteriores de este instalador lo usaran, no hay forma de distinguir sus
+    # restos de una instalación oficial en uso, así que se avisa y no se toca.
+    # Se cubren las rutas fijas (Path.home()/.config, .cache…) y sus variantes
+    # XDG, porque conviven según la versión instalada; los duplicados no molestan.
     local paths=(
-        "$HOME/.config/bauh"
-        "$HOME/.cache/bauh"
-        "$HOME/.local/share/bauh"
-        "/tmp/bauh@$user_name"
+        "$HOME/.config/$PKG_NAME"
+        "$HOME/.cache/$PKG_NAME"
+        "$HOME/.local/share/$PKG_NAME"
+        "/tmp/$PKG_NAME@$user_name"
     )
-    [[ -n "${XDG_CONFIG_HOME:-}" ]] && paths+=("$XDG_CONFIG_HOME/bauh")
-    [[ -n "${XDG_CACHE_HOME:-}" ]] && paths+=("$XDG_CACHE_HOME/bauh")
-    [[ -n "${XDG_DATA_HOME:-}" ]] && paths+=("$XDG_DATA_HOME/bauh")
-    [[ -n "${XDG_RUNTIME_DIR:-}" ]] && paths+=("$XDG_RUNTIME_DIR/bauh")
+    [[ -n "${XDG_CONFIG_HOME:-}" ]] && paths+=("$XDG_CONFIG_HOME/$PKG_NAME")
+    [[ -n "${XDG_CACHE_HOME:-}" ]] && paths+=("$XDG_CACHE_HOME/$PKG_NAME")
+    [[ -n "${XDG_DATA_HOME:-}" ]] && paths+=("$XDG_DATA_HOME/$PKG_NAME")
+    [[ -n "${XDG_RUNTIME_DIR:-}" ]] && paths+=("$XDG_RUNTIME_DIR/$PKG_NAME")
 
     local path
     for path in "${paths[@]}"; do
@@ -549,6 +556,11 @@ purge_user_data() {
             info "Eliminado: $path"
         fi
     done
+
+    if [[ -d "$HOME/.config/$LEGACY_PKG_NAME" ]]; then
+        warning "No se ha tocado $HOME/.config/$LEGACY_PKG_NAME: ese directorio es del"
+        warning 'bauh oficial. Bórralo a mano solo si no lo tienes instalado.'
+    fi
 
     # Los repositorios clonados por la gem GitHub (~/BauhRepos por defecto)
     # pueden contener trabajo del usuario: nunca se borran sin preguntar.
@@ -791,23 +803,23 @@ install_desktop_entries() {
 
     mkdir -p "$applications_dir"
 
-    if [[ -f "$desktop_dir/bauh.desktop" ]]; then
-        render_desktop "$desktop_dir/bauh.desktop" "$pipx_bin/bauh" "$applications_dir/$DESKTOP_ID.desktop"
+    if [[ -f "$desktop_dir/gekko-bauh.desktop" ]]; then
+        render_desktop "$desktop_dir/gekko-bauh.desktop" "$pipx_bin/$PKG_NAME" "$applications_dir/$DESKTOP_ID.desktop"
     else
-        warning 'No se encontró la plantilla bauh.desktop; el lanzador principal no se instalará.'
+        warning 'No se encontró la plantilla gekko-bauh.desktop; el lanzador principal no se instalará.'
     fi
 
-    if [[ ! -f "$desktop_dir/bauh_tray.desktop" ]]; then
-        warning 'No se encontró la plantilla bauh_tray.desktop; la bandeja no tendrá lanzador.'
+    if [[ ! -f "$desktop_dir/gekko-bauh-tray.desktop" ]]; then
+        warning 'No se encontró la plantilla gekko-bauh-tray.desktop; la bandeja no tendrá lanzador.'
         return 0
     fi
 
     local tray_desktop="$applications_dir/$TRAY_DESKTOP_ID.desktop"
-    render_desktop "$desktop_dir/bauh_tray.desktop" "$pipx_bin/bauh-tray" "$tray_desktop"
+    render_desktop "$desktop_dir/gekko-bauh-tray.desktop" "$pipx_bin/$PKG_NAME-tray" "$tray_desktop"
 
     local enable_autostart="$AUTOSTART_TRAY"
     if [[ -z "$enable_autostart" ]]; then
-        if ask '¿Arrancar la bandeja de bauh al iniciar sesión? [y/N] '; then
+        if ask '¿Arrancar la bandeja al iniciar sesión? [y/N] '; then
             enable_autostart=true
         else
             enable_autostart=false
@@ -872,7 +884,7 @@ install_main() {
 
     local pipx_bin
     pipx_bin="$(pipx_bin_dir)"
-    local bauh_bin="$pipx_bin/bauh"
+    local bauh_bin="$pipx_bin/$PKG_NAME"
 
     # Resolver la fuente: checkout local o commit exacto (modo curl).
     local source_spec=""
@@ -928,7 +940,7 @@ install_main() {
             || rm -f "$icon_fallback"
 
         local desktop_file
-        for desktop_file in bauh.desktop bauh_tray.desktop; do
+        for desktop_file in gekko-bauh.desktop gekko-bauh-tray.desktop; do
             curl -fsSL -o "$desktop_dir/$desktop_file" \
                 "$RAW_BASE/$resolved_ref/bauh/desktop/$desktop_file" 2>/dev/null \
                 || rm -f "$desktop_dir/$desktop_file"

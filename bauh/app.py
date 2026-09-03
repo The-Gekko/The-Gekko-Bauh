@@ -11,6 +11,7 @@ import urllib3
 from PyQt5.QtCore import QCoreApplication, Qt, QTimer
 
 from bauh import __app_name__, app_args
+from bauh.migration import migrate_legacy_user_data
 from bauh.view.core.config import CoreConfigManager
 from bauh.view.util import logs
 
@@ -139,6 +140,10 @@ def main(tray: bool = False):
     _logger = logger
     sys.excepthook = new_excepthook(logger)
 
+    # Debe ejecutarse antes de leer la configuración, para que la primera ejecución tras
+    # el cambio de nombre encuentre los ajustes heredados de «bauh».
+    migrate_legacy_user_data(__app_name__, logger)
+
     try:
         locale.setlocale(locale.LC_NUMERIC, '')
     except Exception:
@@ -153,10 +158,6 @@ def main(tray: bool = False):
 
     if args.offline:
         logger.warning("offline mode activated")
-
-    if os.getenv('XDG_SESSION_TYPE', '').lower() == 'wayland':
-        logger.info("Wayland session detected: forcing 'QT_QPA_PLATFORM' to 'wayland'")
-        os.environ['QT_QPA_PLATFORM'] = 'wayland'
 
     app_config = CoreConfigManager().get_config()
 

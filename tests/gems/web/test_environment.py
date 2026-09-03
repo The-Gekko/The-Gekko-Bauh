@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
-from bauh import __app_name__
+from bauh import __package_name__
 from bauh.gems.web.environment import (
     EnvironmentUpdater,
     extract_tar_safely,
@@ -116,7 +116,7 @@ class EnvironmentUpdaterShouldDownloadSettingsTest(TestCase):
 
         for name, value in (('ENVIRONMENT_SETTINGS_CACHED_FILE', self.settings_file),
                             ('ENVIRONMENT_SETTINGS_TS_FILE', self.ts_file)):
-            patcher = patch(f'{__app_name__}.gems.web.environment.{name}', value)
+            patcher = patch(f'{__package_name__}.gems.web.environment.{name}', value)
             patcher.start()
             self.addCleanup(patcher.stop)
 

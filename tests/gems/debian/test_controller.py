@@ -1,7 +1,7 @@
 from unittest import TestCase
 from unittest.mock import MagicMock, patch, Mock
 
-from bauh import __app_name__
+from bauh import __package_name__
 from bauh.api.abstract.controller import SearchResult
 from bauh.gems.debian.controller import DebianPackageManager
 from bauh.gems.debian.model import DebianPackage, DebianApplication
@@ -16,7 +16,7 @@ class DebianPackageManagerTest(TestCase):
     def test_is_default_enabled__must_be_false_for_legacy_gems(self):
         self.assertFalse(self.controller.is_default_enabled())
 
-    @patch(f'{__app_name__}.gems.debian.controller.Aptitude.read_installed', return_value=iter((
+    @patch(f'{__package_name__}.gems.debian.controller.Aptitude.read_installed', return_value=iter((
         DebianPackage(name='gir1.2-javascriptcoregtk-4.0', version='2.34.1-0distro0.20.04.1',
                       latest_version='2.34.1-0distro0.20.04.1',
                       maintainer='Distro Developers', update=False, installed=True,
@@ -46,7 +46,7 @@ class DebianPackageManagerTest(TestCase):
 
         self.assertEqual(expected, result.installed)
 
-    @patch(f'{__app_name__}.gems.debian.controller.Aptitude.read_installed', return_value=iter((
+    @patch(f'{__package_name__}.gems.debian.controller.Aptitude.read_installed', return_value=iter((
         DebianPackage(name='gir1.2-javascriptcoregtk-4.0', version='2.34.1-0distro0.20.04.1',
                       latest_version='2.34.1-0distro0.20.04.1',
                       maintainer='Distro Developers', update=False, installed=True,
@@ -72,14 +72,14 @@ class DebianPackageManagerTest(TestCase):
 
         self.assertEqual(expected, result.installed)
 
-    @patch(f'{__app_name__}.gems.debian.controller.Aptitude.read_installed')
+    @patch(f'{__package_name__}.gems.debian.controller.Aptitude.read_installed')
     def test_search__must_return_empty_result_when_url(self, read_installed: Mock):
         words = 'i'
         res = self.controller.search(words=words, disk_loader=None, limit=-1, is_url=True)
         read_installed.assert_not_called()
         self.assertEqual(SearchResult.empty(), res)
 
-    @patch(f'{__app_name__}.gems.debian.controller.Aptitude.search', return_value=iter((
+    @patch(f'{__package_name__}.gems.debian.controller.Aptitude.search', return_value=iter((
         DebianPackage(name='xpto', version='1.0', latest_version='1.0', installed=True, update=False, description=''),
         DebianPackage(name='test', version='1.0', latest_version='1.0', installed=False, update=False, description=''),
         DebianPackage(name='myapp', version='1.0', latest_version='1.0', installed=True, update=False, description=''),

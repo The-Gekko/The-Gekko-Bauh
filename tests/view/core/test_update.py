@@ -166,7 +166,7 @@ class CheckForUpdateTest(TestCase):
         with patch.object(update, '__version__', '0.10.8+gekko.1'):
             msg = check_for_update(self.logger, self.http_client, I18N, tray=True)
 
-        self.assertEqual('new bauh version v0.10.8-gekko.2', msg)
+        self.assertEqual('new bauh Gekko Edition version v0.10.8-gekko.2', msg)
         self.assertTrue(os.path.isfile(f'{self.cache_dir.name}/updates/tray_v0.10.8-gekko.2'))
         self.assertFalse(os.path.exists(f'{self.cache_dir.name}/updates/v0.10.8-gekko.2'))
 

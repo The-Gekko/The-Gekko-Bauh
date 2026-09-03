@@ -47,10 +47,18 @@ class VersionMetadataTest(unittest.TestCase):
         # <base upstream>+gekko.<n>: distingue el fork de la 0.10.8 del upstream.
         self.assertRegex(bauh.__version__, r'^\d+\.\d+\.\d+\+gekko\.\d+$')
 
-    def test_app_name_is_unchanged(self):
-        # El identificador técnico manda en rutas de configuración y binarios:
-        # cambiarlo movería ~/.config/bauh y rompería instalaciones existentes.
-        self.assertEqual('bauh', bauh.__app_name__)
+    def test_app_name_is_the_projects_own_identity(self):
+        # El identificador técnico manda en rutas de configuración, ejecutables e icono.
+        # Es propio del proyecto para no compartir ~/.config con el proyecto original:
+        # compartirlo dejaba su interfaz sin estilos al volver a él. La primera ejecución
+        # copia los datos heredados (ver bauh.migration).
+        self.assertEqual('gekko-bauh', bauh.__app_name__)
+
+    def test_package_name_stays_inherited(self):
+        # El paquete Python conserva el nombre heredado para poder seguir integrando las
+        # correcciones del proyecto original sin reescribir cada import.
+        self.assertEqual('bauh', bauh.__package_name__)
+        self.assertNotEqual(bauh.__app_name__, bauh.__package_name__)
 
     def test_display_name(self):
         self.assertEqual('bauh Gekko Edition', bauh.__display_name__)
@@ -78,9 +86,12 @@ class PyprojectTest(unittest.TestCase):
         cls.pyproject = read_pyproject()
         cls.project = cls.pyproject['project']
 
-    def test_distribution_name_is_the_fork_one(self):
-        # bauh-gekko no colisiona con el «bauh» de PyPI/AUR.
-        self.assertEqual('bauh-gekko', self.project['name'])
+    def test_distribution_name_is_the_projects_own(self):
+        # No colisiona con el «bauh» de PyPI/AUR y coincide con el nombre de la
+        # aplicación: pipx crea el entorno con el nombre de la distribución, así que
+        # si divergiera, install.sh buscaría un entorno que no existe.
+        self.assertEqual('gekko-bauh', self.project['name'])
+        self.assertEqual(bauh.__app_name__, self.project['name'])
 
     def test_version_is_dynamic_and_read_from_the_package(self):
         self.assertEqual(['version'], self.project['dynamic'])
@@ -108,10 +119,18 @@ class PyprojectTest(unittest.TestCase):
             self.assertIn(f'Programming Language :: Python :: 3.{minor}', classifiers)
 
     def test_console_scripts(self):
-        self.assertEqual({'bauh': 'bauh.app:main',
-                          'bauh-tray': 'bauh.app:tray',
-                          'bauh-cli': 'bauh.cli.app:main'},
+        # Los ejecutables llevan el nombre propio del proyecto para poder convivir con una
+        # instalación del proyecto original; el paquete importable sigue siendo «bauh».
+        self.assertEqual({'gekko-bauh': 'bauh.app:main',
+                          'gekko-bauh-tray': 'bauh.app:tray',
+                          'gekko-bauh-cli': 'bauh.cli.app:main'},
                          self.project['scripts'])
+
+    def test_console_scripts_are_named_after_the_app(self):
+        self.assertEqual(sorted((bauh.__app_name__,
+                                 f'{bauh.__app_name__}-tray',
+                                 f'{bauh.__app_name__}-cli')),
+                         sorted(self.project['scripts']))
 
     def test_optional_dependencies(self):
         optional = self.project['optional-dependencies']
@@ -159,30 +178,32 @@ class DesktopEntriesTest(unittest.TestCase):
     """Las plantillas .desktop del fork (F64, F121, F129)."""
 
     def test_main_entry(self):
-        entry = read_desktop('bauh.desktop')
+        entry = read_desktop('gekko-bauh.desktop')
         self.assertEqual('bauh Gekko Edition', entry['Name'])
         self.assertEqual('Application', entry['Type'])
-        # StartupWMClass permite a Wayland/KDE asociar la ventana al lanzador.
-        self.assertEqual('bauh', entry['StartupWMClass'])
+        # StartupWMClass permite a Wayland/KDE asociar la ventana al lanzador. Debe
+        # coincidir con app.setDesktopFileName(__app_name__) de bauh/context.py.
+        self.assertEqual(bauh.__app_name__, entry['StartupWMClass'])
         self.assertIn('Name[es]', entry)
         self.assertIn('Comment[es]', entry)
         self.assertIn('Keywords', entry)
 
     def test_tray_entry_exists_and_targets_the_tray_binary(self):
-        entry = read_desktop('bauh_tray.desktop')
-        self.assertIn('bauh-tray', entry['Exec'])
+        entry = read_desktop('gekko-bauh-tray.desktop')
+        self.assertIn(f'{bauh.__app_name__}-tray', entry['Exec'])
         self.assertIn('Name[es]', entry)
         self.assertIn('Comment[es]', entry)
-        self.assertEqual('bauh', entry['StartupWMClass'])
+        self.assertEqual(bauh.__app_name__, entry['StartupWMClass'])
 
     def test_icon_name_does_not_collide_with_the_official_package(self):
-        # Con Icon=bauh, el icono del fork sustituiría al del bauh oficial en
-        # cuanto ambos convivieran (QIcon.fromTheme('bauh')).
-        for name in ('bauh.desktop', 'bauh_tray.desktop'):
-            self.assertEqual('bauh-gekko', read_desktop(name)['Icon'], name)
+        # Con Icon=bauh, el icono de este proyecto sustituiría al del paquete oficial
+        # en cuanto ambos convivieran (QIcon.fromTheme('bauh')).
+        for name in ('gekko-bauh.desktop', 'gekko-bauh-tray.desktop'):
+            self.assertEqual(bauh.__app_name__, read_desktop(name)['Icon'], name)
+            self.assertNotEqual(bauh.__package_name__, read_desktop(name)['Icon'], name)
 
     def test_scope_is_described_in_both_entries(self):
-        for name in ('bauh.desktop', 'bauh_tray.desktop'):
+        for name in ('gekko-bauh.desktop', 'gekko-bauh-tray.desktop'):
             comment = read_desktop(name)['Comment']
             for technology in ('Arch/AUR', 'Chaotic AUR', 'Flatpak', 'eopkg'):
                 self.assertIn(technology, comment, f'{name}: falta «{technology}»')
@@ -224,22 +245,30 @@ class InstallScriptTest(unittest.TestCase):
     def test_does_not_use_eval(self):
         self.assertNotRegex(self.source, r'(?m)^\s*eval\s')
 
-    def test_uses_the_fork_package_name(self):
-        self.assertIn('PKG_NAME="bauh-gekko"', self.source)
+    def test_uses_the_projects_own_package_name(self):
+        self.assertIn(f'PKG_NAME="{bauh.__app_name__}"', self.source)
 
     def test_does_not_shadow_the_official_launcher(self):
         # Escribir ~/.local/share/applications/bauh.desktop taparía por
         # precedencia XDG al lanzador del paquete oficial (F129).
-        self.assertIn('DESKTOP_ID="bauh-gekko"', self.source)
-        self.assertIn('ICON_NAME="bauh-gekko"', self.source)
+        self.assertIn(f'DESKTOP_ID="{bauh.__app_name__}"', self.source)
+        self.assertIn(f'ICON_NAME="{bauh.__app_name__}"', self.source)
 
     def test_purges_cache_share_and_temp(self):
         # F127: --purge prometía una limpieza que no hacía.
-        for path in ('$HOME/.config/bauh',
-                     '$HOME/.cache/bauh',
-                     '$HOME/.local/share/bauh',
-                     '/tmp/bauh@$user_name'):
+        for path in ('$HOME/.config/$PKG_NAME',
+                     '$HOME/.cache/$PKG_NAME',
+                     '$HOME/.local/share/$PKG_NAME',
+                     '/tmp/$PKG_NAME@$user_name'):
             self.assertIn(path, self.source)
+
+    def test_purge_must_not_delete_the_official_project_data(self):
+        # Tras adoptar identidad propia, ~/.config/bauh es del proyecto original:
+        # borrarlo destruiría datos ajenos (los propios cuelgan de $PKG_NAME).
+        self.assertNotIn('"$HOME/.config/bauh"', self.source)
+        self.assertNotIn('"$HOME/.cache/bauh"', self.source)
+        self.assertNotIn('"$HOME/.local/share/bauh"', self.source)
+        self.assertIn('No se ha tocado $HOME/.config/$LEGACY_PKG_NAME', self.source)
 
     def test_purge_also_covers_the_xdg_variants(self):
         # Según la versión instalada, bauh usa las rutas fijas o las XDG.

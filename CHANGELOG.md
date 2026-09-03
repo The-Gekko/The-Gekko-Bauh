@@ -98,9 +98,18 @@ El esquema de versiones del fork es `<versión upstream>+gekko.N`
   `--remove-system-bauh` e `--install-pipx`.
 
 ### Packaging
-- Nombre de distribución **`bauh-gekko`** (paquete importable `bauh`;
-  binarios `bauh`, `bauh-tray`, `bauh-cli` sin cambios) y versión PEP 440
-  `0.10.8+gekko.1`.
+- **Identidad propia**: el proyecto deja de compartir nombre y rutas con el bauh
+  oficial. Distribución y ejecutables `gekko-bauh`, `gekko-bauh-tray` y
+  `gekko-bauh-cli`; configuración en `~/.config/gekko-bauh`, caché en
+  `~/.cache/gekko-bauh`, datos en `~/.local/share/gekko-bauh`; lanzador, icono
+  hicolor y `StartupWMClass` propios. El paquete Python importable sigue siendo
+  `bauh`, y `bauh/__init__.py` distingue ahora `__app_name__` (aplicación) de
+  `__package_name__` (paquete). Versión PEP 440 `0.10.8+gekko.1`.
+- **Migración automática** (`bauh/migration.py`): en el primer arranque se copian
+  la configuración y los temas de usuario desde `~/.config/bauh` y
+  `~/.local/share/bauh`. Solo si el destino no existe, sin borrar ni modificar el
+  origen y sin copiar la caché, de modo que el bauh oficial sigue funcionando
+  igual y ambos pueden convivir.
 - `pyproject.toml` con la sección `[project]` completa (el upstream la
   introdujo en 0.10.6 solo como `[build-system]`); `setup.py` reducido a un
   shim; `requirements-dev.txt` para desarrollo.
@@ -109,11 +118,12 @@ El esquema de versiones del fork es `<versión upstream>+gekko.N`
   (`tools/check_locales.py`).
 - `install.sh`: instala el commit exacto que resuelve (no la punta de `master`
   en el instante de la descarga), pasa `--python` a pipx, migra el entorno
-  pipx `bauh` de versiones anteriores a `bauh-gekko`, instala iconos por
+  pipx `bauh` de versiones anteriores a `gekko-bauh`, instala iconos por
   tamaño (`pictures/icons/gekko-bauh-<N>.png`, N = 16…512) y un `.desktop`
-  con traducciones y `StartupWMClass=bauh`; `uninstall --purge` borra
-  configuración, caché, datos y temporales y ofrece restablecer `ui.theme`
-  para volver al bauh oficial.
+  con traducciones y `StartupWMClass=gekko-bauh`; `uninstall --purge` borra la
+  configuración, la caché, los datos y los temporales propios, deja intacto
+  `~/.config/bauh` (que pertenece al bauh oficial) y ofrece restablecer su
+  `ui.theme` si una versión anterior lo dejó en un tema desconocido para él.
 
 ### Known issues
 - En compositores Wayland que solo implementan `xdg-shell` (Hyprland, Niri,

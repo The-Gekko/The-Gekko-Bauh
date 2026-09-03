@@ -9,7 +9,7 @@
 #
 # Todo lo que se escribe queda dentro del directorio temporal: el `id` falso
 # devuelve un usuario ficticio para que el directorio temporal que borra --purge
-# sea /tmp/bauh@bauh-installer-test y nunca el del usuario real.
+# sea /tmp/gekko-bauh@bauh-installer-test y nunca el del usuario real.
 #
 # Uso:  bash tests/installer/run_tests.sh
 # Salida: 0 si todos los casos pasan, 1 si falla alguno.
@@ -21,7 +21,7 @@ REPO_ROOT="$(cd "$TESTS_DIR/../.." && pwd)"
 INSTALLER="$REPO_ROOT/install.sh"
 
 FAKE_USER='bauh-installer-test'
-FAKE_TEMP_DIR="/tmp/bauh@$FAKE_USER"
+FAKE_TEMP_DIR="/tmp/gekko-bauh@$FAKE_USER"
 
 if [[ ! -f "$INSTALLER" ]]; then
     echo "No se encontró el instalador en $INSTALLER" >&2
@@ -179,21 +179,21 @@ case "${1:-}" in
                 exit 0
             fi
         done
-        mkdir -p "$venvs/bauh-gekko/bin" "$bins"
-        cat > "$venvs/bauh-gekko/bin/python" <<'PYFAKE'
+        mkdir -p "$venvs/gekko-bauh/bin" "$bins"
+        cat > "$venvs/gekko-bauh/bin/python" <<'PYFAKE'
 #!/usr/bin/env bash
 echo '0.10.8+gekko.1'
 PYFAKE
-        chmod +x "$venvs/bauh-gekko/bin/python"
-        for launcher in bauh bauh-tray bauh-cli; do
-            printf '#!/bin/sh\n# %s/bauh-gekko/bin/python\n' "$venvs" > "$bins/$launcher"
+        chmod +x "$venvs/gekko-bauh/bin/python"
+        for launcher in gekko-bauh gekko-bauh-tray gekko-bauh-cli; do
+            printf '#!/bin/sh\n# %s/gekko-bauh/bin/python\n' "$venvs" > "$bins/$launcher"
             chmod +x "$bins/$launcher"
         done
         exit 0 ;;
     uninstall)
         name="${2:-}"
         rm -rf "${venvs:?}/$name"
-        for launcher in bauh bauh-tray bauh-cli; do
+        for launcher in gekko-bauh gekko-bauh-tray gekko-bauh-cli; do
             rm -f "$bins/$launcher"
         done
         exit 0 ;;
@@ -305,36 +305,36 @@ test_local_install() {
     assert_contains "$FAKE_LOG" "$REPO_ROOT"
 
     local apps="$HOME/.local/share/applications"
-    assert_file "$apps/bauh-gekko.desktop"
-    assert_file "$apps/bauh-gekko-tray.desktop"
+    assert_file "$apps/gekko-bauh.desktop"
+    assert_file "$apps/gekko-bauh-tray.desktop"
 
     # No se escribe bauh.desktop: taparía por precedencia XDG al bauh oficial.
     assert_no_file "$apps/bauh.desktop"
     assert_no_file "$apps/bauh_tray.desktop"
 
-    assert_contains "$apps/bauh-gekko.desktop" "Exec=$BIN_DIR/bauh"
-    assert_contains "$apps/bauh-gekko.desktop" 'Icon=bauh-gekko'
-    assert_contains "$apps/bauh-gekko.desktop" 'X-Gekko-Edition=true'
-    assert_contains "$apps/bauh-gekko.desktop" 'Name=bauh Gekko Edition'
-    assert_contains "$apps/bauh-gekko.desktop" 'StartupWMClass=bauh'
-    assert_contains "$apps/bauh-gekko.desktop" 'Name[es]='
-    assert_contains "$apps/bauh-gekko.desktop" 'Comment[es]='
-    assert_contains "$apps/bauh-gekko.desktop" 'Keywords='
-    assert_contains "$apps/bauh-gekko-tray.desktop" "Exec=$BIN_DIR/bauh-tray"
+    assert_contains "$apps/gekko-bauh.desktop" "Exec=$BIN_DIR/gekko-bauh"
+    assert_contains "$apps/gekko-bauh.desktop" 'Icon=gekko-bauh'
+    assert_contains "$apps/gekko-bauh.desktop" 'X-Gekko-Edition=true'
+    assert_contains "$apps/gekko-bauh.desktop" 'Name=bauh Gekko Edition'
+    assert_contains "$apps/gekko-bauh.desktop" 'StartupWMClass=gekko-bauh'
+    assert_contains "$apps/gekko-bauh.desktop" 'Name[es]='
+    assert_contains "$apps/gekko-bauh.desktop" 'Comment[es]='
+    assert_contains "$apps/gekko-bauh.desktop" 'Keywords='
+    assert_contains "$apps/gekko-bauh-tray.desktop" "Exec=$BIN_DIR/gekko-bauh-tray"
 
     local icons="$HOME/.local/share/icons/hicolor"
     local size
     for size in 16 32 48 64 128 256 512; do
-        assert_file "$icons/${size}x${size}/apps/bauh-gekko.png"
+        assert_file "$icons/${size}x${size}/apps/gekko-bauh.png"
         assert_no_file "$icons/${size}x${size}/apps/bauh.png"
     done
 
     # Marca de origen: identifica el venv como creado por este instalador.
-    assert_file "$VENVS_DIR/bauh-gekko/.gekko-source-ref"
-    assert_contains "$VENVS_DIR/bauh-gekko/.gekko-source-ref" 'local:'
+    assert_file "$VENVS_DIR/gekko-bauh/.gekko-source-ref"
+    assert_contains "$VENVS_DIR/gekko-bauh/.gekko-source-ref" 'local:'
 
     # --no-autostart no debe dejar entrada de arranque automático.
-    assert_no_file "$XDG_CONFIG_HOME/autostart/bauh-gekko-tray.desktop"
+    assert_no_file "$XDG_CONFIG_HOME/autostart/gekko-bauh-tray.desktop"
 
     cleanup_sandbox
 }
@@ -344,8 +344,8 @@ test_autostart() {
 
     run_installer_local --yes --autostart
     assert_status 0 "$?" 'el instalador termina bien'
-    assert_file "$XDG_CONFIG_HOME/autostart/bauh-gekko-tray.desktop"
-    assert_contains "$XDG_CONFIG_HOME/autostart/bauh-gekko-tray.desktop" "Exec=$BIN_DIR/bauh-tray"
+    assert_file "$XDG_CONFIG_HOME/autostart/gekko-bauh-tray.desktop"
+    assert_contains "$XDG_CONFIG_HOME/autostart/gekko-bauh-tray.desktop" "Exec=$BIN_DIR/gekko-bauh-tray"
 
     cleanup_sandbox
 }
@@ -368,7 +368,7 @@ test_legacy_migration() {
     assert_no_dir "$VENVS_DIR/bauh"
     assert_no_file "$HOME/.local/share/applications/bauh.desktop"
     assert_no_file "$HOME/.local/share/icons/hicolor/64x64/apps/bauh.png"
-    assert_file "$HOME/.local/share/applications/bauh-gekko.desktop"
+    assert_file "$HOME/.local/share/applications/gekko-bauh.desktop"
 
     cleanup_sandbox
 }
@@ -444,8 +444,8 @@ test_remote_installs_resolved_commit() {
     assert_not_contains "$FAKE_LOG" 'heads/master.zip'
 
     # La marca guardada es el mismo SHA que se instaló.
-    assert_file "$VENVS_DIR/bauh-gekko/.gekko-source-ref"
-    assert_contains "$VENVS_DIR/bauh-gekko/.gekko-source-ref" "$FAKE_CURL_SHA"
+    assert_file "$VENVS_DIR/gekko-bauh/.gekko-source-ref"
+    assert_contains "$VENVS_DIR/gekko-bauh/.gekko-source-ref" "$FAKE_CURL_SHA"
 
     cleanup_sandbox
 }
@@ -472,10 +472,10 @@ test_uninstall_after_install() {
     assert_status 0 "$?" 'el desinstalador termina bien'
 
     assert_contains "$OUTPUT" 'desinstalado correctamente'
-    assert_no_dir "$VENVS_DIR/bauh-gekko"
-    assert_no_file "$HOME/.local/share/applications/bauh-gekko.desktop"
-    assert_no_file "$HOME/.local/share/applications/bauh-gekko-tray.desktop"
-    assert_no_file "$HOME/.local/share/icons/hicolor/256x256/apps/bauh-gekko.png"
+    assert_no_dir "$VENVS_DIR/gekko-bauh"
+    assert_no_file "$HOME/.local/share/applications/gekko-bauh.desktop"
+    assert_no_file "$HOME/.local/share/applications/gekko-bauh-tray.desktop"
+    assert_no_file "$HOME/.local/share/icons/hicolor/256x256/apps/gekko-bauh.png"
 
     cleanup_sandbox
 }
@@ -486,19 +486,29 @@ test_uninstall_purge() {
     run_installer_local --yes --no-autostart
     assert_status 0 "$?" 'la instalación previa termina bien'
 
-    mkdir -p "$HOME/.config/bauh" "$HOME/.cache/bauh" "$HOME/.local/share/bauh" "$FAKE_TEMP_DIR"
-    printf 'ui:\n  theme: light\n' > "$HOME/.config/bauh/config.yml"
-    : > "$HOME/.cache/bauh/marca"
-    : > "$HOME/.local/share/bauh/marca"
+    mkdir -p "$HOME/.config/gekko-bauh" "$HOME/.cache/gekko-bauh" \
+             "$HOME/.local/share/gekko-bauh" "$FAKE_TEMP_DIR"
+    printf 'ui:\n  theme: light\n' > "$HOME/.config/gekko-bauh/config.yml"
+    : > "$HOME/.cache/gekko-bauh/marca"
+    : > "$HOME/.local/share/gekko-bauh/marca"
     : > "$FAKE_TEMP_DIR/marca"
+
+    # Datos del bauh oficial: --purge no debe tocarlos.
+    mkdir -p "$HOME/.config/bauh"
+    printf 'ui:\n  theme: darcula\n' > "$HOME/.config/bauh/config.yml"
 
     run_installer_local uninstall --purge --yes
     assert_status 0 "$?" 'el desinstalador termina bien'
 
-    assert_no_dir "$HOME/.config/bauh"
-    assert_no_dir "$HOME/.cache/bauh"
-    assert_no_dir "$HOME/.local/share/bauh"
+    assert_no_dir "$HOME/.config/gekko-bauh"
+    assert_no_dir "$HOME/.cache/gekko-bauh"
+    assert_no_dir "$HOME/.local/share/gekko-bauh"
     assert_no_dir "$FAKE_TEMP_DIR"
+
+    # El directorio heredado pertenece ahora al proyecto original.
+    assert_dir "$HOME/.config/bauh"
+    assert_contains "$HOME/.config/bauh/config.yml" 'theme: darcula'
+    assert_contains "$SANDBOX/output.txt" 'No se ha tocado'
 
     cleanup_sandbox
 }

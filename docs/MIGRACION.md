@@ -1,114 +1,123 @@
 # Migración: convivencia con el bauh oficial y vuelta atrás
 
-bauh Gekko Edition y el bauh oficial (`vinifmor/bauh`, paquete `bauh` de los
-repositorios o de PyPI) usan el **mismo nombre de aplicación** (`bauh`) y por
-tanto **comparten** la configuración, la caché y los datos de usuario. Eso hace
-que cambiar de uno a otro sea sencillo, pero también que algunos ajustes del
-fork no signifiquen nada para el oficial. Esta página explica qué se comparte,
-qué no, y los pasos exactos en cada dirección.
+`gekko-bauh` deriva de [bauh](https://github.com/vinifmor/bauh) pero es un
+proyecto independiente **con identidad propia en el sistema**: su ejecutable, su
+lanzador, su icono y su configuración llevan su propio nombre. Eso significa que
+puede instalarse junto al bauh oficial sin pisarlo, y que volver al oficial no
+deja su instalación en un estado raro.
 
-## 1. Qué se comparte y qué no
+Hasta la versión `0.10.8+gekko.1` ambos compartían el nombre `bauh` y, con él,
+la configuración. Si vienes de una versión anterior, lee también la sección 5.
+
+## 1. Qué usa cada uno
 
 | Ruta | Quién la usa | Notas |
 |---|---|---|
-| `~/.config/bauh/config.yml` | Ambos | Configuración general. Ver las claves problemáticas en la sección 2. |
-| `~/.config/bauh/arch.yml`, `appimage.yml`, `flatpak.yml`, `snap.yml`, `web.yml`, `debian.yml` | Ambos | Configuración por gem. |
-| `~/.config/bauh/eopkg.yml`, `~/.config/bauh/github.yml` | Solo el fork | El oficial las ignora sin error. |
-| `~/.cache/bauh/` | Ambos | Caché de paquetes, iconos y sugerencias. Se puede borrar sin perder nada. |
-| `~/.local/share/bauh/` | Ambos | Temas de usuario (`themes/`) y datos compartidos. |
-| `$XDG_RUNTIME_DIR/bauh/` | Solo el fork | Temporales y logs de la sesión; el oficial usa `/tmp/bauh@<usuario>`. Desaparecen al cerrar sesión. |
-| `~/BauhRepos/` | Solo el fork | Clones de la gem GitHub (ruta configurable con `repos_dir` en `github.yml`). Nunca se borra automáticamente. |
-| `~/.local/share/pipx/venvs/bauh-gekko/` | Solo el fork | Entorno de pipx del fork (la ruta exacta la da `pipx environment --value PIPX_LOCAL_VENVS`). Versiones antiguas del fork usaban `bauh`. |
-| `~/.local/share/applications/bauh.desktop`, `bauh_tray.desktop` | Ambos (mismo nombre) | El instalador del fork los sobrescribe; el paquete oficial los instala en `/usr/share/applications/`. |
-| `~/.local/share/icons/hicolor/<N>x<N>/apps/bauh.png` | Solo el fork | Icono Gekko; el oficial usa el suyo desde `/usr/share`. |
-| `/etc/bauh/gems.forbidden` | Ambos | Gems prohibidas por el administrador. |
-| `~/.config/autostart/bauh_tray.desktop` | Ambos | Si activaste el arranque de la bandeja. |
+| `~/.config/gekko-bauh/` | Solo este proyecto | Configuración general (`config.yml`) y por gem (`arch.yml`, `flatpak.yml`, `eopkg.yml`, `github.yml`, ...). |
+| `~/.cache/gekko-bauh/` | Solo este proyecto | Caché de paquetes, iconos, sugerencias, temporales y logs. Se puede borrar sin perder nada. |
+| `~/.local/share/gekko-bauh/` | Solo este proyecto | Temas de usuario (`themes/`) y datos compartidos. |
+| `~/.config/bauh/`, `~/.cache/bauh/`, `~/.local/share/bauh/` | Solo el oficial | Este proyecto **solo las lee una vez**, para copiar tus ajustes, y nunca las modifica ni las borra. |
+| `~/.local/share/pipx/venvs/gekko-bauh/` | Solo este proyecto | Entorno de pipx (la ruta exacta la da `pipx environment --value PIPX_LOCAL_VENVS`). |
+| `~/.local/share/applications/gekko-bauh.desktop`, `gekko-bauh-tray.desktop` | Solo este proyecto | El oficial instala los suyos como `bauh.desktop` en `/usr/share/applications/`. |
+| `~/.local/share/icons/hicolor/<N>x<N>/apps/gekko-bauh.png` | Solo este proyecto | El oficial usa `bauh.png` desde `/usr/share`. |
+| `~/.config/autostart/gekko-bauh-tray.desktop` | Solo este proyecto | Si activaste el arranque de la bandeja. |
+| `~/BauhRepos/` | Solo este proyecto | Clones de la gem GitHub (configurable con `repos_dir` en `github.yml`). Nunca se borra automáticamente. |
+| `/etc/bauh/gems.forbidden` | Ambos | Gems prohibidas por el administrador. Se conserva el nombre heredado a propósito, para respetar la política que ya tuviera el sistema. |
 
-## 2. Claves de `config.yml` que el bauh oficial no entiende
+Los ejecutables tampoco chocan: este proyecto instala `gekko-bauh`,
+`gekko-bauh-tray` y `gekko-bauh-cli`, mientras que el oficial instala `bauh`,
+`bauh-tray` y `bauh-cli`.
 
-| Clave | Valor típico en el fork | Efecto en el bauh oficial |
-|---|---|---|
-| `ui.theme` | `aurora`, `gtk`, `matugen` | El oficial no tiene esos temas: arranca **sin hoja de estilos** (aspecto Fusion plano, sin error visible) hasta que elijas otro tema en sus ajustes. Los valores compartidos son `light`, `darcula`, `default`, `knight` y `sublime`. |
-| `custom_theme` (color de fondo, texto, acento, opacidad, imagen) | Objeto | Ignorado. |
-| `gems` | Lista con `arch`, `flatpak`, `eopkg`, `github`, ... | Los nombres que el oficial no conoce (`eopkg`, `github`) se ignoran. **Ojo**: como la lista existe, el oficial solo activará las gems que aparezcan en ella; AppImage/Snap/Web/Debian quedarán desactivadas hasta que las marques en sus ajustes o borres la clave (`gems: null` = todas las que el sistema permita). |
+## 2. Migración automática al primer arranque
 
-En sentido contrario no hay problema: el fork entiende todas las claves del
-oficial. La única diferencia al llegar desde el oficial es que las gems
-heredadas están **desactivadas por defecto** en el fork; si en el oficial las
-usabas, actívalas en `Ajustes → Tipos de aplicaciones`.
+La primera vez que ejecutas `gekko-bauh`, si `~/.config/gekko-bauh` todavía no
+existe y sí existe `~/.config/bauh`, se **copia** su contenido. Lo mismo con
+`~/.local/share/bauh`, que guarda tus temas de usuario.
 
-## 3. Del bauh oficial al fork
+La copia es deliberadamente conservadora:
 
-1. Cierra bauh (y el icono de bandeja si está activo).
-2. Opcional pero recomendado: copia tu configuración
-   (`cp -r ~/.config/bauh ~/.config/bauh.bak`).
-3. Ejecuta el instalador:
+- solo actúa si el directorio de destino **no existe**, así que nunca sobrescribe
+  ajustes tuyos;
+- **no borra ni modifica** el directorio de origen, de modo que el bauh oficial
+  sigue funcionando exactamente igual;
+- **no copia la caché**, que se regenera sola y puede ocupar cientos de megabytes;
+- no actúa cuando la aplicación se ejecuta como root, porque ahí las rutas son
+  del sistema (`/etc`, `/var/cache`) y eso le corresponde al empaquetador.
+
+Queda registrada en el log (`gekko-bauh --logs`).
+
+## 3. Del bauh oficial a este proyecto
+
+1. Cierra bauh, incluido el icono de bandeja si lo tienes activo.
+2. Ejecuta el instalador:
    ```bash
    curl -fsSL https://raw.githubusercontent.com/The-Gekko/Bauh-Fork-The-Gekko/master/install.sh | bash
    ```
-   Si detecta el paquete `bauh` del sistema te avisará; para que lo
-   desinstale por ti añade `--remove-system-bauh` (requiere `sudo`). También
-   puedes hacerlo tú antes: `sudo pacman -Rns bauh` o `sudo eopkg remove bauh`.
-   No es obligatorio desinstalarlo, pero si conviven, `bauh` en el `PATH`
-   puede resolver a uno u otro según el orden de `~/.local/bin` y `/usr/bin`,
-   y los dos `.desktop` se llaman igual.
-4. Abre el fork. Tu configuración se conserva. Arch, Flatpak y eopkg quedan
-   activas; revisa `Ajustes → Tipos de aplicaciones` y marca
-   AppImage/Snap/Web/Debian si las quieres. El tema cambia a Aurora solo si no
-   tenías uno configurado.
+3. Abre `gekko-bauh` desde el menú de aplicaciones. Tus ajustes y tus temas se
+   copian solos. Arch, Flatpak y eopkg quedan activas; si en el oficial usabas
+   AppImage, Snap, Web o Debian, actívalas en
+   `Ajustes → Tipos de aplicaciones`. El tema cambia a Aurora solo si no tenías
+   ninguno configurado.
 
-## 4. Del fork al bauh oficial (vuelta atrás)
+**No hace falta desinstalar el bauh oficial.** Los dos pueden convivir. Si aun
+así prefieres quitarlo, añade `--remove-system-bauh` al instalador (usa `sudo`)
+o hazlo tú con `sudo pacman -Rns bauh` o `sudo eopkg rmf -y bauh`.
 
-### Camino recomendado
+## 4. Vuelta al bauh oficial
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/The-Gekko/Bauh-Fork-The-Gekko/master/install.sh | bash -s -- uninstall
 ```
 
-Elimina el entorno pipx (`bauh-gekko` y, si quedara, el antiguo `bauh`), los
-`.desktop` de `~/.local/share/applications/` y los iconos, y refresca las
-cachés. Antes de terminar **ofrece restablecer `ui.theme`** a `light` en
-`config.yml` para que el oficial arranque con tema. Acepta si vas a volver al
-oficial conservando la configuración.
+Elimina el entorno de pipx, los `.desktop` de `~/.local/share/applications/` y
+los iconos, y refresca las cachés del escritorio. Si el bauh oficial estaba
+instalado, sigue donde estaba y con su configuración intacta: no hay nada más
+que hacer.
 
-Si además quieres empezar de cero:
+Para borrar además los datos de este proyecto:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/The-Gekko/Bauh-Fork-The-Gekko/master/install.sh | bash -s -- uninstall --purge
 ```
 
-`--purge` borra `~/.config/bauh`, `~/.cache/bauh`, `~/.local/share/bauh` y
-`$XDG_RUNTIME_DIR/bauh`. **No** borra `~/BauhRepos` ni nada que hayas
-compilado o instalado con la gem GitHub (esos paquetes se gestionan con pacman
-o con el método de build que usaste).
-
-Después instala el oficial: `sudo pacman -S bauh` (Arch y derivados),
-`pipx install bauh` (PyPI) o el método que prefieras de su
-[README](https://github.com/vinifmor/bauh#installation).
+`--purge` borra `~/.config/gekko-bauh`, `~/.cache/gekko-bauh`,
+`~/.local/share/gekko-bauh` y el directorio temporal. **No toca**
+`~/.config/bauh`, que pertenece al oficial, ni `~/BauhRepos`, ni nada que hayas
+compilado o instalado con la gem GitHub.
 
 ### Camino manual
 
-Si no quieres usar el instalador:
+1. `pipx uninstall gekko-bauh`.
+2. `rm -f ~/.local/share/applications/gekko-bauh.desktop ~/.local/share/applications/gekko-bauh-tray.desktop`
+   y los iconos `~/.local/share/icons/hicolor/*/apps/gekko-bauh.png`.
+3. Opcional: `rm -rf ~/.config/gekko-bauh ~/.cache/gekko-bauh ~/.local/share/gekko-bauh`.
+   Alternativa: `gekko-bauh --reset`, que además pide a cada gem que limpie sus
+   datos; ejecútalo **antes** del paso 1.
 
-1. `pipx uninstall bauh-gekko` (y `pipx uninstall bauh` si aparece en
-   `pipx list` como versión antigua del fork).
-2. `rm -f ~/.local/share/applications/bauh.desktop ~/.local/share/applications/bauh_tray.desktop`
-   y los iconos `~/.local/share/icons/hicolor/*/apps/bauh.png`.
-3. Edita `~/.config/bauh/config.yml` y cambia `ui.theme` a `light` (o
-   cualquier tema del oficial); si tenías `gems` con `eopkg`/`github`, quítalos
-   o pon `gems: null`.
-4. Alternativa a lo anterior: `bauh --reset` borra `~/.config/bauh`,
-   `~/.cache/bauh` y los temporales, y pide a cada gem que limpie sus datos.
-   Ejecútalo **con el fork todavía instalado**, antes del paso 1.
-5. Instala el oficial.
+## 5. Si vienes de una versión anterior a `0.10.8+gekko.1`
 
-## 5. Comprobar qué bauh tienes
+Aquellas versiones sí escribían en `~/.config/bauh`, así que ese directorio
+puede contener ajustes que el bauh oficial no entiende:
 
-- `bauh --help` no distingue las ediciones, pero **Acerca de** sí: el fork
-  muestra «bauh Gekko Edition», la versión `0.10.8+gekko.N` y enlaza al
-  repositorio del fork; el oficial muestra `bauh` y enlaza a `vinifmor/bauh`.
-- `pipx list` muestra `bauh-gekko` si el fork está instalado con el instalador.
-- `pacman -Qi bauh` o `eopkg info bauh` muestran el paquete oficial del
-  sistema, si existe.
-- `command -v bauh` indica cuál se ejecuta al escribir `bauh`
-  (`~/.local/bin/bauh` = pipx; `/usr/bin/bauh` = paquete del sistema).
+| Clave | Valor que pudo quedar | Efecto en el bauh oficial |
+|---|---|---|
+| `ui.theme` | `aurora`, `gtk`, `matugen` | El oficial no tiene esos temas: arranca **sin hoja de estilos** (aspecto plano, botones sin iconos) y sin ningún error visible, hasta que elijas otro tema en sus ajustes. Los valores que ambos entienden son `light`, `darcula`, `default`, `knight` y `sublime`. |
+| `custom_theme` | Objeto con colores y opacidad | Se ignora sin error. |
+| `gems` | Lista con `eopkg`, `github`, ... | Los nombres que no conoce se ignoran, pero como la lista existe, el oficial solo activará las gems que aparezcan en ella. Pon `gems: null` para que active todas las que el sistema permita. |
+
+El desinstalador detecta el caso del tema y **ofrece devolver `ui.theme` a
+`light`**. Acepta si vas a seguir usando el bauh oficial.
+
+El instalador también migra el entorno de pipx: si encuentra uno llamado `bauh`
+con la marca `.gekko-source-ref` dentro (es decir, instalado por este proyecto),
+lo desinstala antes de crear `gekko-bauh`. Un entorno `bauh` que no lleve esa
+marca se considera ajeno y no se toca.
+
+## 6. Comprobar qué tienes instalado
+
+- `command -v gekko-bauh` y `command -v bauh` indican cuál está en el `PATH`.
+- `pipx list` muestra `gekko-bauh` si está instalado con el instalador.
+- `pacman -Qi bauh` o `eopkg info bauh` muestran el paquete oficial del sistema.
+- El diálogo **Acerca de** distingue las dos aplicaciones: esta muestra
+  «bauh Gekko Edition», la versión `0.10.8+gekko.N` y enlaza a este repositorio
+  y al original; el oficial muestra `bauh` y enlaza solo a `vinifmor/bauh`.

@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from unittest import TestCase
 from unittest.mock import Mock, patch, call
 
-from bauh import __app_name__
+from bauh import __package_name__
 from bauh.gems.debian.index import ApplicationsMapper, ApplicationIndexer
 from bauh.gems.debian.model import DebianApplication
 from tests.gems.debian import DEBIAN_TESTS_DIR
@@ -103,8 +103,8 @@ class ApplicationsMapperTest(TestCase):
     def setUp(self):
         self.mapper = ApplicationsMapper(logger=Mock(), workers=1)
 
-    @patch(f'{__app_name__}.gems.debian.index.ApplicationsMapper._read_file', side_effect=mock_read_file)
-    @patch(f'{__app_name__}.gems.debian.index.system.execute', return_value=(0, """
+    @patch(f'{__package_name__}.gems.debian.index.ApplicationsMapper._read_file', side_effect=mock_read_file)
+    @patch(f'{__package_name__}.gems.debian.index.system.execute', return_value=(0, """
     firefox: /usr/share/applications/firefox.desktop
     app-install-data: /usr/share/app-install/desktop/firefox-launchpad-plugin.desktop
     app-install-data: /usr/share/app-install/desktop/firefox:firefox.desktop

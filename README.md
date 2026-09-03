@@ -2,7 +2,7 @@
 
 # 🦎 bauh Gekko Edition
 
-### Fork de [bauh](https://github.com/vinifmor/bauh) centrado en Arch Linux (pacman + AUR + Chaotic AUR), Flatpak y Solus (eopkg)
+### Gestor gráfico de aplicaciones para Arch Linux (pacman + AUR + Chaotic AUR), Flatpak y Solus (eopkg)
 
 <p align="center">
   <a href="https://github.com/The-Gekko/Bauh-Fork-The-Gekko/releases"><img src="https://img.shields.io/github/v/tag/The-Gekko/Bauh-Fork-The-Gekko?label=Versi%C3%B3n&sort=semver" alt="Versión"></a>
@@ -16,28 +16,33 @@
 
 ---
 
-> **Versión alterada del software original.** Este repositorio es un fork de
-> [`vinifmor/bauh`](https://github.com/vinifmor/bauh) mantenido por
-> [The-Gekko](https://github.com/The-Gekko). No es el bauh original ni está
-> respaldado por su autor, **Vinicius Moreira**. Los errores de esta edición se
-> reportan en [este repositorio](https://github.com/The-Gekko/Bauh-Fork-The-Gekko/issues),
-> no en el proyecto original. Versión actual: `0.10.8+gekko.1` (etiqueta git
-> `v0.10.8-gekko.1`), construida sobre la rama `staging` del upstream (0.10.8
-> sin publicar). Detalles en [CHANGELOG.md](CHANGELOG.md) y [CREDITS.md](CREDITS.md).
+> **Proyecto independiente derivado de bauh.** `gekko-bauh` nació como fork de
+> [`vinifmor/bauh`](https://github.com/vinifmor/bauh), creado por **Vinicius Moreira**,
+> y hoy se desarrolla por separado con su propio rumbo, sus propias versiones y su
+> propia identidad en el sistema. Es una **versión alterada** del software original
+> en el sentido de la licencia zlib: no es bauh, no está respaldada por su autor y
+> sus errores se reportan
+> [aquí](https://github.com/The-Gekko/Bauh-Fork-The-Gekko/issues), nunca en el
+> proyecto original. La mayor parte del código sigue siendo obra suya y de sus
+> colaboradores: el crédito completo está en [CREDITS.md](CREDITS.md).
+>
+> Se instala como `gekko-bauh`, guarda su configuración en `~/.config/gekko-bauh` y
+> convive sin interferir con una instalación del bauh oficial. Versión actual:
+> `0.10.8+gekko.1` (etiqueta `v0.10.8-gekko.1`), construida sobre la rama `staging`
+> del proyecto original. Detalles en [CHANGELOG.md](CHANGELOG.md).
 
-**bauh** (pronunciado _baoo_) es una interfaz gráfica en PyQt5 para buscar,
-instalar, actualizar y desinstalar software en Linux. El alcance de esta edición
-son tres plataformas: **Arch Linux y derivados** (pacman, AUR y cualquier
-repositorio adicional de pacman, por ejemplo Chaotic AUR), **Flatpak** y
-**Solus (eopkg)**. Las tres vienen activadas de fábrica. Los demás formatos que
-gestiona el bauh original (AppImage, Snap, Web, Debian) siguen incluidos, pero
-**desactivados por defecto** y sin soporte activo: se activan en
-`Ajustes → Tipos de aplicaciones`.
+**gekko-bauh** (se pronuncia _gueko baoo_) es una interfaz gráfica en PyQt5 para
+buscar, instalar, actualizar y desinstalar software en Linux. Su alcance son tres
+plataformas: **Arch Linux y derivados** (pacman, AUR y cualquier repositorio
+adicional de pacman, por ejemplo Chaotic AUR), **Flatpak** y **Solus (eopkg)**.
+Las tres vienen activadas de fábrica. Los demás formatos heredados del proyecto
+original (AppImage, Snap, Web, Debian) siguen incluidos, pero **desactivados por
+defecto** y sin soporte activo: se activan en `Ajustes → Tipos de aplicaciones`.
 
 ## Índice
 
-- [Qué añade este fork](#qué-añade-este-fork)
-- [Heredado de bauh (upstream)](#heredado-de-bauh-upstream)
+- [Qué aporta este proyecto](#qué-aporta-este-proyecto)
+- [Heredado del proyecto original](#heredado-del-proyecto-original)
 - [Requisitos](#requisitos)
 - [Instalación](#instalación)
 - [Actualización](#actualización)
@@ -53,7 +58,7 @@ gestiona el bauh original (AppImage, Snap, Web, Debian) siguen incluidos, pero
 - [Créditos](#créditos)
 - [Licencia](#licencia)
 
-## Qué añade este fork
+## Qué aporta este proyecto
 
 Todo lo que sigue está en este repositorio y **no** en `vinifmor/bauh`. Cada
 punto es comprobable en el código o en la propia interfaz.
@@ -71,9 +76,9 @@ punto es comprobable en el código o en la propia interfaz.
   el tema dinámico con un clic; su estado persiste entre sesiones.
 - **Pestaña «Personalización»** en Ajustes (traducida) para color de fondo,
   texto, acento, opacidad e imagen de fondo (clave `custom_theme` de
-  `~/.config/bauh/config.yml`).
+  `~/.config/gekko-bauh/config.yml`).
 - **Identidad propia**: la ventana se llama «bauh Gekko Edition», el diálogo
-  «Acerca de» enlaza a este fork y al proyecto original, y el aviso de nueva
+  «Acerca de» enlaza a este repositorio y al proyecto original, y el aviso de nueva
   versión consulta las releases de este repositorio.
 - **Diálogo de contraseña** (`RootDialog`) modal a nivel de aplicación, con
   campo enmascarado, foco automático y confirmación con `Enter`. Se abre sobre
@@ -108,11 +113,11 @@ punto es comprobable en el código o en la propia interfaz.
   la instalación (con privilegios, solo si el método lo requiere). No existe
   ninguna «protección anti-scripts»: compilar código de terceros es tu
   responsabilidad. Los clones se guardan en `~/BauhRepos` (clave `repos_dir`
-  de `~/.config/bauh/github.yml`).
+  de `~/.config/gekko-bauh/github.yml`).
 - **Gems heredadas opt-in**: AppImage, Snap, Web y Debian vienen desactivadas
   y sin soporte activo. Se activan en `Ajustes → Tipos de aplicaciones` (o con
   la clave `gems` de `config.yml`). Arch, Flatpak y eopkg, que son el alcance
-  del fork, siguen activadas por defecto.
+  del proyecto, siguen activadas por defecto.
 
 ### Seguridad
 
@@ -120,7 +125,7 @@ punto es comprobable en el código o en la propia interfaz.
   se entrega por `stdin` a `sudo -S -k` y se valida por el código de retorno,
   no analizando texto.
 - Directorios temporales bajo `$XDG_RUNTIME_DIR` con permisos `0700`
-  (antes `/tmp/bauh@usuario`).
+  (antes `/tmp/bauh@usuario`, una ruta predecible en un directorio compartido).
 - Los comandos de pacman se construyen como listas de argumentos (sin pasar
   por un shell) y el saneado de la entrada del usuario se ha reforzado.
 
@@ -128,10 +133,14 @@ punto es comprobable en el código o en la propia interfaz.
 
 - **`install.sh`**: instalador y desinstalador por `curl` basado en `pipx`
   (ver [Instalación](#instalación)).
-- Distribución **`bauh-gekko`** (el paquete importable sigue siendo `bauh` y
-  los binarios `bauh`, `bauh-tray` y `bauh-cli` no cambian) con versión PEP 440
-  `0.10.8+gekko.1`; `pyproject.toml` con la sección `[project]` completa y
-  `setup.py` reducido a un shim de compatibilidad.
+- **Identidad propia en el sistema**: distribución `gekko-bauh`, ejecutables
+  `gekko-bauh`, `gekko-bauh-tray` y `gekko-bauh-cli`, configuración en
+  `~/.config/gekko-bauh` y lanzador e icono propios. Nada de eso colisiona con
+  una instalación del bauh oficial, y la primera ejecución copia los ajustes
+  heredados de `~/.config/bauh` sin tocar el original. El paquete Python interno
+  sigue llamándose `bauh` para poder integrar las correcciones del proyecto
+  original. Versión PEP 440 `0.10.8+gekko.1`, `pyproject.toml` con la sección
+  `[project]` completa.
 - **CI en GitHub Actions**: tests en Python 3.9, 3.12 y 3.14 con Qt
   offscreen, `ruff`, `shellcheck` sobre `install.sh`, construcción del wheel y
   comprobación de paridad de traducciones (`tools/check_locales.py`).
@@ -140,10 +149,10 @@ punto es comprobable en el código o en la propia interfaz.
   sesiones Wayland (evitaba un cierre inesperado al arrancar en algunos
   equipos).
 
-## Heredado de bauh (upstream)
+## Heredado del proyecto original
 
 Estas funciones ya existían en `vinifmor/bauh`; aquí solo se mantienen y no
-son mérito de este fork:
+son mérito de este proyecto:
 
 - Gestión completa de **pacman y AUR**: resolución de dependencias y
   conflictos, elección entre varios proveedores, actualización del sistema con
@@ -154,9 +163,9 @@ son mérito de este fork:
 - **Copias de seguridad con Timeshift** antes de actualizar.
 - Lectura de instalados y búsquedas en paralelo, descargador propio en Python,
   filtro «verificado», icono de bandeja con aviso de actualizaciones y CLI
-  `bauh-cli updates`.
+  `gekko-bauh-cli updates`.
 - El gestor de **Flatpak** (búsqueda en Flathub, instalación por usuario o para
-  todo el sistema, actualización de runtimes), que el fork mantiene dentro de su
+  todo el sistema, actualización de runtimes), que este proyecto mantiene dentro de su
   alcance.
 - Los demás gestores, ya sin soporte activo: AppImage, Snap, Web (nativefier) y
   Debian.
@@ -192,10 +201,10 @@ Qué hace el instalador:
    (no «lo que haya en master» en ese instante), de modo que la marca
    `.gekko-source-ref` que guarda dentro del entorno coincide siempre con el
    código instalado.
-3. Instala el código en un entorno aislado de pipx llamado **`bauh-gekko`**,
+3. Instala el código en un entorno aislado de pipx llamado **`gekko-bauh`**,
    pasando `--python` con el intérprete elegido (`PYTHON_BIN`, por defecto
    `python3`). Si encuentra el entorno `bauh` de una versión anterior de este
-   fork, lo **migra** a `bauh-gekko` y elimina el antiguo.
+   proyecto, lo **migra** a `gekko-bauh` y elimina el antiguo.
 4. Instala el icono en los tamaños estándar de `hicolor` (16 a 512 px) y un
    `.desktop` con traducciones y `StartupWMClass=bauh` en
    `~/.local/share/applications/`, y refresca las cachés del escritorio.
@@ -209,7 +218,7 @@ por tubería; sin terminal (CI, cron, systemd) la respuesta por defecto es «no�
 |---|---|
 | `--force`, `-f` | Reconstruye el entorno pipx aunque ya esté instalado el mismo commit. |
 | `--yes`, `-y` | Responde «sí» a las preguntas que **no** requieren `sudo`. No autoriza acciones con privilegios. |
-| `--remove-system-bauh` | Autoriza desinstalar el paquete `bauh` de pacman/eopkg antes de instalar el fork. |
+| `--remove-system-bauh` | Autoriza desinstalar el paquete `bauh` de pacman/eopkg antes de instalar gekko-bauh. |
 | `--install-pipx` | Autoriza instalar `pipx` con el gestor de paquetes del sistema si falta. |
 | `PYTHON_BIN=/ruta/python3.x` | Intérprete que usará pipx para crear el entorno. |
 
@@ -244,7 +253,7 @@ bauh_env/bin/bauh
 ```
 
 > [!WARNING]
-> `pip install bauh` o `pacman -S bauh` **no** instalan este fork: instalan el
+> `pip install bauh` o `pacman -S bauh` **no** instalan este proyecto: instalan el
 > bauh original (PyPI / repositorios), sin el tema Aurora, las gems eopkg y
 > GitHub, ni los cambios de la gem Arch.
 
@@ -270,7 +279,7 @@ las releases de este repositorio.
 curl -fsSL https://raw.githubusercontent.com/The-Gekko/Bauh-Fork-The-Gekko/master/install.sh | bash -s -- uninstall
 ```
 
-Elimina el entorno pipx (`bauh-gekko`, y `bauh` si quedara de una versión
+Elimina el entorno pipx (`gekko-bauh`, y `bauh` si quedara de una versión
 anterior), el `.desktop` y los iconos, y refresca las cachés del escritorio.
 **No toca** tu configuración.
 
@@ -280,7 +289,8 @@ Para borrar **también** los datos de usuario:
 curl -fsSL https://raw.githubusercontent.com/The-Gekko/Bauh-Fork-The-Gekko/master/install.sh | bash -s -- uninstall --purge
 ```
 
-`--purge` elimina `~/.config/bauh`, `~/.cache/bauh`, `~/.local/share/bauh` y
+`--purge` elimina `~/.config/gekko-bauh`, `~/.cache/gekko-bauh`,
+`~/.local/share/gekko-bauh` y
 el directorio temporal de la sesión, y **ofrece restablecer `ui.theme`** en
 `config.yml` antes de borrarlo si prefieres conservar la configuración pero
 volver al bauh oficial (que no conoce los temas Aurora, GTK ni Matugen). Los
@@ -289,25 +299,31 @@ se borran nunca automáticamente. Detalles en [docs/MIGRACION.md](docs/MIGRACION
 
 ## Migración desde y hacia el bauh oficial
 
-El fork y el bauh oficial **comparten** `~/.config/bauh/config.yml`, la caché y
+Este proyecto y el bauh oficial **ya no comparten** configuración, caché ni
 los datos de usuario. En resumen:
 
-- **Oficial → fork**: desinstala el paquete `bauh` del sistema (o deja que el
-  instalador lo haga con `--remove-system-bauh`) y ejecuta `install.sh`. Tu
-  configuración se conserva; las gems AppImage/Snap/Web/Debian pasan a estar
-  desactivadas hasta que las marques en `Ajustes → Tipos de aplicaciones`.
-- **Fork → oficial**: ejecuta `install.sh uninstall` (con `--purge` si quieres
-  limpiar todo) y acepta restablecer `ui.theme`; después instala el oficial
-  (`sudo pacman -S bauh` o `pipx install bauh`). Si conservas la configuración
-  sin restablecer el tema, el bauh oficial arrancará sin hoja de estilos hasta
-  que elijas otro tema en sus ajustes.
+- **Venir del oficial**: ejecuta `install.sh`. La primera vez que abras
+  `gekko-bauh`, tus ajustes y tus temas de usuario se **copian** de
+  `~/.config/bauh` y `~/.local/share/bauh` a las rutas propias. El directorio
+  original queda intacto, así que puedes seguir usando el bauh oficial en
+  paralelo. Las gems AppImage/Snap/Web/Debian quedan desactivadas hasta que las
+  marques en `Ajustes → Tipos de aplicaciones`.
+- **Convivir con el oficial**: no hace falta desinstalarlo. Cada uno tiene su
+  ejecutable, su lanzador, su icono y su configuración. Si aun así prefieres
+  quitarlo, el instalador puede hacerlo con `--remove-system-bauh`.
+- **Volver al oficial**: ejecuta `install.sh uninstall` (con `--purge` para
+  borrar también los datos propios). El purgado **no toca** `~/.config/bauh`,
+  que pertenece al oficial. Si vienes de una versión anterior de este proyecto,
+  que sí escribía ahí, el desinstalador te ofrece devolver `ui.theme` a `light`:
+  el oficial no conoce los temas Aurora, GTK ni Matugen y arrancaría sin hoja de
+  estilos.
 
 La guía completa, con la tabla de rutas y de claves de configuración que el
 upstream no entiende, está en [docs/MIGRACION.md](docs/MIGRACION.md).
 
 ## Wayland, Hyprland y Niri
 
-bauh funciona en sesiones Wayland (GNOME, KDE Plasma, Hyprland, Niri, Sway...)
+gekko-bauh funciona en sesiones Wayland (GNOME, KDE Plasma, Hyprland, Niri, Sway...)
 y en X11. Al arrancar en una sesión Wayland fuerza `QT_QPA_PLATFORM=wayland`
 (arreglo integrado desde el upstream).
 
@@ -318,21 +334,22 @@ implementan solo `xdg-shell` sin extensiones de gestión de ventanas (Hyprland,
 Niri, Sway, river...) **el protocolo no permite** que una aplicación se ponga
 por encima de las demás ni se dé el foco a sí misma: el diálogo puede abrirse
 detrás de otra ventana o sin foco, y hay que traerlo con el atajo del
-compositor. No es un fallo de bauh; se resuelve con una regla de ventana. El
+compositor. No es un fallo de la aplicación; se resuelve con una regla de ventana. El
 diálogo se titula «Autenticación» (o su traducción) y la clase de la aplicación
-es `bauh`:
+es `gekko-bauh` (se declara con `setDesktopFileName`, así que coincide con el
+`StartupWMClass` del lanzador):
 
 ```ini
 # Hyprland (>= 0.50; en versiones anteriores sustituye "windowrule" por "windowrulev2")
-windowrule = float, class:^(bauh)$, title:^(Autenticación|Authentication)$
-windowrule = center, class:^(bauh)$, title:^(Autenticación|Authentication)$
-windowrule = stayfocused, class:^(bauh)$, title:^(Autenticación|Authentication)$
+windowrule = float, class:^(gekko-bauh)$, title:^(Autenticación|Authentication)$
+windowrule = center, class:^(gekko-bauh)$, title:^(Autenticación|Authentication)$
+windowrule = stayfocused, class:^(gekko-bauh)$, title:^(Autenticación|Authentication)$
 ```
 
 ```kdl
 // Niri (~/.config/niri/config.kdl)
 window-rule {
-    match app-id="^bauh$" title="^(Autenticación|Authentication)$"
+    match app-id="^gekko-bauh$" title="^(Autenticación|Authentication)$"
     open-floating true
     open-focused true
 }
@@ -348,23 +365,23 @@ Temas incluidos (`bauh/view/resources/style/`): `aurora` (por defecto),
 `darcula`, `default`, `gtk`, `knight`, `light`, `matugen` y `sublime`. Los
 temas `gtk` y `matugen` heredan de Aurora (`root_theme=aurora`) y sustituyen
 sus colores por los del sistema. Puedes añadir temas propios en
-`~/.local/share/bauh/themes/`; el formato (`.qss` + `.vars` + `.meta`) es el
+`~/.local/share/gekko-bauh/themes/`; el formato (`.qss` + `.vars` + `.meta`) es el
 del upstream.
 
 ## Configuración
 
 | Ruta | Contenido |
 |---|---|
-| `~/.config/bauh/config.yml` | Configuración general: `gems` activas, `ui.theme`, `custom_theme`, actualizaciones, descargas, copias de seguridad. |
-| `~/.config/bauh/<gem>.yml` | Configuración de cada gem (`arch.yml`, `eopkg.yml`, `github.yml`, ...). |
-| `~/.cache/bauh/` | Caché de paquetes, iconos y sugerencias. |
-| `~/.local/share/bauh/` | Datos compartidos y temas de usuario (`themes/`). |
+| `~/.config/gekko-bauh/config.yml` | Configuración general: `gems` activas, `ui.theme`, `custom_theme`, actualizaciones, descargas, copias de seguridad. |
+| `~/.config/gekko-bauh/<gem>.yml` | Configuración de cada gem (`arch.yml`, `eopkg.yml`, `github.yml`, ...). |
+| `~/.cache/gekko-bauh/` | Caché de paquetes, iconos y sugerencias. |
+| `~/.local/share/gekko-bauh/` | Datos compartidos y temas de usuario (`themes/`). |
 | `$XDG_RUNTIME_DIR/bauh/` | Archivos temporales y logs de la sesión (`bauh --logs` los muestra en el terminal). |
 | `/etc/bauh/gems.forbidden` | Lista de gems que el administrador prohíbe cargar (una por línea). |
 
 Argumentos útiles: `bauh --logs` (logs en el terminal), `bauh --settings`
 (abre directamente los ajustes), `bauh --offline`, `bauh --reset` (borra
-configuración, caché y temporales), `bauh-cli updates [--format json]`.
+configuración, caché y temporales), `gekko-bauh-cli updates [--format json]`.
 
 ## Cómo ejecutar los tests
 
@@ -383,11 +400,12 @@ traducciones: `python3 tools/check_locales.py`. El detalle está en
 
 ## Sincronización con upstream
 
-El fork sigue a `vinifmor/bauh` (`master` y `staging`) mediante **merges** (no
+Este proyecto sigue a `vinifmor/bauh` (`master` y `staging`) mediante **merges** (no
 rebase) sobre `master`, registra la base upstream de cada versión en el
 `CHANGELOG.md` y numera sus versiones como `<versión upstream>+gekko.N`. La
 política completa (remotes, cadencia, cómo se resuelven los conflictos en los
-archivos que el fork reestructuró y cómo devolver arreglos al upstream) está
+archivos que este proyecto reestructuró y cómo devolver arreglos al proyecto
+original) está
 en [docs/SINCRONIZACION_UPSTREAM.md](docs/SINCRONIZACION_UPSTREAM.md).
 
 ## Compatibilidad con Python
@@ -398,7 +416,7 @@ en [docs/SINCRONIZACION_UPSTREAM.md](docs/SINCRONIZACION_UPSTREAM.md).
   Python 3.8 está fuera de soporte desde octubre de 2024 y las versiones
   actuales de `PyQt5-sip`, `requests` y `urllib3` ya no lo admiten. Se
   mantiene «best effort» y se retirará en una versión futura; ninguna de las
-  distribuciones a las que va dirigido el fork (Arch y derivados, Solus) lo
+  distribuciones a las que va dirigido el proyecto (Arch y derivados, Solus) lo
   incluye.
 
 ## Contribuir
@@ -410,14 +428,24 @@ el commit instalado).
 
 ## Créditos
 
+`gekko-bauh` no existiría sin el trabajo del que parte. La mayor parte del código
+de este repositorio no es nuestra.
+
 - **Proyecto original**: [bauh](https://github.com/vinifmor/bauh), creado y
-  mantenido por **Vinicius Moreira** ([@vinifmor](https://github.com/vinifmor))
-  junto con sus colaboradores. Este fork incluye además trabajo de
-  albanobattistella, KoromeloDev, antipeth, Boria138, EGYT5453 y NoobKozlegeny
-  integrado desde el upstream; ver [CREDITS.md](CREDITS.md) y
-  [CHANGELOG.md](CHANGELOG.md).
-- **Fork**: [The-Gekko](https://github.com/The-Gekko).
+  mantenido por **Vinicius Moreira** ([@vinifmor](https://github.com/vinifmor)).
+  Suya es la arquitectura de gems, el gestor de Arch y AUR con todo su manejo de
+  dependencias, claves PGP y conflictos, la capa Qt, el sistema de temas y los
+  diez idiomas de la interfaz. Este proyecto se limita a construir encima.
+- **Colaboradores del proyecto original** cuyo trabajo se incluye aquí:
+  albanobattistella, KoromeloDev, antipeth, Boria138, EGYT5453 y NoobKozlegeny,
+  entre muchos otros en el historial anterior a la versión 0.10.7. El detalle
+  está en [CREDITS.md](CREDITS.md) y [CHANGELOG.md](CHANGELOG.md).
+- **Este proyecto**: [The-Gekko](https://github.com/The-Gekko). Lo que aporta,
+  y solo eso, está listado en [Qué aporta este proyecto](#qué-aporta-este-proyecto).
 - **Arte**: la imagen `pictures/gekko-bauh.png` fue **generada con IA**.
+
+Si `gekko-bauh` te resulta útil, considera darle una estrella también al
+[proyecto original](https://github.com/vinifmor/bauh).
 
 ## Licencia
 
