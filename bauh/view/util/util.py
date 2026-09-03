@@ -23,7 +23,20 @@ def notify_user(msg: str, icon_path: str = None):
     if not icon_id:
         icon_id = get_default_icon()[0]
 
-    os.system("notify-send -a {} {} '{}'".format(__app_name__, "-i {}".format(icon_id) if icon_id else '', msg))
+    # Sin shell: el mensaje lleva el nombre del paquete, que viene del repositorio. Con
+    # os.system y comillas simples, un nombre que contuviera una comilla se salía de ellas
+    # y el resto se ejecutaba como una orden más.
+    cmd = ['notify-send', '-a', __app_name__]
+
+    if icon_id:
+        cmd.extend(('-i', icon_id))
+
+    cmd.append(msg)
+
+    try:
+        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError:  # notify-send no instalado: una notificación nunca debe tumbar nada
+        logging.debug("could not notify the user: 'notify-send' is not available")
 
 
 @lru_cache(maxsize=8)
