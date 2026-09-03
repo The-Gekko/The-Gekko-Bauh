@@ -273,6 +273,21 @@ case "${FAKE_CURL_MODE:-real}" in
         # El resto de descargas (iconos, .desktop) falla a propósito para
         # comprobar que el instalador sigue adelante con sus alternativas.
         exit 22 ;;
+    icons-fallback)
+        # La API resuelve y el PNG grande llega, pero los iconos por tamaño no
+        # existen todavía en ese commit: el instalador debe recurrir al grande.
+        if [[ "$url" == *'api.github.com'* ]]; then
+            printf '%s\n' "$FAKE_CURL_SHA"
+            exit 0
+        fi
+        if [[ "$url" == *'/pictures/icons/'* ]]; then
+            exit 22
+        fi
+        if [[ "$url" == *'gekko-bauh.png' || "$url" == *'.desktop' ]]; then
+            [[ -n "$out" ]] && printf 'contenido\n' > "$out"
+            exit 0
+        fi
+        exit 22 ;;
 esac
 
 # Modo 'real': no se sale a la red en los tests; se responde vacío.
@@ -574,6 +589,82 @@ test_help_and_bad_option() {
     cleanup_sandbox
 }
 
+test_remote_skips_rebuild_when_same_commit() {
+    start_case 'modo remoto: reinstalar el mismo commit omite la reconstrucción'
+
+    export FAKE_CURL_MODE='resolve'
+
+    run_installer_remote --yes --no-autostart
+    assert_status 0 "$?" 'la primera instalación termina bien'
+    assert_contains "$FAKE_LOG" 'pipx install'
+    assert_contains "$VENVS_DIR/gekko-bauh/.gekko-source-ref" "$FAKE_CURL_SHA"
+
+    # A partir de aquí solo interesa lo que haga la segunda ejecución.
+    : > "$FAKE_LOG"
+
+    run_installer_remote --yes --no-autostart
+    assert_status 0 "$?" 'la segunda instalación termina bien'
+    assert_not_contains "$FAKE_LOG" 'pipx install --force'
+    assert_contains "$OUTPUT" 'Omitiendo la reconstrucción'
+
+    cleanup_sandbox
+}
+
+test_remote_force_rebuilds() {
+    start_case 'modo remoto: --force reconstruye aunque el commit coincida'
+
+    export FAKE_CURL_MODE='resolve'
+
+    run_installer_remote --yes --no-autostart
+    assert_status 0 "$?" 'la primera instalación termina bien'
+
+    : > "$FAKE_LOG"
+
+    run_installer_remote --yes --no-autostart --force
+    assert_status 0 "$?" 'la reinstalación forzada termina bien'
+    assert_contains "$FAKE_LOG" 'pipx install --force'
+
+    cleanup_sandbox
+}
+
+test_remote_ref_is_honoured() {
+    start_case 'modo remoto: --ref consulta la referencia pedida'
+
+    export FAKE_CURL_MODE='resolve'
+
+    run_installer_remote --yes --no-autostart --ref v0.10.8-gekko.1
+    assert_status 0 "$?" 'el instalador termina bien'
+
+    # La referencia pedida debe llegar tal cual a la API y el commit resuelto
+    # debe ser el que se descarga e instala.
+    assert_contains "$FAKE_LOG" 'commits/v0.10.8-gekko.1'
+    assert_contains "$FAKE_LOG" "archive/$FAKE_CURL_SHA.zip"
+    assert_contains "$VENVS_DIR/gekko-bauh/.gekko-source-ref" "$FAKE_CURL_SHA"
+
+    cleanup_sandbox
+}
+
+test_remote_icon_fallback() {
+    start_case 'modo remoto: sin iconos por tamaño se recurre al PNG grande'
+
+    export FAKE_CURL_MODE='icons-fallback'
+
+    run_installer_remote --yes --no-autostart
+    assert_status 0 "$?" 'el instalador termina bien'
+
+    # Aunque los iconos por tamaño no existan en ese commit, deben quedar
+    # instalados todos los tamaños a partir del PNG grande.
+    local icons="$HOME/.local/share/icons/hicolor"
+    local size
+    for size in 16 48 256 512; do
+        assert_file "$icons/${size}x${size}/apps/gekko-bauh.png"
+    done
+
+    assert_file "$HOME/.local/share/applications/gekko-bauh.desktop"
+
+    cleanup_sandbox
+}
+
 # ──────────────────────────────────── Main ────────────────────────────────────
 
 echo "Instalador bajo prueba: $INSTALLER"
@@ -592,6 +683,10 @@ test_uninstall_purge
 test_uninstall_resets_fork_theme
 test_theme_untouched_when_standard
 test_help_and_bad_option
+test_remote_skips_rebuild_when_same_commit
+test_remote_force_rebuilds
+test_remote_ref_is_honoured
+test_remote_icon_fallback
 
 echo
 if ((FAILED > 0)); then

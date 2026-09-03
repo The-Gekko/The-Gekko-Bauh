@@ -24,3 +24,6 @@ linux_dist/appimage/*.gz.*
 linux_dist/appimage/bauh-*
 AGENTS.md
 graphify-out/
+
+# Directorio de trabajo de Claude Code (worktrees y estado de sesión)
+.claude/
