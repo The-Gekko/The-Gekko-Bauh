@@ -4,11 +4,11 @@ import subprocess
 import traceback
 from datetime import datetime
 from threading import Thread
-from typing import List, Dict, Set, Iterable, Optional, Tuple
+from typing import List, Dict, Sequence, Set, Iterable, Optional, Tuple
 
 from bauh.api.exception import NoInternetException
 from bauh.commons import system
-from bauh.commons.system import new_subprocess, run_cmd, SimpleProcess, ProcessHandler, DEFAULT_LANG
+from bauh.commons.system import new_subprocess, SimpleProcess, ProcessHandler, DEFAULT_LANG
 from bauh.commons.util import size_to_byte
 from bauh.commons.version_util import map_str_version
 from bauh.gems.flatpak import EXPORTS_PATH, VERSION_1_3, VERSION_1_2, VERSION_1_5, VERSION_1_12
@@ -18,6 +18,37 @@ RE_SEVERAL_SPACES = re.compile(r'\s+')
 RE_COMMIT = re.compile(r'(Latest commit|Commit)\s*:\s*(.+)')
 RE_REQUIRED_RUNTIME = re.compile(r'Required\s+runtime\s+.+\(([\w./]+)\)\s*.+\s+remote\s+([\w+./]+)')
 OPERATION_UPDATE_SYMBOLS = {'i', 'u'}
+
+
+def _run(args: Sequence[str], ignore_return_code: bool = False, print_error: bool = True,
+         lang: Optional[str] = DEFAULT_LANG) -> Optional[str]:
+    """Ejecuta flatpak pasando los argumentos como lista (sin shell) y devuelve su salida.
+
+    Sustituye a `bauh.commons.system.run_cmd`, que interpola en una cadena y ejecuta con
+    `shell=True`. Por ahí pasaban el texto del buscador -escrito por el usuario- y los
+    identificadores y orígenes que llegan de los metadatos de un remoto, es decir, de un
+    tercero: escribir «firefox; touch /tmp/x #» en el buscador ejecutaba ese comando.
+    """
+    final_args = [a for a in args if a]
+
+    if not final_args:
+        return None
+
+    params = {'stdout': subprocess.PIPE,
+              'env': system.gen_env(lang=lang),
+              'cwd': '.',
+              'shell': False}
+
+    if not print_error:
+        params['stderr'] = subprocess.DEVNULL
+
+    res = subprocess.run(final_args, check=False, **params)
+
+    if ignore_return_code or res.returncode == 0:
+        try:
+            return res.stdout.decode()
+        except UnicodeDecodeError:
+            return None
 
 
 def get_app_info_fields(app_id: str, branch: str, installation: str, fields: List[str] = [], check_runtime: bool = False):
@@ -72,20 +103,20 @@ def is_installed():
 
 
 def get_version() -> Optional[Tuple[str, ...]]:
-    res = run_cmd('flatpak --version', print_error=False)
+    res = _run(('flatpak', '--version'), print_error=False)
     return map_str_version(res.split(' ')[1].strip()) if res else None
 
 
 def get_app_info(app_id: str, branch: str, installation: str) -> Optional[str]:
     try:
-        return run_cmd(f'flatpak info {app_id} {branch} --{installation}')
+        return _run(('flatpak', 'info', app_id, branch, f'--{installation}'))
     except Exception:
         import logging; logging.error("Exception occurred", exc_info=True)
         return ''
 
 
 def get_commit(app_id: str, branch: str, installation: str) -> Optional[str]:
-    info = run_cmd(f'flatpak info {app_id} {branch} --{installation}')
+    info = _run(('flatpak', 'info', app_id, branch, f'--{installation}'))
 
     if info:
         commits = RE_COMMIT.findall(info)
@@ -218,8 +249,7 @@ def list_required_runtime_updates(installation: str) -> Optional[List[Tuple[str,
     Return a list of tuples composed by the reference and the origin.
     e.g: ('runtime/org.gnome.Desktop/42/x86_64', 'flathub')
     """
-    _, updates = system.execute(f'flatpak update --{installation}', shell=True,
-                                custom_env=system.gen_env())
+    updates = _run(('flatpak', 'update', f'--{installation}'), ignore_return_code=True)
 
     if updates:
         return RE_REQUIRED_RUNTIME.findall(updates)
@@ -228,7 +258,8 @@ def list_required_runtime_updates(installation: str) -> Optional[List[Tuple[str,
 def fill_updates(version: Tuple[str, ...], installation: str, res: Dict[str, Set[str]]):
     if version < VERSION_1_2:
         try:
-            output = run_cmd(f'flatpak update --no-related --no-deps --{installation}', ignore_return_code=True)
+            output = _run(('flatpak', 'update', '--no-related', '--no-deps', f'--{installation}'),
+                          ignore_return_code=True)
 
             if f'Updating in {installation}' in output:
                 for line in output.split(f'Updating in {installation}:\n')[1].split('\n'):
@@ -297,7 +328,7 @@ def get_app_commits(app_ref: str, origin: str, installation: str, handler: Proce
 
 
 def get_app_commits_data(app_ref: str, origin: str, installation: str, full_str: bool = True) -> List[dict]:
-    log = run_cmd(f'flatpak remote-info --log {origin} {app_ref} --{installation}')
+    log = _run(('flatpak', 'remote-info', '--log', origin, app_ref, f'--{installation}'))
 
     if not log:
         raise NoInternetException()
@@ -327,7 +358,7 @@ def get_app_commits_data(app_ref: str, origin: str, installation: str, full_str:
 
 def search(version: Tuple[str, ...], word: str, installation: str, app_id: bool = False) -> Optional[List[dict]]:
 
-    res = run_cmd(f'flatpak search {word} --{installation}', lang=None)
+    res = _run(('flatpak', 'search', word, f'--{installation}'), lang=None)
 
     if not res:
         return
@@ -423,12 +454,12 @@ def set_default_remotes(installation: str, root_password: Optional[str] = None) 
 
 
 def has_remotes_set() -> bool:
-    return bool(run_cmd('flatpak remotes').strip())
+    return bool((_run(('flatpak', 'remotes')) or '').strip())
 
 
 def list_remotes() -> Dict[str, Set[str]]:
     res = {'system': set(), 'user': set()}
-    output = run_cmd('flatpak remotes').strip()
+    output = (_run(('flatpak', 'remotes')) or '').strip()
 
     if output:
         lines = output.split('\n')
@@ -445,7 +476,8 @@ def list_remotes() -> Dict[str, Set[str]]:
 
 
 def run(app_id: str):
-    subprocess.Popen((f'flatpak run {app_id}',), shell=True, env={**os.environ})
+    # sin shell: un identificador con metacaracteres no debe convertirse en otra orden
+    subprocess.Popen(('flatpak', 'run', app_id), env={**os.environ})
 
 
 def map_update_download_size(app_ids: Iterable[str], installation: str, version: Tuple[str, ...]) -> Dict[str, float]:

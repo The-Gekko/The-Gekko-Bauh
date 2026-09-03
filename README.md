@@ -449,12 +449,18 @@ y una plataforma Qt sin pantalla; si PyQt5 no está instalado se omiten solos.
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
-QT_QPA_PLATFORM=offscreen .venv/bin/python -m unittest discover -s tests
+QT_QPA_PLATFORM=offscreen .venv/bin/python -m unittest discover -s tests -t .
 ```
 
-Lint: `.venv/bin/ruff check bauh tests` y `shellcheck install.sh`. Paridad de
-traducciones: `python3 tools/check_locales.py`. El detalle está en
-[CONTRIBUTING.md](CONTRIBUTING.md).
+Además de los tests unitarios, `tests/integration/` ejecuta las gems contra
+**binarios `pacman`, `eopkg` y `flatpak` simulados en el `PATH`**: comprueban los
+argumentos que llegan de verdad al proceso y el análisis de salidas reales, algo
+que un test que parchea `subprocess` no puede ver. El instalador tiene sus
+propios 21 casos en bash: `bash tests/installer/run_tests.sh`.
+
+Lint: `.venv/bin/ruff check bauh tests tools` y `shellcheck install.sh`. Paridad
+de traducciones: `python3 tools/check_locales.py`. El detalle está en
+[docs/TESTS.md](docs/TESTS.md) y en [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Sincronización con upstream
 

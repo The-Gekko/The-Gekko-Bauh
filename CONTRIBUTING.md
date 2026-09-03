@@ -125,6 +125,11 @@ los diez en **todos** los directorios anteriores. `tools/check_locales.py` exige
 esa paridad y falla si un directorio se queda sin uno de ellos, así que al añadir
 un idioma nuevo crea el archivo en todos.
 
+## Tests
+
+El detalle completo (qué cubre cada carpeta, cómo funciona el arnés de binarios simulados
+y qué ejecuta la integración continua) está en [docs/TESTS.md](docs/TESTS.md).
+
 ## Estilo de código
 
 - [PEP 8](https://www.python.org/dev/peps/pep-0008/) y lo que dicte `ruff`.
