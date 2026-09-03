@@ -1,0 +1,8 @@
+tray.action.manage=应用程序
+tray.action.exit=退出
+tray.action.about=关于
+tray.action.refreshing=正在刷新
+tray.settings=设置
+notification.update={} 个可用更新
+notification.updates={} 个可用更新
+tray.warning.update_available={} 有新版本可用（{}）

@@ -448,6 +448,7 @@ manage_window.checkbox.only_installed=Installed
 manage_window.checkbox.only_verified=Verified
 manage_window.checkbox.show_details=Show details
 manage_window.close.transaction.body=There is an operation in progress. Closing now may leave the transaction unfinished.<br>Do you really want to close?
+manage_window.close.transaction.busy=The transaction could not be interrupted: it is still running.<br>Wait for it to finish and close again.
 manage_window.close.transaction.title=Operation in progress
 manage_window.columns.installed=Installed
 manage_window.columns.latest_version=Latest Version

@@ -339,6 +339,25 @@ class CheckLocalesToolTest(unittest.TestCase):
         self.assertEqual(0, limited.returncode, limited.stdout)
         self.assertEqual(1, everything.returncode, everything.stdout)
 
+    def test_a_whole_missing_language_file_is_detected(self):
+        # el fallo más probable al añadir una gem: traducirla solo a «en» y «es». Antes los
+        # idiomas se derivaban de los ficheros presentes, así que uno ausente no se comparaba
+        # con nada y la puerta de la CI lo dejaba pasar.
+        with tempfile.TemporaryDirectory() as root:
+            self.build_tree(root, {'en': {'a': 'A'}, 'es': {'a': 'A'}, 'it': {'a': 'A'}})
+            gem_locale = os.path.join(root, 'bauh', 'gems', 'nueva', 'resources', 'locale')
+            os.makedirs(gem_locale)
+
+            for language in ('en', 'es'):
+                with open(os.path.join(gem_locale, language), 'w', encoding='utf-8') as file_handle:
+                    file_handle.write('nueva.key=Value\n')
+
+            result = self.run_tool(root)
+
+        self.assertEqual(1, result.returncode, result.stdout)
+        self.assertIn('falta el fichero del idioma «it»', result.stdout)
+        self.assertIn('nueva.key', result.stdout)
+
     def test_malformed_line_is_an_error(self):
         with tempfile.TemporaryDirectory() as root:
             self.build_tree(root, {'en': {'a': 'A'}, 'es': {'a': 'A'}})

@@ -185,28 +185,42 @@ def parse_package_line(line: str) -> Optional[Dict[str, Optional[str]]]:
     if not line or line.endswith(':'):
         return None
 
+    # Las estrategias se prueban en cascada y ninguna aborta el análisis: un resumen que
+    # contenga « - » o «|» («ranger - Console file manager | vim-like») haría fracasar a la
+    # especializada, y devolver None ahí borraba el paquete del listado en silencio.
     if '|' in line:
-        return _split_table_line(line)
+        entry = _split_table_line(line)
+
+        if entry:
+            return entry
+
+    entry = _split_columns_line(line)
+
+    if entry:
+        return entry
 
     if ' - ' in line:
         name, summary = line.split(' - ', 1)
         name = name.strip()
 
-        if not RE_PKG_NAME.match(name):
-            return None
+        if RE_PKG_NAME.match(name):
+            return {'name': name, 'version': None, 'release': None, 'summary': summary.strip()}
 
-        return {'name': name, 'version': None, 'release': None, 'summary': summary.strip()}
+    return None
 
+
+def _split_columns_line(line: str) -> Optional[Dict[str, Optional[str]]]:
+    """Analiza una línea de tabla separada por espacios ('nombre versión release resumen')."""
     parts = line.split()
 
-    if not RE_PKG_NAME.match(parts[0]):
+    if not parts or not RE_PKG_NAME.match(parts[0]):
         return None
 
     if len(parts) == 1:
         return {'name': parts[0], 'version': None, 'release': None, 'summary': ''}
 
-    # tabla separada por espacios: sólo se acepta si el segundo campo parece una versión.
-    # Así se descartan frases informativas del tipo "No packages to upgrade."
+    # sólo se acepta si el segundo campo parece una versión. Así se descartan frases
+    # informativas del tipo "No packages to upgrade."
     if not RE_VERSION.match(parts[1]):
         return None
 

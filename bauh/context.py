@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import QApplication
 
 from bauh import __app_name__, __version__
 from bauh.stylesheet import contrast_color, dynamic_color_sources, dynamic_theme_kind, is_dark_color, \
-    parse_gtk_matugen_colors, process_theme, read_default_themes, read_theme_metada, read_theme_vars, read_user_themes
+    normalize_color, parse_gtk_matugen_colors, process_theme, read_default_themes, read_theme_metada, read_theme_vars, read_user_themes
 from bauh.view.util import util, translation
 from bauh.view.util.translation import I18n
 
@@ -217,12 +217,23 @@ def apply_theme_palette(app: QCoreApplication, theme_vars: Dict[str, str]):
         app.setPalette(app.style().standardPalette())
         return
 
-    base = theme_vars.get('inner_widget.background.color') or background
-    text = theme_vars.get('font.color') or contrast_color(background)
-    bright_text = theme_vars.get('font.color.bright') or text
-    disabled = theme_vars.get('disabled.color') or text
-    highlight = theme_vars.get('color.primary') or text
-    button = theme_vars.get('pushbutton.background.color') or background
+    def color(key: str, fallback: str) -> str:
+        """Color del tema normalizado a '#RRGGBB', o el de reserva si no es interpretable.
+
+        QColor no entiende todo lo que sí acepta el QSS y, ante un valor que no reconoce,
+        devuelve negro opaco sin avisar. Con un tema oscuro eso deja negro sobre negro todo
+        lo que Qt dibuja desde la paleta: QMessageBox, QFileDialog, listas desplegables,
+        tooltips nativos. Por eso se valida antes en lugar de confiar en QColor.
+        """
+        return normalize_color(theme_vars.get(key)) or fallback
+
+    background = normalize_color(background) or background
+    text = color('font.color', contrast_color(background))
+    base = color('inner_widget.background.color', background)
+    bright_text = color('font.color.bright', text)
+    disabled = color('disabled.color', text)
+    highlight = color('color.primary', text)
+    button = color('pushbutton.background.color', background)
 
     palette = QPalette()
     palette.setColor(QPalette.Window, QColor(background))

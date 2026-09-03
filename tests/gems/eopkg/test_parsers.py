@@ -329,3 +329,39 @@ class NoiseTest(unittest.TestCase):
 
     def test_strip_ansi(self):
         self.assertEqual('vlc', parsers.strip_ansi('\x1b[32mvlc\x1b[0m'))
+
+
+class SummaryWithSeparatorsTest(unittest.TestCase):
+    """Resúmenes que contienen los propios separadores del formato."""
+
+    def test_a_summary_with_a_dash_does_not_hide_the_package(self):
+        # el formato de cuatro columnas de «eopkg li» deja el resumen al final: si contiene
+        # « - », la estrategia de corte por guion producía un nombre inválido y se descartaba
+        # la línea entera, con lo que el paquete desaparecía de la lista de instalados
+        entry = parsers.parse_package_line('gnome-shell 45.4 5 GNOME Shell - the core user interface')
+
+        self.assertIsNotNone(entry)
+        self.assertEqual('gnome-shell', entry['name'])
+        self.assertEqual('45.4', entry['version'])
+        self.assertEqual('5', entry['release'])
+        self.assertEqual('GNOME Shell - the core user interface', entry['summary'])
+
+    def test_a_summary_with_a_pipe_does_not_hide_the_package(self):
+        entry = parsers.parse_package_line('ranger - Console file manager | vim-like')
+
+        self.assertIsNotNone(entry)
+        self.assertEqual('ranger', entry['name'])
+        self.assertEqual('Console file manager | vim-like', entry['summary'])
+
+    def test_informative_lines_are_still_discarded(self):
+        # «Installed N / M» no entra aquí: es una línea de progreso de «eopkg it», que
+        # analiza parse_install_progress, no el listado de paquetes
+        for line in ('No packages to upgrade.', 'Total download size:', 'Reinstalling:'):
+            with self.subTest(line=line):
+                self.assertIsNone(parsers.parse_package_line(line))
+
+    def test_the_package_list_keeps_them(self):
+        output = ('gnome-shell 45.4 5 GNOME Shell - the core user interface\n'
+                  'vlc 3.0.20 1 VLC media player\n')
+
+        self.assertEqual(['gnome-shell', 'vlc'], [p['name'] for p in parsers.parse_package_list(output)])

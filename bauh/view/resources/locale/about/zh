@@ -1,0 +1,10 @@
+about.title=关于
+about.info.desc=用于管理 Linux 应用程序的图形界面
+about.info.fork={} 的修改版本（fork）
+about.info.link=更多信息见
+about.info.license=自由许可证
+about.info.rate.question=喜欢这个工具吗？
+about.info.rate.answer=在 GitHub 上点个星标来支持这个项目
+about.info.trouble.question=遇到问题了吗？
+about.info.trouble.answer=在 GitHub 上提交 issue，开发者会帮助你
+about.version=版本

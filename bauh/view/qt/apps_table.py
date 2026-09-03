@@ -22,6 +22,11 @@ from bauh.view.qt.thread import URLFileDownloader
 from bauh.view.qt.view_model import PackageView
 from bauh.view.util.translation import I18n
 
+# Hilos que ya no dependen de ninguna ventana y a los que se deja terminar solos. Mantener la
+# referencia aqui evita que el recolector de basura destruya el objeto Python -y con el, el
+# QThread de C++- mientras run() sigue ejecutandose, que Qt castiga con un abort().
+_ORPHAN_THREADS = set()
+
 
 class UpgradeToggleButton(QToolButton):
 
@@ -642,3 +647,25 @@ class PackagesTable(QTableWidget):
                     if not self.file_downloader.wait(self.FILE_DOWNLOADER_WAIT_TIMEOUT):
                         self.logger.warning('The icon downloader thread did not stop within '
                                             f'{2 * self.FILE_DOWNLOADER_WAIT_TIMEOUT} milliseconds')
+
+                        # el hilo sigue vivo con una peticion en vuelo. Se desconecta su senal
+                        # (la tabla esta destruyendose) y se le quita el padre: sin esto Qt
+                        # destruiria un QThread en marcha al morir la ventana, que es un
+                        # qFatal('QThread: Destroyed while thread is still running') -> abort()
+                        self._detach_file_downloader()
+
+    def _detach_file_downloader(self) -> None:
+        """Desliga el descargador de iconos de la tabla y lo deja terminar por su cuenta."""
+        downloader = self.file_downloader
+        self.file_downloader = None
+
+        try:
+            downloader.signal_downloaded.disconnect()
+        except TypeError:  # no habia ninguna conexion
+            pass
+
+        downloader.setParent(None)
+        # la referencia de modulo evita que el recolector de basura destruya el objeto Python
+        # (y con el, el QThread de C++) antes de que run() termine
+        _ORPHAN_THREADS.add(downloader)
+        downloader.finished.connect(lambda: _ORPHAN_THREADS.discard(downloader))

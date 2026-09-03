@@ -112,8 +112,14 @@ class DirReport:
         self.warnings: List[str] = []
 
 
-def check_locale_dir(locale_dir: str, root: str) -> DirReport:
-    """Compara todos los idiomas de un directorio con el de referencia."""
+def check_locale_dir(locale_dir: str, root: str, required_languages: Set[str] = frozenset()) -> DirReport:
+    """Compara todos los idiomas de un directorio con el de referencia.
+
+    ``required_languages`` son idiomas que deben existir aunque el directorio no los tenga:
+    sin ellos, un fichero de idioma entero ausente pasaba inadvertido, porque la lista de
+    idiomas se derivaba de los ficheros presentes. Es justo el caso más probable y más grave:
+    añadir una gem nueva traducida solo a «en» y «es».
+    """
     relative_dir = os.path.relpath(locale_dir, root)
     reference_path = os.path.join(locale_dir, REFERENCE_LANGUAGE)
     report = DirReport()
@@ -126,11 +132,18 @@ def check_locale_dir(locale_dir: str, root: str) -> DirReport:
     report.errors.extend(errors)
     report.warnings.extend(warnings)
 
-    for language in list_languages(locale_dir):
+    for language in sorted(set(list_languages(locale_dir)) | set(required_languages)):
         if language == REFERENCE_LANGUAGE:
             continue
 
-        language_keys, errors, warnings = read_locale_keys(os.path.join(locale_dir, language))
+        language_path = os.path.join(locale_dir, language)
+
+        if not os.path.isfile(language_path):
+            report.missing[language] = set(reference_keys)
+            report.errors.append(f'{relative_dir}: falta el fichero del idioma «{language}»')
+            continue
+
+        language_keys, errors, warnings = read_locale_keys(language_path)
         report.errors.extend(errors)
         report.warnings.extend(warnings)
 
@@ -157,12 +170,21 @@ def main() -> int:
     args = parser.parse_args()
 
     root = os.path.abspath(args.root)
-    required_languages = {lang.strip() for lang in args.languages.split(',') if lang.strip()}
+    # Idiomas cuyas claves ausentes hacen fallar la comprobación. Vacío = todos.
+    blocking_languages = {lang.strip() for lang in args.languages.split(',') if lang.strip()}
     locale_dirs = find_locale_dirs(root)
 
     if not locale_dirs:
         print(f'ERROR: no se encontró ningún directorio de locales bajo {root}', file=sys.stderr)
         return 1
+
+    # Un idioma presente en cualquier directorio debe existir en todos: si no, un fichero de
+    # idioma entero ausente no se comparaba con nada y pasaba inadvertido. Es el caso más
+    # probable al añadir una gem nueva: traducirla solo a «en» y «es».
+    required_languages = set(blocking_languages)
+
+    for locale_dir in locale_dirs:
+        required_languages.update(list_languages(locale_dir))
 
     total_missing = 0
     total_errors = 0
@@ -171,7 +193,7 @@ def main() -> int:
 
     for locale_dir in locale_dirs:
         relative_dir = os.path.relpath(locale_dir, root)
-        report = check_locale_dir(locale_dir, root)
+        report = check_locale_dir(locale_dir, root, required_languages)
         reported_extras.extend(report.extras)
 
         for message in report.errors:
@@ -184,7 +206,7 @@ def main() -> int:
 
         # Si se acotó la comprobación a unos idiomas, el resto solo informa.
         blocking = {lang: keys for lang, keys in report.missing.items()
-                    if not required_languages or lang in required_languages}
+                    if not blocking_languages or lang in blocking_languages}
 
         if not report.missing:
             print(f'OK     {relative_dir}: todos los idiomas cubren las claves de «{REFERENCE_LANGUAGE}»')

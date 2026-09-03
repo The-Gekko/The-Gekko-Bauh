@@ -318,22 +318,63 @@ class PacmanProcessBuildTest(TestCase):
 class PacmanRunningProcessTest(TestCase):
     """Deteccion de un pacman en ejecucion antes de borrar db.lck (F78)."""
 
-    def test_list_running_pacman_pids__detects_the_process(self):
+    @staticmethod
+    def _fake_proc(proc_dir: str, pid: str, comm: str, cmdline: tuple = ()):
+        os.mkdir(f'{proc_dir}/{pid}')
+
+        with open(f'{proc_dir}/{pid}/comm', 'w') as f:
+            f.write(f'{comm}\n')
+
+        with open(f'{proc_dir}/{pid}/cmdline', 'wb') as f:
+            f.write(b'\0'.join(arg.encode() for arg in cmdline))
+
+    def test_list_running_pacman_pids__detects_the_transaction(self):
         with TemporaryDirectory() as proc_dir:
-            for pid, comm in (('101', 'pacman'), ('202', 'firefox'), ('303', 'pacman')):
-                os.mkdir(f'{proc_dir}/{pid}')
-                with open(f'{proc_dir}/{pid}/comm', 'w') as f:
-                    f.write(f'{comm}\n')
+            self._fake_proc(proc_dir, '101', 'pacman', ('pacman', '-S', 'firefox'))
+            self._fake_proc(proc_dir, '202', 'firefox', ('firefox',))
+            self._fake_proc(proc_dir, '303', 'pacman', ('pacman', '-Syu'))
 
             os.mkdir(f'{proc_dir}/self')  # entradas no numericas se ignoran
 
             self.assertEqual({101, 303}, pacman.list_running_pacman_pids(proc_dir))
 
+    def test_list_running_pacman_pids__read_only_queries_do_not_count(self):
+        # el propio bauh lanza estas consultas en segundo plano y no crean db.lck: contarlas
+        # dejaba al usuario sin poder limpiar un bloqueo huerfano
+        with TemporaryDirectory() as proc_dir:
+            self._fake_proc(proc_dir, '101', 'pacman', ('pacman', '-Ql', 'firefox'))
+            self._fake_proc(proc_dir, '202', 'pacman', ('pacman', '-Qi', 'firefox'))
+            self._fake_proc(proc_dir, '303', 'pacman', ('pacman', '-Ss', 'firefox'))
+            self._fake_proc(proc_dir, '404', 'pacman', ('pacman', '-Si', 'firefox'))
+
+            self.assertEqual(set(), pacman.list_running_pacman_pids(proc_dir))
+
+    def test_list_running_pacman_pids__zombies_do_not_count(self):
+        with TemporaryDirectory() as proc_dir:
+            self._fake_proc(proc_dir, '101', 'pacman')  # cmdline vacio: proceso ya terminado
+
+            self.assertEqual(set(), pacman.list_running_pacman_pids(proc_dir))
+
+    def test_is_transactional_pacman(self):
+        for cmdline, expected in ((['pacman', '-S', 'firefox'], True),
+                                  (['pacman', '-Syu'], True),
+                                  (['pacman', '-U', '/tmp/a.pkg.tar.zst'], True),
+                                  (['pacman', '-Rns', 'firefox'], True),
+                                  (['pacman', '--sync', '--refresh'], True),
+                                  (['pacman', '-Ql', 'firefox'], False),
+                                  (['pacman', '-Qi'], False),
+                                  (['pacman', '-Ss', 'firefox'], False),
+                                  (['pacman', '-Sp', 'firefox'], False),
+                                  (['pacman', '--query'], False),
+                                  (['pacman', '-Fy'], False),
+                                  (['pacman'], False),
+                                  ([], False)):
+            with self.subTest(cmdline=cmdline):
+                self.assertEqual(expected, pacman.is_transactional_pacman(cmdline))
+
     def test_list_running_pacman_pids__none_running(self):
         with TemporaryDirectory() as proc_dir:
-            os.mkdir(f'{proc_dir}/101')
-            with open(f'{proc_dir}/101/comm', 'w') as f:
-                f.write('bash\n')
+            self._fake_proc(proc_dir, '101', 'bash', ('bash',))
 
             self.assertEqual(set(), pacman.list_running_pacman_pids(proc_dir))
 

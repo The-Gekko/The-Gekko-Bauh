@@ -452,6 +452,7 @@ manage_window.checkbox.only_installed=Instalados
 manage_window.checkbox.only_verified=Verificados
 manage_window.checkbox.show_details=Mostrar detalhes
 manage_window.close.transaction.body=Há uma operação em andamento. Fechar agora pode deixar a transação incompleta.<br>Deseja realmente fechar?
+manage_window.close.transaction.busy=Não foi possível interromper a transação: ela ainda está em andamento.<br>Espere terminar e feche novamente.
 manage_window.close.transaction.title=Operação em andamento
 manage_window.columns.installed=Instalado
 manage_window.columns.latest_version=Última Versão

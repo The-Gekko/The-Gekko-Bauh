@@ -162,12 +162,74 @@ def map_available_repositories(pkgnames: Collection[str]) -> Dict[str, str]:
     return map_repositories_from_info(output)
 
 
+# Operaciones largas de pacman que escriben en la base de datos y, por tanto, toman db.lck
+TRANSACTIONAL_LONG_OPS = frozenset(('sync', 'upgrade', 'remove', 'database'))
+# Operaciones largas que solo leen
+READ_ONLY_LONG_OPS = frozenset(('query', 'files', 'deptest', 'version', 'help'))
+# Sub-banderas de '-S' que lo convierten en consulta: -Ss, -Si, -Sl, -Sg, -Sp
+SYNC_READ_ONLY_FLAGS = frozenset('silgp')
+
+
+def is_transactional_pacman(cmdline: List[str]) -> bool:
+    """Indica si una invocacion de pacman puede tomar /var/lib/pacman/db.lck.
+
+    Una consulta de solo lectura ('pacman -Ql', '-Qi', '-Ss', '-Si'...) nunca crea el bloqueo,
+    asi que su presencia no debe impedir que el usuario borre un db.lck huerfano. Un cmdline
+    vacio corresponde a un zombi o a un proceso que ya termino: tampoco cuenta.
+    """
+    if not cmdline or len(cmdline) < 2:
+        return False
+
+    for arg in cmdline[1:]:
+        if arg == '--' or not arg.startswith('-'):
+            continue
+
+        if arg.startswith('--'):
+            long_op = arg[2:].split('=')[0]
+
+            if long_op in TRANSACTIONAL_LONG_OPS:
+                return True
+
+            if long_op in READ_ONLY_LONG_OPS:
+                return False
+
+            continue
+
+        letters = arg[1:]
+        op = letters[:1]
+
+        if op in ('Q', 'T', 'V', 'h', 'F'):
+            return False
+
+        if op == 'S':
+            return not (set(letters[1:]) & SYNC_READ_ONLY_FLAGS)
+
+        if op in ('U', 'R', 'D'):
+            return True
+
+    # operacion no reconocida: se asume que escribe, que es el lado seguro para la base de datos
+    return True
+
+
+def read_proc_cmdline(pid: str, proc_dir: str = '/proc') -> List[str]:
+    """Argumentos de un proceso. Devuelve una lista vacia si no se puede leer."""
+    try:
+        with open(f'{proc_dir}/{pid}/cmdline', 'rb') as f:
+            return [arg.decode('utf-8', 'replace') for arg in f.read().split(b'\0') if arg]
+    except OSError:
+        return []
+
+
 def list_running_pacman_pids(proc_dir: str = '/proc') -> Set[int]:
     """
-    Devuelve los PID de los procesos 'pacman' en ejecucion leyendo /proc.
+    Devuelve los PID de las transacciones de pacman en ejecucion leyendo /proc.
 
     Se usa antes de ofrecer el borrado de /var/lib/pacman/db.lck: si hay una transaccion viva,
     eliminar el bloqueo permitiria dos transacciones simultaneas y corromper la base de datos.
+
+    Se excluyen a proposito las consultas de solo lectura, que no crean el bloqueo. El propio
+    bauh lanza muchas ('pacman -Ql', '-Qi', '-Si'...) desde sus tareas de fondo, y contarlas
+    dejaba al usuario sin poder limpiar un bloqueo huerfano mientras la aplicacion trabajaba.
     """
     pids = set()
 
@@ -182,10 +244,13 @@ def list_running_pacman_pids(proc_dir: str = '/proc') -> Set[int]:
 
         try:
             with open(f'{proc_dir}/{entry}/comm') as f:
-                if f.read().strip() == 'pacman':
-                    pids.add(int(entry))
+                if f.read().strip() != 'pacman':
+                    continue
         except (OSError, ValueError):
             continue
+
+        if is_transactional_pacman(read_proc_cmdline(entry, proc_dir)):
+            pids.add(int(entry))
 
     return pids
 

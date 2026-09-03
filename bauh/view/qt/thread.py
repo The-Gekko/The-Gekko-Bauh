@@ -810,7 +810,10 @@ class SearchPackages(AsyncAction):
         self.manager = manager
 
     def _get_error_result(self) -> object:
-        return {'pkgs_found': [], 'error': None}
+        # con 'error' a None, _finish_search presentaria un fallo del gem como una busqueda
+        # correcta sin resultados: el usuario veria «no hay nada» en vez de un aviso, y del
+        # error solo quedaria rastro en el log
+        return {'pkgs_found': [], 'error': 'action.failed'}
 
     def _run(self):
         search_res = {'pkgs_found': [], 'error': None}
@@ -1241,14 +1244,30 @@ class URLFileDownloader(QThread):
         self._max_downloads = max_downloads
         self._stop = False
 
+    # tiempo maximo de una peticion una vez pedida la parada: la ventana esta cerrandose y
+    # nadie va a ver el icono, asi que no tiene sentido esperar los 30 s del caso normal
+    STOPPING_REQUEST_TIMEOUT = 1
+
+    def _should_stop(self) -> bool:
+        # requestInterruption() lo pide Qt desde fuera; self._stop, el propio codigo. Sin
+        # consultar el primero, requestInterruption() era un no-op y la espera acotada de
+        # stop_file_downloader vencia con el hilo dentro de requests.get: al aceptar el cierre,
+        # Qt destruia un QThread en marcha y abortaba el proceso.
+        return self._stop or self.isInterruptionRequested()
+
     def _get(self, url_: str, id_: Optional[object]):
-        if self._stop:
+        if self._should_stop():
             self._logger.info(f"File '{url_}' download cancelled")
             return
 
         try:
             res = requests.get(url=url_, timeout=self._request_timeout)
             content = res.content if res.status_code == 200 else None
+
+            if self._should_stop():
+                # la tabla que recibiria la senal puede estar destruyendose
+                return
+
             self.signal_downloaded.emit(url_, content, id_)
         except Exception as e:
             self._logger.error(f"[ERROR] could not download file from '{url_}': "
@@ -1257,8 +1276,10 @@ class URLFileDownloader(QThread):
     def run(self) -> None:
         download_count = 0
         futures = []
-        with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
-            while not self._stop and (self._max_downloads <= 0 or download_count < self._max_downloads):
+        executor = ThreadPoolExecutor(max_workers=self._max_workers)
+
+        try:
+            while not self._should_stop() and (self._max_downloads <= 0 or download_count < self._max_downloads):
                 try:
                     url_, id_ = self._queue.get(timeout=self._inactivity_timeout)
                     futures.append(executor.submit(self._get, url_, id_))
@@ -1274,11 +1295,19 @@ class URLFileDownloader(QThread):
 
             if cancelled_count > 0:
                 self._logger.info(f"{cancelled_count} file downloads cancelled")
+        finally:
+            # sin 'with': su __exit__ hace shutdown(wait=True) y dejaria el hilo bloqueado
+            # hasta que venciera el timeout de cada peticion en vuelo (hasta 30 s cada una).
+            # Las pendientes ya se cancelaron una a una en el bucle anterior.
+            executor.shutdown(wait=not self._should_stop())
 
         self._logger.info(f"Finished to download files (count={download_count})")
 
     def stop(self) -> None:
         self._stop = True
+        # las peticiones ya en vuelo no son cancelables, pero las que aun no han empezado
+        # deben rendirse enseguida
+        self._request_timeout = min(self._request_timeout, self.STOPPING_REQUEST_TIMEOUT)
 
     def get(self, url: str, id_: Optional[object]):
         final_url = url.strip() if url else None

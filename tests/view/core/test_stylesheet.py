@@ -325,7 +325,10 @@ class ColorUtilsTest(TestCase):
         self.assertEqual('#FFFFFF', stylesheet.blend_colors('#FFFFFF', '#000000', 1))
 
     def test__blend_colors__it_should_return_the_first_color_when_it_cannot_parse(self):
-        self.assertEqual('white', stylesheet.blend_colors('white', '#000000', 0.5))
+        # 'white' sí se interpreta (normalize_color traduce los nombres CSS); lo que no se
+        # puede leer es un valor que no es un color en ningún formato
+        self.assertEqual('#808080', stylesheet.blend_colors('white', '#000000', 0.5))
+        self.assertEqual('var(--acento)', stylesheet.blend_colors('var(--acento)', '#000000', 0.5))
 
     def test__valid_color__it_should_reject_expressions_that_break_the_stylesheet(self):
         self.assertEqual('#161B22', stylesheet.valid_color('#161B22'))
@@ -506,15 +509,19 @@ class VarFileTest(TestCase):
 @unittest.skipUnless(PYQT5_AVAILABLE, 'PyQt5 no disponible')
 class ThemeWatcherTest(TestCase):
 
-    """Comprueba el vigilante de temas de bauh/context.py (usa QCoreApplication, sin GUI)."""
+    """Comprueba el vigilante de temas de bauh/context.py."""
 
     def setUp(self):
-        from PyQt5.QtCore import QCoreApplication
+        # Se crea una QApplication, no una QCoreApplication: la instancia es unica por proceso
+        # y la comparten todos los tests. Con una QCoreApplication, el 'QApplication.instance()'
+        # de los tests que construyen widgets devuelve ese objeto sin GUI y Qt aborta el proceso
+        # entero con «Cannot create a QWidget without QApplication».
+        from PyQt5.QtWidgets import QApplication
 
         from bauh import context
 
         self.context = context
-        self.app = QCoreApplication.instance() or QCoreApplication([])
+        self.app = QApplication.instance() or QApplication([])
         context._THEME_WATCHER = None
         context._THEME_WATCHER_ENABLED = True
         self.logger = logging.getLogger('bauh-test-theme-watcher')
@@ -692,3 +699,51 @@ class ThemeWatcherTest(TestCase):
                     self.app.processEvents()
 
             set_theme.assert_not_called()
+
+
+class NormalizeColorTest(TestCase):
+    """Los ficheros de GTK y Matugen no solo traen hexadecimal."""
+
+    def test_hexadecimal_is_expanded_to_six_digits(self):
+        self.assertEqual('#FFFFFF', stylesheet.normalize_color('#fff'))
+        self.assertEqual('#1E1E2E', stylesheet.normalize_color('#1e1e2e'))
+        self.assertEqual('#1E1E2E', stylesheet.normalize_color('#1e1e2eff'))
+
+    def test_rgb_and_rgba_are_understood(self):
+        # libadwaita y varias plantillas de matugen escriben así los colores
+        self.assertEqual('#1E1E2E', stylesheet.normalize_color('rgb(30, 30, 46)'))
+        self.assertEqual('#1E1E2E', stylesheet.normalize_color('rgba(30, 30, 46, 0.9)'))
+        self.assertEqual('#1E1E2E', stylesheet.normalize_color('rgb(11.8%, 11.8%, 18%)'))
+
+    def test_css_names_are_understood(self):
+        self.assertEqual('#FFFFFF', stylesheet.normalize_color('white'))
+        self.assertEqual('#000000', stylesheet.normalize_color('black'))
+
+    def test_unparseable_values_return_none(self):
+        for value in (None, '', 'var(--acento)', 'rgb(a, b, c)', '#12345'):
+            with self.subTest(value=value):
+                self.assertIsNone(stylesheet.normalize_color(value))
+
+    def test_a_dark_rgb_background_is_recognised_as_dark(self):
+        # antes solo se leía hexadecimal, así que is_dark_color devolvía False y la aplicación
+        # ponía una paleta clara sobre una hoja de estilo oscura
+        self.assertTrue(stylesheet.is_dark_color('rgb(30, 30, 46)'))
+        self.assertEqual('#FFFFFF', stylesheet.contrast_color('rgb(30, 30, 46)'))
+
+
+class PrimaryButtonOverridesTest(TestCase):
+    """El botón primario debe seguir al acento del sistema también al pasar el ratón."""
+
+    def test_hover_and_pressed_derive_from_the_accent(self):
+        overrides = stylesheet.build_dynamic_var_overrides({'accent_color': '#B4A0F5',
+                                                            'window_bg_color': '#1E1E2E',
+                                                            'window_fg_color': '#CDD6F4'})
+
+        for key in ('button_ok.hover.background.color', 'button_ok.pressed.background.color'):
+            with self.subTest(key=key):
+                # el verde fijo de Aurora rompía la sincronización con el fondo de pantalla
+                self.assertNotIn(overrides[key], ('#2EA043', '#1A7F37'))
+                self.assertTrue(overrides[key].startswith('#'))
+
+        self.assertNotEqual(overrides['button_ok.background.color'],
+                            overrides['button_ok.hover.background.color'])

@@ -15,6 +15,7 @@ from bauh.view.qt import commons, qt_utils
 from bauh.view.qt.apps_table import PackagesTable
 from bauh.view.qt.commons import sum_updates_displayed
 from bauh.view.qt.components import new_spacer, IconButton, QtComponentsManager, QSearchBar, QCustomToolbar
+from bauh.view.qt import dialog
 from bauh.view.qt.dialog import ConfirmationDialog
 from bauh.view.qt.qt_utils import get_current_screen_geometry
 from bauh.view.qt.thread import UpgradeSelected, RefreshApps, UninstallPackage, DowngradePackage, ShowPackageInfo, ShowPackageHistory, SearchPackages, InstallPackage, AnimateProgress, NotifyPackagesReady, FindSuggestions, ListWarnings, AsyncAction, LaunchPackage, ApplyFilters, ShowScreenshots, CustomAction, NotifyInstalledLoaded, IgnorePackageUpdates, SaveTheme, StartAsyncAction
@@ -667,19 +668,36 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
         """Indica si hay una transaccion de paquetes en curso (proceso privilegiado en marcha)."""
         return self.current_action_id in BLOCKING_ACTIONS or bool(self._blocking_threads())
 
-    def _stop_action_threads(self, timeout: int = 5000) -> None:
-        """Pide la parada de los hilos de accion vivos y los espera con un limite de tiempo."""
+    def _stop_action_threads(self, timeout: int = 5000) -> bool:
+        """Pide la parada de los hilos de accion vivos y los espera con un limite de tiempo.
+
+        Devuelve False si alguno sigue vivo al agotarse el plazo. Una transaccion de paquetes
+        no es interrumpible a mitad (pacman o eopkg ya estan escribiendo en el sistema), asi
+        que lo unico que se puede hacer es no cerrar sobre ella.
+        """
         running = self._blocking_threads()
 
         for thread in running:
             thread.stop = True
-            thread.wait_confirmation = False
             thread.requestInterruption()
+
+            if thread.wait_confirmation:
+                # el hilo esta detenido en wait_user() esperando una respuesta. Liberarlo sin
+                # mas le devolveria el confirmation_res anterior y podria hacerle CONTINUAR la
+                # transaccion; se le responde que no, que es lo que el cierre significa.
+                thread.confirmation_res = False
+                thread.root_password = (False, None)
+                thread.wait_confirmation = False
+
+        stopped = True
 
         for thread in running:
             if not thread.wait(timeout):
+                stopped = False
                 self.logger.warning(f"The action thread '{thread.__class__.__name__}' did not stop within "
                                     f"{timeout} milliseconds")
+
+        return stopped
 
     def closeEvent(self, event: QCloseEvent) -> None:
         if self.is_transaction_running():
@@ -692,7 +710,15 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
                 event.ignore()
                 return
 
-            self._stop_action_threads()
+            if not self._stop_action_threads():
+                # aceptar el cierre destruiria la QApplication con el QThread de la transaccion
+                # todavia en marcha, y Qt responde a eso con un abort(). Mas vale una ventana
+                # que no se cierra que un proceso muerto a mitad de una instalacion.
+                dialog.show_message(title=self.i18n['warning'].capitalize(),
+                                    body=f"<p>{self.i18n['manage_window.close.transaction.busy']}</p>",
+                                    type_=MessageType.WARNING)
+                event.ignore()
+                return
 
         # needs to be stopped to avoid a Qt exception/crash
         self.table_apps.stop_file_downloader(wait=True)

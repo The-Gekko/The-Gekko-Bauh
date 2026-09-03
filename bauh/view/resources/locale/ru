@@ -452,6 +452,7 @@ manage_window.checkbox.only_installed=Установленные
 manage_window.checkbox.only_verified=Проверено
 manage_window.checkbox.show_details=Показать детали
 manage_window.close.transaction.body=Выполняется операция. Закрытие сейчас может оставить транзакцию незавершённой.<br>Действительно закрыть?
+manage_window.close.transaction.busy=Транзакцию не удалось прервать: она всё ещё выполняется.<br>Дождитесь окончания и закройте снова.
 manage_window.close.transaction.title=Выполняется операция
 manage_window.columns.installed=Установленно
 manage_window.columns.latest_version=Последняя версия

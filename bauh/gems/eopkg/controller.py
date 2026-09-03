@@ -143,22 +143,29 @@ class EopkgManager(SoftwareManager, SettingsController):
         index: Dict[str, dict] = {}
 
         # 'li' clásico: aporta el resumen de cada paquete
-        success, output = self._execute_eopkg(commands.list_installed_command())
+        listed, output = self._execute_eopkg(commands.list_installed_command())
 
-        if success:
+        if listed:
             for entry in parsers.parse_package_list(output):
                 index[entry['name']] = dict(entry)
 
         # 'li --install-info': aporta versión y release
-        success, output = self._execute_eopkg(commands.list_installed_command(install_info=True))
+        detailed, output = self._execute_eopkg(commands.list_installed_command(install_info=True))
 
-        if success:
+        if detailed:
             for entry in parsers.parse_package_list(output):
                 current = index.setdefault(entry['name'], dict(entry))
 
                 if entry.get('version'):
                     current['version'] = entry['version']
                     current['release'] = entry.get('release')
+
+        if not listed and not detailed:
+            # Un fallo puntual (la base de datos bloqueada por un 'eopkg up' en un terminal,
+            # un tiempo de espera agotado) no debe cachearse: si no, durante el resto de la
+            # sesión toda búsqueda mostraría como «nuevos» paquetes que ya están instalados.
+            self.logger.warning("Could not read the installed packages: the index will not be cached")
+            return index
 
         self._installed_index = index
         return index
@@ -300,6 +307,15 @@ class EopkgManager(SoftwareManager, SettingsController):
 
         installed = [pkg]
         index = self._read_installed_index(refresh=True)
+
+        # 'eopkg sr' no da la versión, así que el paquete creado por search() llega sin ella y
+        # la tabla mostraría «?» justo en la fila que el usuario acaba de instalar, mientras
+        # sus dependencias sí la traen. El índice recién releído ya la tiene.
+        own_data = index.get(pkg.name)
+
+        if own_data and own_data.get('version'):
+            pkg.version = parsers.format_version(own_data.get('version'), own_data.get('release'))
+            pkg.latest_version = pkg.version
 
         # eopkg instala también las dependencias: se reportan para que la vista las conozca
         for name in parsers.parse_installed_packages(output):

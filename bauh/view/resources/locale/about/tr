@@ -1,0 +1,10 @@
+about.title=hakkında
+about.info.desc=Linux uygulamalarınızı yönetmek için grafik arayüz
+about.info.fork={} projesinin değiştirilmiş sürümü (fork)
+about.info.link=Daha fazla bilgi
+about.info.license=Özgür lisans
+about.info.rate.question=Bu araç hoşunuza gitti mi?
+about.info.rate.answer=Projeyi desteklemek için GitHub üzerinde yıldız verin
+about.info.trouble.question=Bir sorun mu var?
+about.info.trouble.answer=Geliştiricilerin yardımcı olabilmesi için GitHub üzerinde bir issue açın
+about.version=sürüm

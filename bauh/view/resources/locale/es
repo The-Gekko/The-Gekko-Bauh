@@ -453,6 +453,7 @@ manage_window.checkbox.only_installed=Instalados
 manage_window.checkbox.only_verified=Verificados
 manage_window.checkbox.show_details=Mostrar detalles
 manage_window.close.transaction.body=Hay una operación en curso. Cerrar ahora puede dejar la transacción a medias.<br>¿Seguro que quieres cerrar?
+manage_window.close.transaction.busy=La transacción no se ha podido interrumpir: sigue en curso.<br>Espera a que termine y vuelve a cerrar.
 manage_window.close.transaction.title=Operación en curso
 manage_window.columns.installed=Instaladas
 manage_window.columns.latest_version=Versión más reciente

@@ -448,6 +448,7 @@ manage_window.checkbox.only_installed=Installierte
 manage_window.checkbox.only_verified=Verifiziert
 manage_window.checkbox.show_details=Details anzeigen
 manage_window.close.transaction.body=Es läuft gerade ein Vorgang. Jetzt zu schließen kann die Transaktion unvollständig lassen.<br>Möchten Sie wirklich schließen?
+manage_window.close.transaction.busy=Der Vorgang ließ sich nicht abbrechen: er läuft weiter.<br>Warten Sie, bis er endet, und schließen Sie erneut.
 manage_window.close.transaction.title=Vorgang läuft
 manage_window.columns.installed=Installiert
 manage_window.columns.latest_version=Neueste Version

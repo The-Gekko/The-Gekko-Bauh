@@ -21,6 +21,7 @@ RE_HEX_COLOR = re.compile(r'^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})
 RE_DEFINE_COLOR = re.compile(r'@define-color\s+([\w\-]+)\s+([^;]+);')
 RE_CSS_IMPORT = re.compile(r'@import\s+(?:url\()?["\']?([^"\')\s]+)["\']?\)?\s*;')
 RE_COLOR_FUNCTION = re.compile(r'^(?:alpha|shade|mix|darker|lighter|transparentize)\s*\((.+)\)$', re.IGNORECASE)
+RE_RGB_FUNCTION = re.compile(r'^rgba?\(([^()]*)\)$', re.IGNORECASE)
 
 # claves de los temas que derivan sus colores del sistema en tiempo real
 DYNAMIC_THEME_KEYS = ('matugen', 'gtk')
@@ -334,8 +335,94 @@ def _resolve_color_references(raw: Dict[str, str], logger: Optional[Logger] = No
     return final
 
 
+# Nombres CSS que aparecen de verdad en los temas de GTK y en las plantillas de Matugen. Se
+# usan como respaldo cuando PyQt5 no está disponible (la suite sin Qt de la integración continua).
+CSS_COLOR_NAMES = {'black': '#000000', 'white': '#FFFFFF', 'red': '#FF0000', 'green': '#008000',
+                   'blue': '#0000FF', 'gray': '#808080', 'grey': '#808080', 'silver': '#C0C0C0',
+                   'transparent': '#000000', 'orange': '#FFA500', 'yellow': '#FFFF00',
+                   'purple': '#800080', 'navy': '#000080', 'teal': '#008080', 'lime': '#00FF00',
+                   'maroon': '#800000', 'olive': '#808000', 'aqua': '#00FFFF', 'cyan': '#00FFFF',
+                   'fuchsia': '#FF00FF', 'magenta': '#FF00FF'}
+
+
+def _color_name_to_hex(name: str) -> Optional[str]:
+    """Traduce un nombre de color CSS a '#RRGGBB'."""
+    try:
+        from PyQt5.QtGui import QColor
+
+        color = QColor(name)
+
+        if color.isValid():
+            return f'#{color.red():02X}{color.green():02X}{color.blue():02X}'
+    except ImportError:
+        pass
+
+    return CSS_COLOR_NAMES.get(name)
+
+
+def _parse_rgb_function(color: str) -> Optional[Tuple[int, int, int]]:
+    """Convierte 'rgb(r, g, b)' o 'rgba(r, g, b, a)' en una tupla RGB. Acepta porcentajes."""
+    match = RE_RGB_FUNCTION.match(color.strip())
+
+    if not match:
+        return None
+
+    args = [arg.strip() for arg in _split_css_args(match.group(1))]
+
+    if len(args) not in (3, 4):
+        return None
+
+    channels = []
+
+    for arg in args[:3]:
+        try:
+            value = float(arg[:-1]) * 255 / 100 if arg.endswith('%') else float(arg)
+        except ValueError:
+            return None
+
+        channels.append(max(0, min(255, int(round(value)))))
+
+    return channels[0], channels[1], channels[2]
+
+
+def normalize_color(color: Optional[str]) -> Optional[str]:
+    """Devuelve el color como '#RRGGBB', o None si no se puede interpretar.
+
+    Los ficheros de GTK y de Matugen declaran colores como 'rgb(30, 30, 46)' o con nombres CSS
+    ('white'), formatos que Qt entiende en una hoja de estilo pero que el resto de utilidades de
+    este módulo (luminancia, mezcla, contraste) no sabían leer: devolvían None y la paleta
+    derivada acababa pintando texto negro sobre fondo oscuro.
+    """
+    if not color:
+        return None
+
+    value = color.strip()
+
+    if RE_HEX_COLOR.match(value):
+        digits = value[1:]
+
+        if len(digits) in (3, 4):
+            digits = ''.join(char * 2 for char in digits)
+
+        return f'#{digits[:6].upper()}'
+
+    rgb = _parse_rgb_function(value)
+
+    if rgb is not None:
+        return '#{:02X}{:02X}{:02X}'.format(*rgb)
+
+    return _color_name_to_hex(value.lower())
+
+
 def _parse_hex_color(color: Optional[str]) -> Optional[Tuple[int, int, int]]:
-    """Convierte un color hexadecimal en una tupla RGB (ignora el canal alfa)."""
+    """Convierte un color en una tupla RGB (ignora el canal alfa)."""
+    normalized = normalize_color(color)
+
+    if not normalized:
+        return None
+
+    color = normalized
+
     if not color or not RE_HEX_COLOR.match(color.strip()):
         return None
 
@@ -422,6 +509,10 @@ def build_dynamic_var_overrides(colors: Dict[str, str],
     muted = blend_colors(fg, bg, 0.65)
     disabled = blend_colors(fg, bg, 0.45)
     hover = blend_colors(card_bg, fg, 0.9)
+    # el boton primario se aclara al pasar el raton y se oscurece al pulsarlo, igual que hace
+    # Aurora con su verde, pero partiendo del acento del sistema
+    ok_hover = blend_colors(accent, fg, 0.85)
+    ok_pressed = blend_colors(accent, bg, 0.75)
 
     return {
         'color.primary': accent,
@@ -460,6 +551,10 @@ def build_dynamic_var_overrides(colors: Dict[str, str],
         'console.font.color': fg,
         'button_ok.background.color': accent,
         'button_ok.font.color': accent_fg,
+        # sin estas dos, el boton primario saltaba al verde fijo de Aurora al pasar el raton,
+        # rompiendo justo la sincronizacion con el sistema que estos temas persiguen
+        'button_ok.hover.background.color': ok_hover,
+        'button_ok.pressed.background.color': ok_pressed,
         'menu.item.selected.background.color': accent,
         'menu.item.selected.font.color': accent_fg,
         'table.selection.background.color': card_bg,

@@ -448,6 +448,7 @@ manage_window.checkbox.only_installed=已安装
 manage_window.checkbox.only_verified=已验证
 manage_window.checkbox.show_details=显示详细信息
 manage_window.close.transaction.body=有一个操作正在进行。现在关闭可能会使事务处于未完成状态。<br>确定要关闭吗？
+manage_window.close.transaction.busy=无法中断事务：它仍在运行。<br>请等待其结束后再关闭。
 manage_window.close.transaction.title=操作进行中
 manage_window.columns.installed=已安装
 manage_window.columns.latest_version=最新版本

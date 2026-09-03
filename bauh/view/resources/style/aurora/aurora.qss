@@ -416,11 +416,11 @@ QPushButton#ok {
 }
 
 QPushButton#ok:hover {
-    background-color: #2EA043;
+    background-color: @button_ok.hover.background.color;
 }
 
 QPushButton#ok:pressed {
-    background-color: #1A7F37;
+    background-color: @button_ok.pressed.background.color;
 }
 
 /* ── Prepare Panel ───────────────────────────────────────────────────── */

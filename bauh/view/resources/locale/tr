@@ -453,6 +453,7 @@ manage_window.checkbox.only_installed=Yüklü
 manage_window.checkbox.only_verified=Doğrulandı
 manage_window.checkbox.show_details=Detayları göster
 manage_window.close.transaction.body=Devam eden bir işlem var. Şimdi kapatmak işlemi yarım bırakabilir.<br>Gerçekten kapatmak istiyor musunuz?
+manage_window.close.transaction.busy=İşlem kesilemedi: hâlâ sürüyor.<br>Bitmesini bekleyin ve tekrar kapatın.
 manage_window.close.transaction.title=İşlem sürüyor
 manage_window.columns.installed=Yüklü
 manage_window.columns.latest_version=Son sürüm

@@ -454,6 +454,7 @@ manage_window.checkbox.only_installed=Installate
 manage_window.checkbox.only_verified=Verificati
 manage_window.checkbox.show_details=Mostra dettagli
 manage_window.close.transaction.body=È in corso un'operazione. Chiudere ora può lasciare la transazione incompleta.<br>Vuoi davvero chiudere?
+manage_window.close.transaction.busy=Non è stato possibile interrompere la transazione: è ancora in corso.<br>Attendi che finisca e chiudi di nuovo.
 manage_window.close.transaction.title=Operazione in corso
 manage_window.columns.installed=Installato
 manage_window.columns.latest_version=Ultima Versione
