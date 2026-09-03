@@ -2,7 +2,7 @@
 
 # 🦎 bauh Gekko Edition
 
-### Fork de [bauh](https://github.com/vinifmor/bauh) centrado en Arch Linux (pacman + AUR + repositorios adicionales) y Solus (eopkg)
+### Fork de [bauh](https://github.com/vinifmor/bauh) centrado en Arch Linux (pacman + AUR + Chaotic AUR), Flatpak y Solus (eopkg)
 
 <p align="center">
   <a href="https://github.com/The-Gekko/Bauh-Fork-The-Gekko/releases"><img src="https://img.shields.io/github/v/tag/The-Gekko/Bauh-Fork-The-Gekko?label=Versi%C3%B3n&sort=semver" alt="Versión"></a>
@@ -26,11 +26,12 @@
 > sin publicar). Detalles en [CHANGELOG.md](CHANGELOG.md) y [CREDITS.md](CREDITS.md).
 
 **bauh** (pronunciado _baoo_) es una interfaz gráfica en PyQt5 para buscar,
-instalar, actualizar y desinstalar software en Linux. Esta edición se centra en
-**Arch Linux y derivados** (pacman, AUR y cualquier repositorio adicional de
-pacman, por ejemplo Chaotic AUR) y añade soporte para **Solus (eopkg)**. Los
-demás formatos que gestiona el bauh original (AppImage, Flatpak, Snap, Web,
-Debian) siguen incluidos, pero **desactivados por defecto**: se activan en
+instalar, actualizar y desinstalar software en Linux. El alcance de esta edición
+son tres plataformas: **Arch Linux y derivados** (pacman, AUR y cualquier
+repositorio adicional de pacman, por ejemplo Chaotic AUR), **Flatpak** y
+**Solus (eopkg)**. Las tres vienen activadas de fábrica. Los demás formatos que
+gestiona el bauh original (AppImage, Snap, Web, Debian) siguen incluidos, pero
+**desactivados por defecto** y sin soporte activo: se activan en
 `Ajustes → Tipos de aplicaciones`.
 
 ## Índice
@@ -108,9 +109,10 @@ punto es comprobable en el código o en la propia interfaz.
   ninguna «protección anti-scripts»: compilar código de terceros es tu
   responsabilidad. Los clones se guardan en `~/BauhRepos` (clave `repos_dir`
   de `~/.config/bauh/github.yml`).
-- **Gems heredadas opt-in**: AppImage, Flatpak, Snap, Web y Debian vienen
-  desactivadas. Se activan en `Ajustes → Tipos de aplicaciones` (o con la
-  clave `gems` de `config.yml`).
+- **Gems heredadas opt-in**: AppImage, Snap, Web y Debian vienen desactivadas
+  y sin soporte activo. Se activan en `Ajustes → Tipos de aplicaciones` (o con
+  la clave `gems` de `config.yml`). Arch, Flatpak y eopkg, que son el alcance
+  del fork, siguen activadas por defecto.
 
 ### Seguridad
 
@@ -153,7 +155,10 @@ son mérito de este fork:
 - Lectura de instalados y búsquedas en paralelo, descargador propio en Python,
   filtro «verificado», icono de bandeja con aviso de actualizaciones y CLI
   `bauh-cli updates`.
-- Todos los demás gestores: AppImage, Flatpak, Snap, Web (nativefier) y
+- El gestor de **Flatpak** (búsqueda en Flathub, instalación por usuario o para
+  todo el sistema, actualización de runtimes), que el fork mantiene dentro de su
+  alcance.
+- Los demás gestores, ya sin soporte activo: AppImage, Snap, Web (nativefier) y
   Debian.
 
 ## Requisitos
@@ -289,8 +294,8 @@ los datos de usuario. En resumen:
 
 - **Oficial → fork**: desinstala el paquete `bauh` del sistema (o deja que el
   instalador lo haga con `--remove-system-bauh`) y ejecuta `install.sh`. Tu
-  configuración se conserva; las gems AppImage/Flatpak/Snap/Web/Debian pasan a
-  estar desactivadas hasta que las marques en `Ajustes → Tipos de aplicaciones`.
+  configuración se conserva; las gems AppImage/Snap/Web/Debian pasan a estar
+  desactivadas hasta que las marques en `Ajustes → Tipos de aplicaciones`.
 - **Fork → oficial**: ejecuta `install.sh uninstall` (con `--purge` si quieres
   limpiar todo) y acepta restablecer `ui.theme`; después instala el oficial
   (`sudo pacman -S bauh` o `pipx install bauh`). Si conservas la configuración

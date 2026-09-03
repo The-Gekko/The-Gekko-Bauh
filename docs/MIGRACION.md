@@ -30,7 +30,7 @@ qué no, y los pasos exactos en cada dirección.
 |---|---|---|
 | `ui.theme` | `aurora`, `gtk`, `matugen` | El oficial no tiene esos temas: arranca **sin hoja de estilos** (aspecto Fusion plano, sin error visible) hasta que elijas otro tema en sus ajustes. Los valores compartidos son `light`, `darcula`, `default`, `knight` y `sublime`. |
 | `custom_theme` (color de fondo, texto, acento, opacidad, imagen) | Objeto | Ignorado. |
-| `gems` | Lista con `arch`, `eopkg`, `github`, ... | Los nombres que el oficial no conoce (`eopkg`, `github`) se ignoran. **Ojo**: como la lista existe, el oficial solo activará las gems que aparezcan en ella; AppImage/Flatpak/Snap/Web/Debian quedarán desactivadas hasta que las marques en sus ajustes o borres la clave (`gems: null` = todas las que el sistema permita). |
+| `gems` | Lista con `arch`, `flatpak`, `eopkg`, `github`, ... | Los nombres que el oficial no conoce (`eopkg`, `github`) se ignoran. **Ojo**: como la lista existe, el oficial solo activará las gems que aparezcan en ella; AppImage/Snap/Web/Debian quedarán desactivadas hasta que las marques en sus ajustes o borres la clave (`gems: null` = todas las que el sistema permita). |
 
 En sentido contrario no hay problema: el fork entiende todas las claves del
 oficial. La única diferencia al llegar desde el oficial es que las gems
@@ -52,9 +52,10 @@ usabas, actívalas en `Ajustes → Tipos de aplicaciones`.
    No es obligatorio desinstalarlo, pero si conviven, `bauh` en el `PATH`
    puede resolver a uno u otro según el orden de `~/.local/bin` y `/usr/bin`,
    y los dos `.desktop` se llaman igual.
-4. Abre el fork. Tu configuración se conserva. Revisa
-   `Ajustes → Tipos de aplicaciones` y marca AppImage/Flatpak/Snap/Web/Debian
-   si las quieres; el tema cambia a Aurora solo si no tenías uno configurado.
+4. Abre el fork. Tu configuración se conserva. Arch, Flatpak y eopkg quedan
+   activas; revisa `Ajustes → Tipos de aplicaciones` y marca
+   AppImage/Snap/Web/Debian si las quieres. El tema cambia a Aurora solo si no
+   tenías uno configurado.
 
 ## 4. Del fork al bauh oficial (vuelta atrás)
 

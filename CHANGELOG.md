@@ -43,9 +43,10 @@ El esquema de versiones del fork es `<versión upstream>+gekko.N`
   (las excepciones no controladas quedan en el log).
 
 ### Improvements
-- Gems heredadas **AppImage, Flatpak, Snap, Web y Debian desactivadas por
-  defecto** (opt-in en `Ajustes → Tipos de aplicaciones`). La gem GitHub
-  también es opt-in.
+- Alcance del fork acotado a **Arch/AUR/Chaotic AUR, Flatpak y Solus (eopkg)**:
+  esas tres gems siguen activadas por defecto. Las heredadas **AppImage, Snap,
+  Web y Debian pasan a estar desactivadas** (opt-in en `Ajustes → Tipos de
+  aplicaciones`) y sin soporte activo. La gem GitHub también es opt-in.
 - Arch: `get_databases` reconoce repositorios con guion o guion bajo
   (`chaotic-aur`, `arcolinux_repo`, ...); la búsqueda deduplica un mismo
   paquete presente en un repositorio y en AUR prefiriendo el binario.

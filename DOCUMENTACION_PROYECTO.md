@@ -17,12 +17,13 @@ El punto de entrada principal es `bauh.app:main`; también existen una
 aplicación para la bandeja del sistema y una interfaz de línea de comandos
 limitada a la consulta de actualizaciones.
 
-El fork se orienta a Arch Linux y derivados (pacman, AUR y cualquier
-repositorio adicional de pacman) y a Solus (eopkg). El árbol conserva los
-gestores del upstream para AppImage, Debian, Flatpak, Snap y Web, pero estos
-están **desactivados por defecto** (`is_default_enabled()` devuelve `False`) y
-el usuario los activa en `Ajustes → Tipos de aplicaciones`. La gem GitHub,
-propia del fork, también es opt-in. La disponibilidad real de cada gestor
+El alcance del fork son tres plataformas: Arch Linux y derivados (pacman, AUR y
+cualquier repositorio adicional de pacman), Flatpak y Solus (eopkg). Esas tres
+gems están activadas por defecto. El árbol conserva los gestores del upstream
+para AppImage, Debian, Snap y Web, pero estos están **desactivados por defecto**
+(`is_default_enabled()` devuelve `False`), sin soporte activo, y el usuario los
+activa en `Ajustes → Tipos de aplicaciones`. La gem GitHub, propia del fork,
+también es opt-in. La disponibilidad real de cada gestor
 depende además de `can_work()`: comandos, servicios y configuración presentes
 en el sistema anfitrión.
 
@@ -123,9 +124,9 @@ muestra las actualizaciones disponibles.
 
 - Si `/etc/bauh/gems.forbidden` lista la gem, no se carga.
 - Si `config.yml` no tiene la clave `gems` (valor `null`), cada gem queda
-  activada según su propio `is_default_enabled()`: `True` para `arch` y
-  `eopkg` (esta última solo si `can_work()` encuentra el binario `eopkg`);
-  `False` para `appimage`, `debian`, `flatpak`, `snap`, `web` y `github`.
+  activada según su propio `is_default_enabled()`: `True` para `arch`,
+  `flatpak` y `eopkg` (esta última solo si `can_work()` encuentra el binario
+  `eopkg`); `False` para `appimage`, `debian`, `snap`, `web` y `github`.
 - Si `gems` es una lista, se activan exactamente las que aparecen en ella.
   La pestaña `Tipos de aplicaciones` de Ajustes escribe esa lista.
 
@@ -336,7 +337,7 @@ restantes encapsulan consultas, comandos, workers, configuración o UI propia.
 | `github/` | No (opt-in) | Propia del fork. `controller.py` clona repositorios en `repos_dir` (`~/BauhRepos`), detecta el método de build con `build_detector.py`, muestra el comando, pide confirmación y separa compilación (usuario) de instalación (root); `model.py` representa proyectos; `config.py` (`repos_dir`, `clone_only`). |
 | `appimage/` | No (opt-in) | `controller.py`, `query.py`, `util.py`, `worker.py`: ciclo de vida de AppImages desde la base de datos del upstream. |
 | `debian/` | No (opt-in) | `controller.py`, `aptitude.py`, `index.py`, `tasks.py`, `gui.py`: APT/aptitude. |
-| `flatpak/` | No (opt-in) | `controller.py`, `flatpak.py`, `worker.py`, `constants.py`. |
+| `flatpak/` | Sí (si hay `flatpak`) | Dentro del alcance del fork. `controller.py`, `flatpak.py`, `worker.py`, `constants.py`. |
 | `snap/` | No (opt-in) | `controller.py`, `snap.py`, `snapd.py`. |
 | `web/` | No (opt-in) | `controller.py`, `search.py`, `nativefier.py`, `environment.py`, `worker.py`: aplicaciones web empaquetadas con nativefier. |
 
