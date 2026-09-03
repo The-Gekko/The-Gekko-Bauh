@@ -42,6 +42,18 @@ def qt_message_handler(mode, context, message):
     sys.stderr.write(f'[qt:{level}] {message}\n')
 
 
+def _in_gui_thread() -> bool:
+    """Indica si el hilo actual es aquel donde vive la QApplication."""
+    try:
+        from PyQt5.QtCore import QThread
+        from PyQt5.QtWidgets import QApplication
+
+        app = QApplication.instance()
+        return app is not None and QThread.currentThread() is app.thread()
+    except Exception:
+        return False
+
+
 def _show_error_dialog(exc_type, exc_value) -> bool:
     """Muestra el error en un dialogo Qt. Devuelve False si no ha sido posible."""
     try:
@@ -64,6 +76,25 @@ def _show_error_dialog(exc_type, exc_value) -> bool:
         return False
 
 
+def _queue_error_dialog(exc_type, exc_value) -> bool:
+    """Pide al hilo de la GUI que muestre el dialogo. Devuelve False si no ha sido posible."""
+    try:
+        from PyQt5.QtCore import QTimer
+        from PyQt5.QtWidgets import QApplication
+
+        app = QApplication.instance()
+
+        if app is None:
+            return False
+
+        # el temporizador se crea con la QApplication como padre, que vive en el hilo
+        # principal: Qt entrega alli el disparo aunque se programe desde un hilo trabajador
+        QTimer.singleShot(0, app, lambda: _show_error_dialog(exc_type, exc_value))
+        return True
+    except Exception:
+        return False
+
+
 def new_excepthook(logger: logging.Logger):
     """Genera un manejador global de excepciones que registra en vez de dejar abortar a PyQt5."""
 
@@ -75,10 +106,40 @@ def new_excepthook(logger: logging.Logger):
         logger.error('Unhandled exception', exc_info=(exc_type, exc_value, exc_tb))
         traceback.print_exception(exc_type, exc_value, exc_tb, file=sys.stderr)
 
+        if not _in_gui_thread():
+            # Qt prohibe crear QWidget fuera del hilo de la GUI: hacerlo aborta el proceso en
+            # xcb/wayland, y ademas exec_() dejaria el hilo trabajador atrapado en su propio
+            # bucle de eventos. Se encola el dialogo en el hilo principal y se sale.
+            if not _queue_error_dialog(exc_type, exc_value):
+                logger.debug('Could not queue the unhandled exception dialog')
+            return
+
         if not _show_error_dialog(exc_type, exc_value):
             logger.debug('Could not display the unhandled exception dialog')
 
     return _excepthook
+
+
+def _resolve_signal_target(widget):
+    """Devuelve la ventana que debe atender el cierre en el momento de recibir la senal.
+
+    El panel de preparacion se autocierra al terminar y cede el paso a la ventana de gestion,
+    pero es el que se captura al arrancar. Cerrar el panel oculto entra por su rama 'self_close'
+    y termina la aplicacion sin pedir la confirmacion de «hay una operacion en curso» ni parar
+    los hilos de la ventana de gestion, que es la que el usuario tiene delante.
+    """
+    nested = getattr(widget, 'manage_window', None)
+
+    if nested is None:
+        return widget
+
+    try:
+        if nested.isVisible() and not widget.isVisible():
+            return nested
+    except RuntimeError:  # el objeto C++ subyacente ya fue destruido
+        pass
+
+    return widget
 
 
 def install_signal_handlers(app: QCoreApplication, widget, logger: logging.Logger) -> Optional[QTimer]:
@@ -92,12 +153,14 @@ def install_signal_handlers(app: QCoreApplication, widget, logger: logging.Logge
 
         logger.info(f'signal {name} received: shutting down')
 
+        target = _resolve_signal_target(widget)
+
         closed = True
         try:
-            if hasattr(widget, 'quit_application'):
-                widget.quit_application()
-            elif hasattr(widget, 'close'):
-                closed = bool(widget.close())
+            if hasattr(target, 'quit_application'):
+                target.quit_application()
+            elif hasattr(target, 'close'):
+                closed = bool(target.close())
         except Exception:
             logger.exception('Could not close the main widget')
 

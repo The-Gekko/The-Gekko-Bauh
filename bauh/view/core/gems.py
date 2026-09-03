@@ -9,7 +9,13 @@ from bauh import __app_name__, ROOT_DIR
 from bauh.api.abstract.controller import SoftwareManager, ApplicationContext
 from bauh.view.util import translation
 
+# Politica del administrador del equipo. Se leen las dos rutas y se unen las listas: la heredada
+# es literal a proposito, para respetar una prohibicion que el sistema ya tuviera puesta antes de
+# instalar este proyecto, y la propia permite configurarlo con el nombre nuevo. Por eso la ruta
+# heredada NO se deriva de __app_name__.
+LEGACY_FORBIDDEN_GEMS_FILE = '/etc/bauh/gems.forbidden'
 FORBIDDEN_GEMS_FILE = f'/etc/{__app_name__}/gems.forbidden'
+FORBIDDEN_GEMS_FILES = (LEGACY_FORBIDDEN_GEMS_FILE, FORBIDDEN_GEMS_FILE)
 
 
 def find_manager(member):
@@ -24,18 +30,18 @@ def find_manager(member):
 
 
 def read_forbidden_gems() -> Generator[str, None, None]:
-    try:
-        with open(FORBIDDEN_GEMS_FILE) as f:
-            forbidden_lines = f.readlines()
+    for file_path in FORBIDDEN_GEMS_FILES:
+        try:
+            with open(file_path) as f:
+                forbidden_lines = f.readlines()
+        except FileNotFoundError:
+            continue
 
         for line in forbidden_lines:
             clean_line = line.strip()
 
             if clean_line and not clean_line.startswith('#'):
                 yield clean_line
-
-    except FileNotFoundError:
-        pass
 
 
 def load_managers(locale: str, context: ApplicationContext, config: dict, default_locale: str, logger: Logger) -> List[SoftwareManager]:

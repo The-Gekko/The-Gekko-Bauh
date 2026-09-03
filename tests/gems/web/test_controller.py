@@ -2,6 +2,7 @@ from unittest import TestCase
 from unittest.mock import Mock, patch
 
 from bauh import __package_name__
+from bauh import __app_name__
 from bauh.gems.web import PIPX_INJECT_COMMAND
 from bauh.gems.web.controller import DEFAULT_LANGUAGE_HEADER
 from bauh.gems.web.controller import WebApplicationManager
@@ -31,7 +32,9 @@ class WebApplicationManagerTest(TestCase):
         self.assertIn('beautifulsoup4', reason)
         self.assertIn('lxml', reason)
         self.assertIn(PIPX_INJECT_COMMAND, reason)
-        self.assertIn('pipx inject bauh-gekko', reason)
+        # el nombre debe ser el de la distribucion instalable (pyproject/install.sh), porque el
+        # usuario copia y pega el comando: con cualquier otro pipx responde «is not installed»
+        self.assertIn(f'pipx inject {__app_name__}', reason)
         # no deben citarse paquetes de Debian: bajo pipx no sirven
         self.assertNotIn('python3-', reason)
 

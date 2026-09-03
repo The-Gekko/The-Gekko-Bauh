@@ -106,6 +106,12 @@ license-files = ["LICENSE"]
 version = { attr = "bauh.__version__" }
 
 [tool.setuptools.packages.find]
+# «namespaces = false» reproduce el find_packages() del antiguo setup.py: solo se empaquetan
+# directorios con __init__.py. Con el valor por defecto (true) se colaban como paquetes de
+# primer nivel «tools» y, al construir el wheel directamente del arbol (lo que hace pipx con
+# un directorio o un zip), tambien «docs», «pictures», «linux_dist» y «dist».
+namespaces = false
+include = ["bauh", "bauh.*"]
 exclude = ["tests", "tests.*"]
 
 [tool.setuptools.package-data]

@@ -497,7 +497,8 @@ reset_fork_theme() {
         cat "$tmp_config" > "$config_file"
         info "Tema restablecido a 'light'."
     else
-        warning 'No se pudo reescribir la configuración; déjalo en manos de «bauh --reset».'
+        warning "No se pudo reescribir $config_file."
+        warning 'Cambia «ui.theme» a «light» a mano, o desde los ajustes del bauh oficial.'
     fi
     rm -f "$tmp_config"
 }
@@ -528,6 +529,36 @@ remove_venv_manually() {
     rm -rf "${venvs:?}/$name"
 }
 
+purge_dir_preserving_repos() {
+    # Borra un directorio de datos conservando "github/repos", donde la gem GitHub clona los
+    # repositorios del usuario. Pueden contener trabajo local sin publicar, así que ni --purge
+    # los toca: es lo que prometen el README, docs/MIGRACION.md y la propia gem.
+    local path="$1"
+    local repos="$path/github/repos"
+
+    if [[ ! -d "$repos" ]]; then
+        rm -rf "$path"
+        info "Eliminado: $path"
+        return
+    fi
+
+    local entry
+    for entry in "$path"/* "$path"/.[!.]*; do
+        [[ -e "$entry" ]] || continue
+        [[ "$entry" == "$path/github" ]] && continue
+        rm -rf "$entry"
+    done
+
+    # dentro de "github" solo sobrevive "repos"
+    for entry in "$path"/github/* "$path"/github/.[!.]*; do
+        [[ -e "$entry" ]] || continue
+        [[ "$entry" == "$repos" ]] && continue
+        rm -rf "$entry"
+    done
+
+    info "Eliminado: $path (se conserva $repos)"
+}
+
 purge_user_data() {
     local user_name
     user_name="$(id -un)"
@@ -552,8 +583,7 @@ purge_user_data() {
     local path
     for path in "${paths[@]}"; do
         if [[ -d "$path" ]]; then
-            rm -rf "$path"
-            info "Eliminado: $path"
+            purge_dir_preserving_repos "$path"
         fi
     done
 
@@ -562,12 +592,19 @@ purge_user_data() {
         warning 'bauh oficial. Bórralo a mano solo si no lo tienes instalado.'
     fi
 
-    # Los repositorios clonados por la gem GitHub (~/BauhRepos por defecto)
-    # pueden contener trabajo del usuario: nunca se borran sin preguntar.
-    if [[ -d "$HOME/BauhRepos" ]]; then
-        warning "Los repositorios clonados en $HOME/BauhRepos no se borran automáticamente."
-        warning 'Revísalos y elimínalos a mano si ya no los necesitas.'
-    fi
+    # Los repositorios clonados por la gem GitHub pueden contener trabajo del usuario sin
+    # publicar: nunca se borran. El directorio por defecto vive dentro de los datos de la
+    # aplicación, así que purge_dir_preserving_repos lo salva de la purga; el heredado
+    # (~/BauhRepos) queda fuera de todas las rutas anteriores.
+    local repos_dir
+    for repos_dir in "$HOME/.local/share/$PKG_NAME/github/repos" \
+                     "${XDG_DATA_HOME:+$XDG_DATA_HOME/$PKG_NAME/github/repos}" \
+                     "$HOME/BauhRepos"; do
+        if [[ -n "$repos_dir" && -d "$repos_dir" ]]; then
+            warning "Los repositorios clonados en $repos_dir no se han borrado."
+            warning 'Revísalos y elimínalos a mano si ya no los necesitas.'
+        fi
+    done
 }
 
 uninstall_main() {
@@ -628,10 +665,13 @@ uninstall_main() {
     remove_legacy_launcher
     refresh_desktop_caches
 
+    # reset_fork_theme opera sobre ~/.config/$LEGACY_PKG_NAME, que purge_user_data no toca:
+    # se ofrece siempre, porque volver al bauh oficial con un tema propio anotado lo deja sin
+    # hoja de estilos y sin ningún error visible.
+    reset_fork_theme
+
     if [[ "$PURGE" == true ]]; then
         purge_user_data
-    else
-        reset_fork_theme
     fi
 
     # Verificación final: nada de «desinstalado correctamente» si quedan restos.
@@ -644,15 +684,21 @@ uninstall_main() {
         fi
     done
 
-    local resolved
-    resolved="$(command -v bauh 2>/dev/null || true)"
-    if [[ -n "$resolved" ]]; then
-        local dest
+    # Se comprueba el ejecutable propio y, del heredado, solo el que instaló este script:
+    # un «bauh» del proyecto original es ajeno y señalarlo daría por fallida una
+    # desinstalación correcta, además de invitar al usuario a borrar lo que no es suyo.
+    local binary resolved dest
+    for binary in "$PKG_NAME" "$LEGACY_PKG_NAME"; do
+        [[ "$binary" == "$LEGACY_PKG_NAME" ]] && ! pipx_venv_is_ours "$LEGACY_PKG_NAME" && continue
+
+        resolved="$(command -v "$binary" 2>/dev/null || true)"
+        [[ -n "$resolved" ]] || continue
+
         dest="$(readlink -f "$resolved" 2>/dev/null || printf '%s' "$resolved")"
         if [[ "$dest" == "$venvs/$PKG_NAME/"* || "$dest" == "$venvs/$LEGACY_PKG_NAME/"* ]]; then
             leftovers+=("$resolved")
         fi
-    fi
+    done
 
     if ((${#leftovers[@]} > 0)); then
         error 'La desinstalación NO se completó. Quedan estos restos:'
@@ -708,7 +754,9 @@ handle_original_bauh() {
     if [[ "$original_pm" == "pacman" ]]; then
         remove_cmd=(sudo pacman -Rns --noconfirm bauh)
     else
-        remove_cmd=(sudo eopkg remove -y bauh)
+        # rmf (remove-full): arrastra también las dependencias que quedan huérfanas, igual que
+        # «pacman -Rns». Es la regla del proyecto: nunca «remove» ni «rm» a secas.
+        remove_cmd=(sudo eopkg rmf --no-color -y bauh)
     fi
 
     if ! sudo_available; then
@@ -1026,7 +1074,7 @@ install_main() {
     printf 'Ejecútalo desde tu menú de aplicaciones o con: %s\n' "$bauh_bin"
 
     if [[ ":$PATH:" != *":$pipx_bin:"* ]]; then
-        warning "'$pipx_bin' no está en tu PATH. Ejecuta 'pipx ensurepath' y abre una terminal nueva para usar 'bauh' por nombre."
+        warning "'$pipx_bin' no está en tu PATH. Ejecuta 'pipx ensurepath' y abre una terminal nueva para usar '$PKG_NAME' por nombre."
     fi
 }
 

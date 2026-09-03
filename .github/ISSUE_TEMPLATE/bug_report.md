@@ -50,7 +50,7 @@ EN: This repository is a fork of vinifmor/bauh. If the same bug happens with the
 ```bash
 # Versión y commit instalados / Installed version and commit
 pipx list | grep -i bauh
-cat "$(pipx environment --value PIPX_LOCAL_VENVS)/bauh-gekko/.gekko-source-ref" 2>/dev/null
+cat "$(pipx environment --value PIPX_LOCAL_VENVS)/gekko-bauh/.gekko-source-ref"
 python3 --version
 
 # Distribución y sesión gráfica / Distro and graphical session
@@ -63,17 +63,17 @@ echo "$XDG_CURRENT_DESKTOP / $XDG_SESSION_TYPE"
 - **Sesión / Session**: Wayland | X11
 - **Método de instalación / Install method**: `install.sh` | pipx manual | venv | otro
 - **Gems activas / Enabled gems** (`Ajustes → Tipos de aplicaciones`): arch, eopkg, github, ...
-- **Tema / Theme** (`ui.theme` en `~/.config/bauh/config.yml`):
+- **Tema / Theme** (`ui.theme` en `~/.config/gekko-bauh/config.yml`):
 
 ## Logs
 
 <!--
-ES: Ejecuta bauh desde un terminal con `bauh --logs`, reproduce el error y pega
-    aquí la salida completa (o adjúntala como archivo). Revisa que no contenga
-    contraseñas ni datos personales.
-EN: Run bauh from a terminal with `bauh --logs`, reproduce the bug and paste the
-    full output here (or attach it as a file). Make sure it contains no passwords
-    or personal data.
+ES: Ejecuta la aplicación desde un terminal con `gekko-bauh --logs`, reproduce el
+    error y pega aquí la salida completa (o adjúntala como archivo). Revisa que no
+    contenga contraseñas ni datos personales.
+EN: Run the application from a terminal with `gekko-bauh --logs`, reproduce the bug
+    and paste the full output here (or attach it as a file). Make sure it contains
+    no passwords or personal data.
 -->
 
 ```text

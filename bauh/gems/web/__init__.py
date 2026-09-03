@@ -1,5 +1,6 @@
 import os
 
+from bauh import __app_name__
 from bauh.api.paths import DESKTOP_ENTRIES_DIR, CONFIG_DIR, TEMP_DIR, CACHE_DIR, SHARED_FILES_DIR
 from bauh.commons import resource
 from bauh.commons.util import map_timestamp_file
@@ -32,7 +33,7 @@ URL_PROPS_PATTERN = URL_BAUH_FILES + "/web/env/v2/fix/{domain}/{electron_branch}
 # muchos sitios sirven desafíos o versiones degradadas a navegadores de hace años.
 UA_CHROME = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'
 # Comando sugerido cuando faltan las dependencias Python de la gem (nombres PyPI, no de paquetes de distro)
-PIPX_INJECT_COMMAND = 'pipx inject bauh-gekko beautifulsoup4 lxml'
+PIPX_INJECT_COMMAND = f'pipx inject {__app_name__} beautifulsoup4 lxml'
 TEMP_PATH = f'{TEMP_DIR}/web'
 SEARCH_INDEX_FILE = f'{WEB_CACHE_DIR}/index.yml'
 CONFIG_FILE = f'{CONFIG_DIR}/web.yml'

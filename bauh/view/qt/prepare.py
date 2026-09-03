@@ -4,7 +4,7 @@ import time
 from functools import reduce
 from typing import Tuple, Optional
 
-from PyQt5.QtCore import QSize, Qt, QThread, pyqtSignal, QCoreApplication, QMutex, QMetaObject, Q_ARG
+from PyQt5.QtCore import QSize, Qt, QThread, pyqtSignal, QCoreApplication, QMutex
 from PyQt5.QtGui import QIcon, QCursor, QCloseEvent, QShowEvent
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QSizePolicy, QTableWidget, QHeaderView, QPushButton, \
     QProgressBar, QPlainTextEdit, QToolButton, QHBoxLayout
@@ -32,6 +32,7 @@ class Prepare(QThread, TaskManager):
     signal_finished = pyqtSignal(str)
     signal_started = pyqtSignal(int)
     signal_ask_password = pyqtSignal()
+    signal_cancelled = pyqtSignal()
     signal_output = pyqtSignal(str, str)
 
     def __init__(self, context: ApplicationContext, manager: SoftwareManager, i18n: I18n):
@@ -65,9 +66,13 @@ class Prepare(QThread, TaskManager):
             ok, root_pwd = self.ask_password()
 
             if not ok:
-                # el upstream terminaba con codigo 1 al cancelar la contrasena: se conserva
-                # ese contrato (los lanzadores lo usan) invocando 'exit' de forma thread-safe
-                QMetaObject.invokeMethod(QCoreApplication.instance(), 'exit', Qt.QueuedConnection, Q_ARG(int, 1))
+                # el upstream terminaba con codigo 1 al cancelar la contrasena y se conserva ese
+                # contrato porque los lanzadores lo usan. La salida se pide con una senal propia:
+                # al estar el receptor en el hilo de la GUI, Qt la encola y 'exit' se ejecuta alli.
+                # No sirve QMetaObject.invokeMethod(app, 'exit', ...): en Qt5 'exit(int)' no es un
+                # slot de QCoreApplication, asi que PyQt5 lanza RuntimeError dentro de run() y el
+                # proceso muere por qFatal (SIGABRT) en vez de terminar con codigo 1.
+                self.signal_cancelled.emit()
                 return
 
         self.manager.prepare(self, root_pwd, None)
@@ -181,6 +186,7 @@ class PreparePanel(QWidget, TaskManager):
         self.prepare_thread.signal_started.connect(self.start)
         self.prepare_thread.signal_ask_password.connect(self.ask_root_password)
         self.prepare_thread.signal_output.connect(self.update_output)
+        self.prepare_thread.signal_cancelled.connect(self.cancel_prepare)
         self.signal_password_response.connect(self.prepare_thread.set_password_reply)
 
         self.check_thread = CheckFinished()
@@ -337,6 +343,16 @@ class PreparePanel(QWidget, TaskManager):
             if thread.isRunning() and not thread.wait(THREAD_STOP_TIMEOUT):
                 self.context.logger.warning(f"The preparation thread '{thread.__class__.__name__}' did not stop "
                                             f'within {THREAD_STOP_TIMEOUT} milliseconds')
+
+    def cancel_prepare(self):
+        """Termina la aplicacion con codigo 1 cuando se cancela el dialogo de contrasena root.
+
+        Se ejecuta en el hilo de la GUI porque la senal se emite desde el hilo de preparacion y
+        Qt la encola hasta este objeto, que vive en el hilo principal.
+        """
+        self.self_close = True
+        self.stop_threads(include_prepare=False)
+        QCoreApplication.exit(1)
 
     def closeEvent(self, ev: QCloseEvent):
         if self.self_close:

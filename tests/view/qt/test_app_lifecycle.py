@@ -11,6 +11,7 @@ os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 PYQT5_AVAILABLE = importlib.util.find_spec('PyQt5') is not None
 
 if PYQT5_AVAILABLE:
+    from PyQt5.QtCore import QCoreApplication
     from PyQt5.QtGui import QCloseEvent
     from PyQt5.QtWidgets import QApplication
 
@@ -259,15 +260,30 @@ class TestPreparePanel(unittest.TestCase):
         thread.manager.requires_root.return_value = True
         thread.ask_password = MagicMock(return_value=(False, None))
 
-        with patch.object(prepare.user, 'is_root', return_value=False), \
-                patch.object(prepare, 'QMetaObject') as meta_object, \
-                patch.object(prepare, 'Q_ARG') as q_arg:
-            thread.run()
+        # no se parchea nada de PyQt5: la senal y el slot reales tienen que funcionar, porque el
+        # fallo que este test cubre (invocar 'exit' por el metaobjeto) solo aparecia al ejecutarlos
+        emitted = []
+        thread.signal_cancelled.connect(lambda: emitted.append(True))
 
-        meta_object.invokeMethod.assert_called_once()
-        self.assertEqual('exit', meta_object.invokeMethod.call_args.args[1])
-        q_arg.assert_called_once_with(int, 1)
+        with patch.object(prepare.user, 'is_root', return_value=False), \
+                patch.object(prepare.QCoreApplication, 'exit') as app_exit:
+            thread.run()
+            # la senal se entrega en la cola del hilo principal: hay que dejarla correr
+            QCoreApplication.processEvents()
+
+        self.assertEqual([True], emitted)
+        app_exit.assert_called_once_with(1)
         thread.manager.prepare.assert_not_called()
+
+    def test_cancelling_the_root_password_does_not_ask_for_confirmation_when_closing(self):
+        # cancel_prepare marca el cierre como propio para que closeEvent no muestre el dialogo
+        # de «hay una operacion en curso» sobre un panel que ya esta terminando
+        self.panel.self_close = False
+
+        with patch.object(prepare.QCoreApplication, 'exit'):
+            self.panel.cancel_prepare()
+
+        self.assertTrue(self.panel.self_close)
 
 
 if __name__ == '__main__':

@@ -2,6 +2,7 @@ import logging
 import sys
 from typing import Optional, Dict
 
+from bauh import __package_name__
 from bauh.api.abstract.cache import MemoryCacheFactory
 from bauh.api.abstract.disk import DiskCacheLoaderFactory
 from bauh.api.abstract.download import FileDownloader
@@ -66,7 +67,10 @@ class ApplicationContext:
 
     def get_suggestion_url(self, module: str, default: Optional[str] = None) -> Optional[str]:
         if self._suggestions_mapping:
-            module_split = module.split(f'{self.app_name}.gems.')
+            # las gems pasan su __module__ ('bauh.gems.arch.controller'), que es una ruta de
+            # modulo Python: hay que partir por __package_name__, no por app_name. Con
+            # 'gekko-bauh' el corte nunca casaba y el mapeo configurado se ignoraba en silencio.
+            module_split = module.split(f'{__package_name__}.gems.')
 
             if len(module_split) > 1:
                 gem_name = module_split[1].split('.')[0]

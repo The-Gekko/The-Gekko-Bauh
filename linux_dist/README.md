@@ -49,12 +49,12 @@ Como mínimo habría que:
 - subir la base a Debian bookworm (o posterior) y sustituir las rutas
   `python3.9` por la versión real del runtime elegido;
 - actualizar `app_info` (`id`, `name`, `icon`) a los identificadores del fork:
-  `bauh-gekko` y el icono `bauh-gekko`;
+  `gekko-bauh` y el icono `gekko-bauh`;
 - añadir un job de CI que la construya, porque una receta de empaquetado que
   nadie ejecuta vuelve a romperse en cuestión de semanas.
 
 ## Canal soportado
 
 La instalación oficial es `install.sh`, que resuelve el commit exacto en GitHub
-y lo instala aislado con **pipx** bajo el nombre de distribución `bauh-gekko`.
+y lo instala aislado con **pipx** bajo el nombre de distribución `gekko-bauh`.
 Consulta el README del repositorio para las instrucciones de uso.
