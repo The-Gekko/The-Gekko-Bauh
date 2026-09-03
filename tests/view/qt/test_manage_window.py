@@ -1,3 +1,8 @@
+# Las anotaciones se evalúan de forma perezosa: la clase de test se salta cuando no
+# hay PyQt5, pero su CUERPO sí se ejecuta al importar el módulo, y sin este import
+# una anotación como «-> PackageView» rompería la recolección con NameError.
+from __future__ import annotations
+
 import importlib.util
 import logging
 import os

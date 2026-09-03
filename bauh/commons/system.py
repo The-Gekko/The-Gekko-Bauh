@@ -49,6 +49,12 @@ def feed_root_password(proc: subprocess.Popen, root_password: str) -> None:
         except OSError:
             pass
 
+        # Se desasocia el descriptor ya cerrado, igual que hace subprocess.communicate()
+        # con el suyo. Si se dejara asignado, una llamada posterior a proc.communicate()
+        # intentaría vaciarlo y fallaría con «ValueError: flush of closed file»
+        # (reproducible en Python 3.12 y 3.13).
+        proc.stdin = None
+
 
 def gen_env(global_interpreter: bool = USE_GLOBAL_INTERPRETER, lang: Optional[str] = DEFAULT_LANG,
             extra_paths: Optional[Set[str]] = None) -> dict:

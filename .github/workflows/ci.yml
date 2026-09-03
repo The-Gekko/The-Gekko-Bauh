@@ -193,8 +193,8 @@ jobs:
               'bauh/view/resources/locale/es',
               'bauh/view/resources/img/',
               'bauh/view/resources/style/',
-              'bauh/desktop/bauh.desktop',
-              'bauh/desktop/bauh_tray.desktop',
+              'bauh/desktop/gekko-bauh.desktop',
+              'bauh/desktop/gekko-bauh-tray.desktop',
               'bauh/gems/arch/resources/locale/en',
               'bauh/gems/flatpak/resources/locale/en',
               'bauh/gems/eopkg/resources/locale/en',
@@ -219,13 +219,8 @@ jobs:
       - name: Informe de traducciones
         run: python tools/check_locales.py --report
 
-      # Puerta acotada al idioma que el fork garantiza junto con «en». Hoy NO
-      # bloquea porque arrastra dos huecos heredados del upstream:
-      #   bauh/view/resources/locale/es          -> category.mail
-      #   bauh/gems/debian/resources/locale/es   -> debian.info.04.priority.optional
-      # En cuanto se añadan esas dos claves, quita `continue-on-error` para que
-      # la paridad de «es» sea obligatoria; después, quita `--languages` para
-      # exigir todos los idiomas.
-      - name: Exigir paridad en «es»
-        continue-on-error: true
-        run: python tools/check_locales.py --languages es
+      # Puerta bloqueante en TODOS los idiomas. Los huecos heredados del
+      # proyecto original se completaron, así que a partir de aquí cualquier
+      # clave nueva debe llegar traducida a todos los idiomas que ya existen.
+      - name: Exigir paridad de traducciones
+        run: python tools/check_locales.py
