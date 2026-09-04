@@ -85,7 +85,7 @@ error() { printf '%b\n' "${red}[bauh]${reset} $*" >&2; }
 # queda vacío y el script entra en modo remoto.
 SCRIPT_DIR=""
 if [[ ${BASH_SOURCE[0]+x} ]]; then
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" || SCRIPT_DIR=""
 fi
 LOCAL_MODE=false
 if [[ -n "$SCRIPT_DIR" && -f "$SCRIPT_DIR/pyproject.toml" && -d "$SCRIPT_DIR/bauh" ]]; then
