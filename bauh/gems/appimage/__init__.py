@@ -18,7 +18,7 @@ URL_BAUH_FILES = 'https://raw.githubusercontent.com/vinifmor/bauh-files/master'
 URL_COMPRESSED_DATABASES = f'{URL_BAUH_FILES}/appimage/dbs.tar.gz'
 URL_SUGGESTIONS_FILE = f'{URL_BAUH_FILES}/appimage/suggestions.txt'
 # Repositorio del fork: lo usa la auto-instalación cuando la app se ejecuta como AppImage
-APP_REPOSITORY_URL = 'https://github.com/The-Gekko/Bauh-Fork-The-Gekko'
+APP_REPOSITORY_URL = 'https://github.com/The-Gekko/The-Gekko-Bauh'
 APPIMAGE_CACHE_DIR = f'{CACHE_DIR}/appimage'
 DATABASE_APPS_FILE = f'{APPIMAGE_CACHE_DIR}/apps.db'
 DATABASE_RELEASES_FILE = f'{APPIMAGE_CACHE_DIR}/releases.db'

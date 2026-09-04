@@ -54,7 +54,7 @@ pkgver=0.10.8+gekko.1
 pkgrel=1
 pkgdesc="Graphical package manager for Arch/AUR, Chaotic AUR, Flatpak and Solus (eopkg)"
 arch=('any')
-url="https://github.com/The-Gekko/Bauh-Fork-The-Gekko"
+url="https://github.com/The-Gekko/The-Gekko-Bauh"
 # La licencia zlib no está en /usr/share/licenses/common, así que se marca como
 # «custom:» y package() copia el LICENSE del proyecto.
 license=('custom:zlib')
@@ -88,7 +88,7 @@ optdepends=(
 options=('!debug')
 
 _gh_user='The-Gekko'
-_gh_repo='Bauh-Fork-The-Gekko'
+_gh_repo='The-Gekko-Bauh'
 # Etiqueta git equivalente a pkgver (ver la nota sobre el esquema de versión).
 _tag="v${pkgver/+/-}"
 # GitHub genera el tarball de una etiqueta quitándole solo la «v» inicial.

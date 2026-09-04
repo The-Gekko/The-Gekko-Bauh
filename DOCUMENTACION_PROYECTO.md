@@ -278,7 +278,7 @@ datos que consume la UI.
 | `suggestions.py` | Carga del mapa de sugerencias y aplicación de recomendaciones. |
 | `timeshift.py` | Integración con Timeshift para copias de seguridad (heredado del upstream). |
 | `tray_client.py` | Comunicación/notificaciones dirigidas a la bandeja del sistema. |
-| `update.py` | Comprobación de nuevas versiones del fork (releases de `The-Gekko/Bauh-Fork-The-Gekko`). |
+| `update.py` | Comprobación de nuevas versiones del fork (releases de `The-Gekko/The-Gekko-Bauh`). |
 
 ### 4.5 Utilidades de la vista: `bauh/view/util/`
 

@@ -30,7 +30,7 @@ pkgver=0.10.8+gekko.1.r0.g0000000
 pkgrel=1
 pkgdesc="Graphical package manager for Arch/AUR, Chaotic AUR, Flatpak and Solus (eopkg) - development version"
 arch=('any')
-url="https://github.com/The-Gekko/Bauh-Fork-The-Gekko"
+url="https://github.com/The-Gekko/The-Gekko-Bauh"
 license=('custom:zlib')
 depends=(
   'python'
@@ -67,7 +67,7 @@ options=('!debug')
 # mismos que instala el paquete estable, no llevan el sufijo «-git».
 _program='gekko-bauh'
 _gh_user='The-Gekko'
-_gh_repo='Bauh-Fork-The-Gekko'
+_gh_repo='The-Gekko-Bauh'
 _branch='master'
 _srcdir="$_gh_repo"
 

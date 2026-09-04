@@ -8,11 +8,11 @@ from bauh.context import generate_i18n
 from bauh.view.util import resource
 
 # repositorio de este fork
-PROJECT_URL = 'https://github.com/The-Gekko/Bauh-Fork-The-Gekko'
+PROJECT_URL = 'https://github.com/The-Gekko/The-Gekko-Bauh'
 # repositorio original del que deriva el fork
 UPSTREAM_URL = 'https://github.com/vinifmor/bauh'
 UPSTREAM_LABEL = 'vinifmor/bauh'
-LICENSE_URL = 'https://raw.githubusercontent.com/The-Gekko/Bauh-Fork-The-Gekko/master/LICENSE'
+LICENSE_URL = 'https://raw.githubusercontent.com/The-Gekko/The-Gekko-Bauh/master/LICENSE'
 
 
 def get_display_name() -> str:

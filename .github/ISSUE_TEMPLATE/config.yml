@@ -7,5 +7,5 @@ contact_links:
     url: https://github.com/vinifmor/bauh/issues
     about: Si el error también ocurre con el bauh original, repórtalo allí. / If the bug also happens with the original bauh, report it there.
   - name: Documentación de instalación y migración / Install and migration docs
-    url: https://github.com/The-Gekko/Bauh-Fork-The-Gekko/blob/master/docs/MIGRACION.md
+    url: https://github.com/The-Gekko/The-Gekko-Bauh/blob/master/docs/MIGRACION.md
     about: Convivencia con el bauh oficial y vuelta atrás. / Coexistence with the official bauh and rollback.

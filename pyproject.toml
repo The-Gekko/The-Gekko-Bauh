@@ -93,10 +93,10 @@ gekko-bauh-tray = "bauh.app:tray"
 gekko-bauh-cli = "bauh.cli.app:main"
 
 [project.urls]
-Homepage = "https://github.com/The-Gekko/Bauh-Fork-The-Gekko"
-Repository = "https://github.com/The-Gekko/Bauh-Fork-The-Gekko"
-Issues = "https://github.com/The-Gekko/Bauh-Fork-The-Gekko/issues"
-Changelog = "https://github.com/The-Gekko/Bauh-Fork-The-Gekko/blob/master/CHANGELOG.md"
+Homepage = "https://github.com/The-Gekko/The-Gekko-Bauh"
+Repository = "https://github.com/The-Gekko/The-Gekko-Bauh"
+Issues = "https://github.com/The-Gekko/The-Gekko-Bauh/issues"
+Changelog = "https://github.com/The-Gekko/The-Gekko-Bauh/blob/master/CHANGELOG.md"
 Upstream = "https://github.com/vinifmor/bauh"
 
 [tool.setuptools]

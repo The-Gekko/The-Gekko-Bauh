@@ -51,7 +51,7 @@ Queda registrada en el log (`gekko-bauh --logs`).
 1. Cierra bauh, incluido el icono de bandeja si lo tienes activo.
 2. Ejecuta el instalador:
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/The-Gekko/Bauh-Fork-The-Gekko/master/install.sh | bash
+   curl -fsSL https://raw.githubusercontent.com/The-Gekko/The-Gekko-Bauh/master/install.sh | bash
    ```
 3. Abre `gekko-bauh` desde el menú de aplicaciones. Tus ajustes y tus temas se
    copian solos. Arch, Flatpak y eopkg quedan activas; si en el oficial usabas
@@ -66,7 +66,7 @@ o hazlo tú con `sudo pacman -Rns bauh` o `sudo eopkg rmf -y bauh`.
 ## 4. Vuelta al bauh oficial
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/The-Gekko/Bauh-Fork-The-Gekko/master/install.sh | bash -s -- uninstall
+curl -fsSL https://raw.githubusercontent.com/The-Gekko/The-Gekko-Bauh/master/install.sh | bash -s -- uninstall
 ```
 
 Elimina el entorno de pipx, los `.desktop` de `~/.local/share/applications/` y
@@ -77,7 +77,7 @@ que hacer.
 Para borrar además los datos de este proyecto:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/The-Gekko/Bauh-Fork-The-Gekko/master/install.sh | bash -s -- uninstall --purge
+curl -fsSL https://raw.githubusercontent.com/The-Gekko/The-Gekko-Bauh/master/install.sh | bash -s -- uninstall --purge
 ```
 
 `--purge` borra `~/.config/gekko-bauh`, `~/.cache/gekko-bauh`,

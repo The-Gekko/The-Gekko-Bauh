@@ -12,12 +12,12 @@ set -Eeuo pipefail
 # ══════════════════════════════════════════════════════════════════════════════
 #  bauh Gekko Edition — instalador / desinstalador (100% por curl)
 #
-#  Instalar/actualizar:  curl -fsSL https://raw.githubusercontent.com/The-Gekko/Bauh-Fork-The-Gekko/master/install.sh | bash
+#  Instalar/actualizar:  curl -fsSL https://raw.githubusercontent.com/The-Gekko/The-Gekko-Bauh/master/install.sh | bash
 #  Forzar reinstall:     ... | bash -s -- --force
-#  Versión concreta:     ... | bash -s -- --ref v0.10.8-gekko.1
+#  Referencia concreta:  ... | bash -s -- --ref <rama|etiqueta|sha>   (solo en modo remoto)
 #  Desinstalar:          ... | bash -s -- uninstall [--purge]
 #
-#  Requisitos: curl, pipx y Python 3.8–3.14.
+#  Requisitos: curl, pipx (con backend pip o uv) y Python 3.8–3.14.
 #    Arch/Garuda:  sudo pacman -S --needed python-pipx
 #    Solus:        sudo eopkg install -y pipx
 #
@@ -27,7 +27,7 @@ set -Eeuo pipefail
 #  --allow-build-from-source.
 # ══════════════════════════════════════════════════════════════════════════════
 
-REPO="The-Gekko/Bauh-Fork-The-Gekko"
+REPO="The-Gekko/The-Gekko-Bauh"
 RAW_BASE="https://raw.githubusercontent.com/$REPO"
 ARCHIVE_BASE="https://github.com/$REPO/archive"
 API_BASE="https://api.github.com/repos/$REPO"
@@ -56,6 +56,18 @@ ICON_SIZES=(16 32 48 64 128 256 512)
 # Dependencias que deben llegar como wheel. No se incluye el propio paquete:
 # ese sí se construye desde el código fuente descargado.
 WHEEL_ONLY_PACKAGES='pyqt5,pyqt5-sip,pyqt5-qt5,pyyaml,requests,colorama,python-dateutil,six,urllib3,certifi,idna,charset-normalizer'
+
+# Directorio temporal de trabajo del instalador (descargas en modo remoto, copia
+# limpia del checkout en modo local). Es global a propósito: la orden del trap
+# EXIT se evalúa al salir del script, cuando las variables «local» de
+# install_main ya no existen, así que un nombre local dejaría el directorio
+# huérfano en /tmp.
+TMP_WORK_DIR=""
+cleanup_tmp_work_dir() {
+    [[ -n "$TMP_WORK_DIR" ]] && rm -rf "$TMP_WORK_DIR"
+    return 0
+}
+trap cleanup_tmp_work_dir EXIT
 
 green='\033[0;32m'
 yellow='\033[0;33m'
@@ -88,6 +100,9 @@ INSTALL_PIPX=false
 ALLOW_SOURCE_BUILD=false
 AUTOSTART_TRAY=""
 REQUESTED_REF="master"
+# Se distingue el valor por defecto de un --ref explícito: desde un checkout la
+# opción no tiene efecto y hay que avisar en vez de ignorarla en silencio.
+REF_EXPLICIT=false
 ACTION="install"
 
 usage() {
@@ -104,7 +119,9 @@ Acciones:
   uninstall    Desinstala bauh Gekko Edition, su icono y sus accesos directos
 
 Opciones generales:
-  --ref REF             Etiqueta, rama o SHA a instalar (por defecto: master)
+  --ref REF             Etiqueta, rama o SHA a instalar (por defecto: master).
+                        Solo en modo remoto: desde un checkout se instala el
+                        árbol de trabajo local y esta opción es un error
   --force, -f           Reinstala aunque ya esté instalado exactamente ese commit
   --yes, -y             Responde «sí» a las preguntas SIN privilegios (nunca a las
                         que ejecutan sudo: para esas están los flags de abajo)
@@ -114,7 +131,8 @@ Opciones generales:
                         Permite compilar dependencias si no hay wheel disponible
                         (requiere compilador y cabeceras de Python)
   --purge               (con uninstall) borra también configuración, caché,
-                        datos compartidos y el directorio temporal
+                        datos compartidos y el directorio temporal. Sin
+                        instalación previa purga igualmente y sale con 0
   --help, -h            Muestra esta ayuda
 
 Opciones que ejecutan acciones con sudo (siempre explícitas):
@@ -124,10 +142,14 @@ Opciones que ejecutan acciones con sudo (siempre explícitas):
 Entorno:
   PYTHON_BIN   Intérprete Python usado por pipx (por defecto: python3)
 
+Códigos de salida de uninstall:
+  0  desinstalado (o, con --purge, datos purgados aunque no hubiera instalación)
+  1  sin instalación previa (sin --purge), quedan restos o algún paso falló
+
 Ejemplos:
-  curl -fsSL https://raw.githubusercontent.com/The-Gekko/Bauh-Fork-The-Gekko/master/install.sh | bash
-  curl -fsSL https://raw.githubusercontent.com/The-Gekko/Bauh-Fork-The-Gekko/master/install.sh | bash -s -- --ref v0.10.8-gekko.1
-  curl -fsSL https://raw.githubusercontent.com/The-Gekko/Bauh-Fork-The-Gekko/master/install.sh | bash -s -- uninstall --purge
+  curl -fsSL https://raw.githubusercontent.com/The-Gekko/The-Gekko-Bauh/master/install.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/The-Gekko/The-Gekko-Bauh/master/install.sh | bash -s -- --ref <rama|etiqueta|sha>
+  curl -fsSL https://raw.githubusercontent.com/The-Gekko/The-Gekko-Bauh/master/install.sh | bash -s -- uninstall --purge
 EOF
 }
 
@@ -143,9 +165,11 @@ while (($#)); do
                 exit 2
             fi
             REQUESTED_REF="$2"
+            REF_EXPLICIT=true
             shift ;;
         --ref=*)
             REQUESTED_REF="${1#--ref=}"
+            REF_EXPLICIT=true
             if [[ -z "$REQUESTED_REF" ]]; then
                 error '--ref necesita un valor (etiqueta, rama o SHA).'
                 exit 2
@@ -559,6 +583,26 @@ purge_dir_preserving_repos() {
     info "Eliminado: $path (se conserva $repos)"
 }
 
+# Elimina duplicados de una lista de rutas (misma cadena una vez normalizadas
+# las barras: se colapsan las repetidas y se quita la final). Hace falta porque
+# XDG_DATA_HOME suele valer exactamente ~/.local/share (y XDG_CONFIG_HOME,
+# ~/.config): sin esto --purge trataba dos veces la misma ruta y repetía cada
+# aviso. No se resuelven enlaces simbólicos a propósito: los mensajes deben
+# mostrar la ruta que el usuario conoce.
+dedupe_paths() {
+    declare -A seen=()
+    local path
+    for path in "$@"; do
+        while [[ "$path" == *//* ]]; do
+            path="${path//\/\//\/}"
+        done
+        path="${path%/}"
+        [[ -n "$path" && -z "${seen[$path]+x}" ]] || continue
+        seen["$path"]=1
+        printf '%s\n' "$path"
+    done
+}
+
 purge_user_data() {
     local user_name
     user_name="$(id -un)"
@@ -568,17 +612,21 @@ purge_user_data() {
     # anteriores de este instalador lo usaran, no hay forma de distinguir sus
     # restos de una instalación oficial en uso, así que se avisa y no se toca.
     # Se cubren las rutas fijas (Path.home()/.config, .cache…) y sus variantes
-    # XDG, porque conviven según la versión instalada; los duplicados no molestan.
-    local paths=(
+    # XDG, porque conviven según la versión instalada. Como las variables XDG
+    # suelen apuntar a las mismas rutas fijas, la lista se deduplica.
+    local candidates=(
         "$HOME/.config/$PKG_NAME"
         "$HOME/.cache/$PKG_NAME"
         "$HOME/.local/share/$PKG_NAME"
         "/tmp/$PKG_NAME@$user_name"
     )
-    [[ -n "${XDG_CONFIG_HOME:-}" ]] && paths+=("$XDG_CONFIG_HOME/$PKG_NAME")
-    [[ -n "${XDG_CACHE_HOME:-}" ]] && paths+=("$XDG_CACHE_HOME/$PKG_NAME")
-    [[ -n "${XDG_DATA_HOME:-}" ]] && paths+=("$XDG_DATA_HOME/$PKG_NAME")
-    [[ -n "${XDG_RUNTIME_DIR:-}" ]] && paths+=("$XDG_RUNTIME_DIR/$PKG_NAME")
+    [[ -n "${XDG_CONFIG_HOME:-}" ]] && candidates+=("$XDG_CONFIG_HOME/$PKG_NAME")
+    [[ -n "${XDG_CACHE_HOME:-}" ]] && candidates+=("$XDG_CACHE_HOME/$PKG_NAME")
+    [[ -n "${XDG_DATA_HOME:-}" ]] && candidates+=("$XDG_DATA_HOME/$PKG_NAME")
+    [[ -n "${XDG_RUNTIME_DIR:-}" ]] && candidates+=("$XDG_RUNTIME_DIR/$PKG_NAME")
+
+    local paths=()
+    mapfile -t paths < <(dedupe_paths "${candidates[@]}")
 
     local path
     for path in "${paths[@]}"; do
@@ -596,11 +644,13 @@ purge_user_data() {
     # publicar: nunca se borran. El directorio por defecto vive dentro de los datos de la
     # aplicación, así que purge_dir_preserving_repos lo salva de la purga; el heredado
     # (~/BauhRepos) queda fuera de todas las rutas anteriores.
+    local repos_dirs=()
+    mapfile -t repos_dirs < <(dedupe_paths "$HOME/.local/share/$PKG_NAME/github/repos" \
+                                           "${XDG_DATA_HOME:+$XDG_DATA_HOME/$PKG_NAME/github/repos}" \
+                                           "$HOME/BauhRepos")
     local repos_dir
-    for repos_dir in "$HOME/.local/share/$PKG_NAME/github/repos" \
-                     "${XDG_DATA_HOME:+$XDG_DATA_HOME/$PKG_NAME/github/repos}" \
-                     "$HOME/BauhRepos"; do
-        if [[ -n "$repos_dir" && -d "$repos_dir" ]]; then
+    for repos_dir in "${repos_dirs[@]}"; do
+        if [[ -d "$repos_dir" ]]; then
             warning "Los repositorios clonados en $repos_dir no se han borrado."
             warning 'Revísalos y elimínalos a mano si ya no los necesitas.'
         fi
@@ -713,6 +763,13 @@ uninstall_main() {
     if [[ "$removed" != true ]]; then
         warning 'No se encontró ninguna instalación de bauh Gekko Edition hecha por este script.'
         warning 'Se limpiaron de todos modos iconos y accesos directos, por si habían quedado sueltos.'
+        # Con --purge el trabajo pedido (borrar los datos de usuario) sí se hizo y no quedan
+        # restos: terminar con 1 haría fallar a quien encadene el comando aunque el resultado
+        # sea el esperado. Sin --purge no había nada que desinstalar y se mantiene el 1.
+        if [[ "$PURGE" == true && "$failed" != true ]]; then
+            warning 'Los datos de usuario se purgaron de todos modos: se termina sin error.'
+            return 0
+        fi
         return 1
     fi
 
@@ -883,6 +940,43 @@ install_desktop_entries() {
     fi
 }
 
+# Copia el checkout a un directorio limpio para dárselo a pipx. Se copia el
+# árbol de trabajo (incluidos los cambios sin confirmar, que es justo lo que un
+# contribuidor quiere probar) en lugar de usar «git archive HEAD», que los
+# ignoraría y además exigiría git y un clon (no vale con un zip descargado).
+# Fuera quedan los artefactos generados: build/, dist/, releases/, *.egg-info,
+# __pycache__, .git, entornos virtuales y los restos de linux_dist/appimage.
+copy_clean_checkout() {
+    local src="$1"
+    local dest="$2"
+
+    mkdir -p "$dest"
+    tar -C "$src" \
+        --exclude='./.git' \
+        --exclude='./.claude' \
+        --exclude='./build' \
+        --exclude='./dist' \
+        --exclude='./releases' \
+        --exclude='./.venv' \
+        --exclude='./venv' \
+        --exclude='./env' \
+        --exclude='./.ruff_cache' \
+        --exclude='./.pytest_cache' \
+        --exclude='./linux_dist/appimage/AppDir' \
+        --exclude='./linux_dist/appimage/appimage-builder-cache' \
+        --exclude='./linux_dist/appimage/*.AppImage' \
+        --exclude='./linux_dist/appimage/*.zsync' \
+        --exclude='*.egg-info' \
+        --exclude='__pycache__' \
+        --exclude='*.pyc' \
+        -cf - . | tar -C "$dest" -xf -
+
+    if [[ ! -f "$dest/pyproject.toml" || ! -d "$dest/bauh" ]]; then
+        error "No se pudo copiar el checkout de $src a $dest."
+        exit 1
+    fi
+}
+
 # Retira el venv «bauh» que dejaron versiones anteriores de este instalador. Un
 # venv «bauh» ajeno (instalado por el usuario a mano) se respeta.
 migrate_legacy_package() {
@@ -903,6 +997,16 @@ migrate_legacy_package() {
 install_main() {
     local python_version python_supported pm
     local PYTHON_BIN="${PYTHON_BIN:-python3}"
+
+    # Desde un checkout se instala el árbol de trabajo tal cual: --ref no puede
+    # cumplirse y callarse sería instalar otra cosa de la que se pidió.
+    if [[ "$LOCAL_MODE" == true && "$REF_EXPLICIT" == true ]]; then
+        error "'--ref $REQUESTED_REF' no tiene efecto desde un checkout: en modo local se instala el árbol de $SCRIPT_DIR."
+        error 'Para instalar esa referencia, cámbiala en el checkout (git checkout <ref>) y repite sin --ref,'
+        error 'o usa el modo remoto:'
+        error "  curl -fsSL $RAW_BASE/master/install.sh | bash -s -- --ref $REQUESTED_REF"
+        exit 2
+    fi
 
     if ! command -v curl >/dev/null 2>&1; then
         error "'curl' es necesario y no está instalado."
@@ -940,11 +1044,20 @@ install_main() {
     local icon_fallback=""
     local desktop_dir=""
     local resolved_ref=""
-    local tmp_dir=""
 
     if [[ "$LOCAL_MODE" == true ]]; then
         info "Modo local: instalando desde el checkout en $SCRIPT_DIR"
-        source_spec="$SCRIPT_DIR"
+
+        # pipx construye el wheel a partir del directorio que se le pasa, y
+        # setuptools reutiliza lo que haya en build/lib sin vaciarlo: un
+        # checkout con construcciones antiguas arrastra al venv módulos ya
+        # borrados del árbol (las gems debian y snap) y paquetes espurios
+        # («build», «tools»). Se instala desde una copia limpia y temporal.
+        TMP_WORK_DIR="$(mktemp -d)"
+        source_spec="$TMP_WORK_DIR/source"
+        copy_clean_checkout "$SCRIPT_DIR" "$source_spec"
+        info "Copia limpia del checkout en $source_spec (sin build/, dist/, *.egg-info, __pycache__ ni .git)."
+
         icons_dir="$SCRIPT_DIR/pictures/icons"
         icon_fallback="$SCRIPT_DIR/pictures/gekko-bauh.png"
         desktop_dir="$SCRIPT_DIR/bauh/desktop"
@@ -966,13 +1079,12 @@ install_main() {
         fi
 
         info "Commit resuelto: $resolved_ref"
-        tmp_dir="$(mktemp -d)"
-        trap 'rm -rf "${tmp_dir:-}"' EXIT
+        TMP_WORK_DIR="$(mktemp -d)"
         source_spec="$ARCHIVE_BASE/$resolved_ref.zip"
 
-        icons_dir="$tmp_dir/icons"
-        icon_fallback="$tmp_dir/gekko-bauh.png"
-        desktop_dir="$tmp_dir/desktop"
+        icons_dir="$TMP_WORK_DIR/icons"
+        icon_fallback="$TMP_WORK_DIR/gekko-bauh.png"
+        desktop_dir="$TMP_WORK_DIR/desktop"
         mkdir -p "$icons_dir" "$desktop_dir"
 
         info 'Descargando iconos y lanzadores del commit resuelto...'
@@ -1028,8 +1140,12 @@ install_main() {
         # proceso en vez de un mensaje claro (F142). El propio paquete no está en
         # la lista: ese sí se construye desde el código descargado.
         if [[ "$ALLOW_SOURCE_BUILD" != true ]]; then
+            # pip espera la lista separada por comas; uv, separada por ESPACIOS
+            # (con comas rechaza la variable al crear el venv: «Not a valid
+            # package or extra name», y la instalación falla en cualquier host
+            # donde pipx elija el backend uv).
             export PIP_ONLY_BINARY="$WHEEL_ONLY_PACKAGES"
-            export UV_NO_BUILD_PACKAGE="$WHEEL_ONLY_PACKAGES"
+            export UV_NO_BUILD_PACKAGE="${WHEEL_ONLY_PACKAGES//,/ }"
         fi
 
         if ! pipx install --force --python "$PYTHON_BIN" \

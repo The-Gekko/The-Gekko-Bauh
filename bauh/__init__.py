@@ -17,7 +17,7 @@ __display_name__ = 'bauh Gekko Edition'
 
 # Repositorio de este proyecto: es el que se consulta para buscar actualizaciones y el
 # que se muestra en la documentación y en los informes de error.
-__repo_url__ = 'https://github.com/The-Gekko/Bauh-Fork-The-Gekko'
+__repo_url__ = 'https://github.com/The-Gekko/The-Gekko-Bauh'
 
 # Proyecto original del que deriva este. Se conserva para dar crédito y para poder
 # distinguir sus versiones «0.10.8» de las «0.10.8+gekko.N» de este proyecto.

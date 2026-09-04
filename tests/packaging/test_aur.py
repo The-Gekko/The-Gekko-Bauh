@@ -224,11 +224,11 @@ class LecturaDePkgbuildTest(unittest.TestCase):
     """El parser de PKGBUILD del propio test tiene que hacer lo que dice."""
 
     def test_expande_las_formas_de_bash_que_usan_los_pkgbuild(self):
-        variables = {'pkgver': '0.10.8+gekko.1', '_gh_repo': 'Bauh-Fork-The-Gekko'}
+        variables = {'pkgver': '0.10.8+gekko.1', '_gh_repo': 'The-Gekko-Bauh'}
 
         self.assertEqual('v0.10.8-gekko.1', _expandir('v${pkgver/+/-}', variables))
         self.assertEqual('0.10.8-gekko.1', _expandir('${_tag#v}', {'_tag': 'v0.10.8-gekko.1'}))
-        self.assertEqual('Bauh-Fork-The-Gekko-1', _expandir('$_gh_repo-1', variables))
+        self.assertEqual('The-Gekko-Bauh-1', _expandir('$_gh_repo-1', variables))
 
     def test_rechaza_las_expansiones_que_no_entiende(self):
         with self.assertRaises(ValueError):
@@ -508,6 +508,20 @@ class WorkflowDeReleaseTest(unittest.TestCase):
         self.assertIn('__version__', self.texto)
         self.assertIn('packaging/aur/gekko-bauh/PKGBUILD', self.texto,
                       'el workflow debería avisar si el PKGBUILD se quedó en la versión anterior')
+
+    def test_genera_y_publica_el_artefacto_de_gekkoapp(self):
+        """GekkoApp instala gekko-bauh desde el .tar.zst y el manifiesto que
+        genera tools/build-gekkoapp-release.sh: la release tiene que llevarlos."""
+        self.assertIn('tools/build-gekkoapp-release.sh', self.texto)
+        self.assertIn('bauh-fork-the-gekko-x86_64-unknown-linux-gnu.manifest.json', self.texto)
+        self.assertIn('*.tar.zst *.manifest.json', self.texto,
+                      'SHA256SUMS debe cubrir también los ficheros de GekkoApp')
+        self.assertTrue((RAIZ / 'tools' / 'build-gekkoapp-release.sh').is_file())
+
+    def test_las_sumas_cubren_los_nombres_renombrados_por_github(self):
+        # GitHub sustituye el «+» de los assets por «.»: SHA256SUMS lleva las dos grafías.
+        self.assertIn('${nombre//+/.}', self.texto)
+        self.assertIn('--ignore-missing', self.texto)
 
 
 if __name__ == '__main__':

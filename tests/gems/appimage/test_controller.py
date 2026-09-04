@@ -15,5 +15,5 @@ class AppImageManagerTest(TestCase):
 
     def test_app_repository__must_point_to_the_fork_and_not_to_the_upstream(self):
         self.assertEqual(APP_REPOSITORY_URL, self.manager.app_repository)
-        self.assertIn('The-Gekko/Bauh-Fork-The-Gekko', self.manager.app_repository)
+        self.assertIn('The-Gekko/The-Gekko-Bauh', self.manager.app_repository)
         self.assertNotIn('vinifmor', self.manager.app_repository)

@@ -144,9 +144,12 @@ jobs:
         run: |
           bash -n install.sh
           bash -n tests/installer/run_tests.sh
+          bash -n tools/build-gekkoapp-release.sh
 
+      # tools/build-gekkoapp-release.sh genera el artefacto que GekkoApp instala
+      # (lo ejecuta release.yml): se revisa con la misma vara que el instalador.
       - name: shellcheck
-        run: shellcheck install.sh tests/installer/run_tests.sh
+        run: shellcheck install.sh tests/installer/run_tests.sh tools/build-gekkoapp-release.sh
 
   # Ejecuta el instalador de verdad contra pipx, sudo y pacman falsos.
   installer:

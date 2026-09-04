@@ -22,7 +22,7 @@ EN: This repository is a fork of vinifmor/bauh. If the same bug happens with the
 - [ ] **ES**: He actualizado a la versión actual de `master` y el error sigue ocurriendo.
       **EN**: I updated to the current `master` and the bug still happens.
       ```bash
-      curl -fsSL https://raw.githubusercontent.com/The-Gekko/Bauh-Fork-The-Gekko/master/install.sh | bash -s -- --force
+      curl -fsSL https://raw.githubusercontent.com/The-Gekko/The-Gekko-Bauh/master/install.sh | bash -s -- --force
       ```
 - [ ] **ES**: He buscado issues abiertos y cerrados con el mismo problema.
       **EN**: I searched open and closed issues for the same problem.

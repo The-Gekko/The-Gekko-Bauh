@@ -7,7 +7,7 @@
 **Vinícius Moreira** (© 2019, licencia zlib/libpng, ver [LICENSE](LICENSE)).
 No es el software original ni debe presentarse como tal: lo mantiene
 [The-Gekko](https://github.com/The-Gekko) en
-<https://github.com/The-Gekko/Bauh-Fork-The-Gekko>, se distribuye con el nombre
+<https://github.com/The-Gekko/The-Gekko-Bauh>, se distribuye con el nombre
 `gekko-bauh` y con versiones `<versión de origen>+gekko.N` (actualmente
 `0.10.8+gekko.1`). El texto de la licencia se conserva sin cambios y sigue
 aplicándose a todo el código, incluido el añadido aquí.

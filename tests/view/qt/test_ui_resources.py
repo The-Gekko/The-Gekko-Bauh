@@ -147,8 +147,8 @@ class TestDefaultIcon(unittest.TestCase):
 class TestAboutDialogUrls(unittest.TestCase):
 
     def test_the_urls_point_to_the_fork_and_the_upstream(self):
-        self.assertIn('The-Gekko/Bauh-Fork-The-Gekko', about.PROJECT_URL)
-        self.assertIn('The-Gekko/Bauh-Fork-The-Gekko', about.LICENSE_URL)
+        self.assertIn('The-Gekko/The-Gekko-Bauh', about.PROJECT_URL)
+        self.assertIn('The-Gekko/The-Gekko-Bauh', about.LICENSE_URL)
         self.assertEqual('https://github.com/vinifmor/bauh', about.UPSTREAM_URL)
 
     def test_the_display_name_identifies_the_fork(self):

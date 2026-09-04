@@ -9,7 +9,7 @@ Es la única fuente de verdad sobre este tema; si algo cambia, se cambia aquí.
 
 | Nombre | URL | Uso |
 |---|---|---|
-| `origin` | `https://github.com/The-Gekko/Bauh-Fork-The-Gekko.git` | El fork. Rama publicada: `master`. |
+| `origin` | `https://github.com/The-Gekko/The-Gekko-Bauh.git` | El fork. Rama publicada: `master`. |
 | `upstream` | `https://github.com/vinifmor/bauh.git` | El proyecto original. Se vigilan `master` (releases), `staging` (siguiente versión) y las ramas `fix-*`. |
 
 ```bash

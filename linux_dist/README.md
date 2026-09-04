@@ -42,7 +42,7 @@ Como mínimo habría que:
 
 - cambiar `wget …/vinifmor/bauh/archive/…` por el archivo de este repositorio y
   fijar el commit o la etiqueta exactos (`v0.10.8-gekko.1`, por ejemplo);
-- cambiar `update-information` a `gh-releases-zsync|The-Gekko|Bauh-Fork-The-Gekko|latest|…`
+- cambiar `update-information` a `gh-releases-zsync|The-Gekko|The-Gekko-Bauh|latest|…`
   y publicar el `.zsync` junto a la release;
 - eliminar el paso `rm setup.cfg setup.py requirements.txt` (ya no aplica) y
   construir directamente con `python3 -m build --wheel`, que lee `pyproject.toml`;

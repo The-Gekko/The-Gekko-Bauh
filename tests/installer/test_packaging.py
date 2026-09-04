@@ -64,7 +64,7 @@ class VersionMetadataTest(unittest.TestCase):
         self.assertEqual('bauh Gekko Edition', bauh.__display_name__)
 
     def test_repo_urls(self):
-        self.assertEqual('https://github.com/The-Gekko/Bauh-Fork-The-Gekko', bauh.__repo_url__)
+        self.assertEqual('https://github.com/The-Gekko/The-Gekko-Bauh', bauh.__repo_url__)
         self.assertEqual('https://github.com/vinifmor/bauh', bauh.__upstream_url__)
 
     def test_version_is_a_literal_on_the_first_line(self):
@@ -282,6 +282,56 @@ class InstallScriptTest(unittest.TestCase):
     def test_installs_every_hicolor_size(self):
         self.assertIn('ICON_SIZES=(16 32 48 64 128 256 512)', self.source)
         self.assertIn('gekko-bauh-$size.png', self.source)
+
+    def test_wheel_only_list_uses_the_separator_each_backend_expects(self):
+        # pip lee PIP_ONLY_BINARY separada por comas; uv lee UV_NO_BUILD_PACKAGE
+        # separada por espacios y con comas rechaza la variable al crear el venv.
+        self.assertIn('export PIP_ONLY_BINARY="$WHEEL_ONLY_PACKAGES"', self.source)
+        self.assertIn('export UV_NO_BUILD_PACKAGE="${WHEEL_ONLY_PACKAGES//,/ }"', self.source)
+        self.assertNotIn('export UV_NO_BUILD_PACKAGE="$WHEEL_ONLY_PACKAGES"', self.source)
+
+    def test_local_mode_installs_from_a_clean_copy(self):
+        # Instalar "$SCRIPT_DIR" tal cual arrastraba build/lib obsoleto al venv.
+        self.assertIn('copy_clean_checkout "$SCRIPT_DIR" "$source_spec"', self.source)
+        self.assertNotIn('source_spec="$SCRIPT_DIR"', self.source)
+        for excluded in ("--exclude='./build'", "--exclude='./dist'", "--exclude='*.egg-info'",
+                         "--exclude='__pycache__'", "--exclude='./.git'"):
+            self.assertIn(excluded, self.source)
+
+    def test_ref_is_rejected_in_local_mode(self):
+        self.assertIn('REF_EXPLICIT=true', self.source)
+        self.assertIn('no tiene efecto desde un checkout', self.source)
+
+    def test_purge_deduplicates_the_xdg_paths(self):
+        self.assertIn('dedupe_paths()', self.source)
+        self.assertIn('mapfile -t paths < <(dedupe_paths "${candidates[@]}")', self.source)
+
+
+class BuildGekkoAppReleaseScriptTest(unittest.TestCase):
+    """tools/build-gekkoapp-release.sh: el generador del artefacto que consume GekkoApp."""
+
+    SCRIPT = os.path.join(REPO_ROOT, 'tools', 'build-gekkoapp-release.sh')
+
+    @classmethod
+    def setUpClass(cls):
+        with open(cls.SCRIPT, 'r', encoding='utf-8') as file_handle:
+            cls.source = file_handle.read()
+
+    def test_is_valid_bash(self):
+        result = subprocess.run(['bash', '-n', self.SCRIPT], capture_output=True, text=True)
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_tag_uses_a_hyphen_and_the_version_keeps_the_plus(self):
+        # Contrato con GekkoApp: product.version = X.Y.Z+gekko.N y release.tag =
+        # la etiqueta git real vX.Y.Z-gekko.N (la misma que exige release.yml).
+        self.assertIn('TAG="v${VERSION/+/-}"', self.source)
+        self.assertIn('ARCHIVE_VERSION="${VERSION//+/.}"', self.source)
+
+    def test_declares_the_agreed_identity(self):
+        self.assertIn('PRODUCT_ID="bauh-fork-the-gekko"', self.source)
+        self.assertIn(f'REPOSITORY="{bauh.__repo_url__.split("github.com/")[1]}"', self.source)
+        self.assertIn('APP_ID="org.thegekko.bauh"', self.source)
+        self.assertIn('TRAY_APP_ID="org.thegekko.bauh.tray"', self.source)
 
 
 class CheckLocalesToolTest(unittest.TestCase):

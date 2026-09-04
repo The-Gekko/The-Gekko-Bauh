@@ -2,7 +2,7 @@ pkgbase = gekko-bauh-git
 	pkgdesc = Graphical package manager for Arch/AUR, Chaotic AUR, Flatpak and Solus (eopkg) - development version
 	pkgver = 0.10.8+gekko.1.r0.g0000000
 	pkgrel = 1
-	url = https://github.com/The-Gekko/Bauh-Fork-The-Gekko
+	url = https://github.com/The-Gekko/The-Gekko-Bauh
 	arch = any
 	license = custom:zlib
 	makedepends = git
@@ -26,7 +26,7 @@ pkgbase = gekko-bauh-git
 	provides = gekko-bauh=0.10.8+gekko.1.r0.g0000000
 	conflicts = gekko-bauh
 	options = !debug
-	source = Bauh-Fork-The-Gekko::git+https://github.com/The-Gekko/Bauh-Fork-The-Gekko.git#branch=master
+	source = The-Gekko-Bauh::git+https://github.com/The-Gekko/The-Gekko-Bauh.git#branch=master
 	sha256sums = SKIP
 
 pkgname = gekko-bauh-git

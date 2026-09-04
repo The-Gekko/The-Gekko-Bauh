@@ -7,10 +7,23 @@ name: release
 #   2. comprueba que el PKGBUILD del AUR va con esa misma versión;
 #   3. construye el wheel y el sdist con `python -m build`;
 #   4. los valida con `twine check`;
-#   5. descarga el tarball que GitHub genera para esa etiqueta —el mismo que se
+#   5. genera con tools/build-gekkoapp-release.sh el artefacto del contrato de
+#      GekkoApp (bauh-fork-the-gekko-<X.Y.Z.gekko.N>.tar.zst) y su manifiesto
+#      (bauh-fork-the-gekko-x86_64-unknown-linux-gnu.manifest.json), que es lo
+#      que el Control Center descarga y verifica para instalar gekko-bauh;
+#   6. descarga el tarball que GitHub genera para esa etiqueta —el mismo que se
 #      baja el PKGBUILD del AUR— y calcula su suma;
-#   6. publica en la release los artefactos y un fichero SHA256SUMS con las
-#      sumas de los tres ficheros.
+#   7. publica en la release todos esos ficheros y un SHA256SUMS con sus sumas.
+#
+# Sobre los nombres con «+»: GitHub renombra los assets de una release cuyo
+# nombre lleva caracteres especiales y sustituye el «+» por «.», así que
+# gekko_bauh-0.10.8+gekko.1-py3-none-any.whl se descarga como
+# gekko_bauh-0.10.8.gekko.1-py3-none-any.whl. SHA256SUMS lleva por eso DOS
+# líneas para cada fichero con «+»: la del nombre original (el que produce
+# `python -m build` o makepkg) y la del nombre con el que GitHub lo publica, de
+# modo que `sha256sum --check --ignore-missing SHA256SUMS` funciona en ambos
+# casos. El artefacto de GekkoApp ya se genera sin «+» (el manifiesto lo
+# localiza por su nombre exacto).
 #
 # El procedimiento completo, incluido el paso manual de actualizar el AUR, está
 # en docs/DISTRIBUCION.md.
@@ -129,6 +142,42 @@ jobs:
       - name: twine check
         run: twine check dist/*
 
+      # ── Artefacto del contrato de GekkoApp ─────────────────────────────────
+      #
+      # tools/build-gekkoapp-release.sh (copia vendorizada del script de
+      # GekkoApp) deja en dist/ el .tar.zst con el árbol fuente y el manifiesto
+      # con sus sumas; `gh release upload dist/*` los sube con el resto. La
+      # etiqueta que escribe en el manifiesto (release.tag) es la misma que la
+      # de esta release: se comprueba aquí para no publicar un manifiesto que
+      # GekkoApp rechazaría.
+      - name: Instalar zstd
+        run: command -v zstd >/dev/null 2>&1 || (sudo apt-get update && sudo apt-get install -y zstd)
+
+      - name: Generar el artefacto y el manifiesto de GekkoApp
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          bash tools/build-gekkoapp-release.sh "$RELEASE_VERSION" x86_64-unknown-linux-gnu dist
+          python - <<'PY'
+          import json
+          import os
+          import pathlib
+          import sys
+
+          manifest = json.loads(pathlib.Path('dist/bauh-fork-the-gekko-x86_64-unknown-linux-gnu.manifest.json').read_text(encoding='utf-8'))
+          esperada_tag = os.environ['RELEASE_TAG']
+          esperada_version = os.environ['RELEASE_VERSION']
+          if manifest['release']['tag'] != esperada_tag or manifest['product']['version'] != esperada_version:
+              sys.exit(f"el manifiesto dice tag={manifest['release']['tag']!r} version={manifest['product']['version']!r}; "
+                       f"se esperaba {esperada_tag!r} / {esperada_version!r}")
+          artefacto = pathlib.Path('dist') / manifest['artifact']['file_name']
+          if not artefacto.is_file() or artefacto.stat().st_size != manifest['artifact']['size_bytes']:
+              sys.exit(f'el artefacto {artefacto} no existe o su tamaño no coincide con el manifiesto')
+          print(f"OK: {artefacto.name} ({manifest['artifact']['size_bytes']} bytes) para {esperada_tag}")
+          PY
+          ls -l dist
+
       # El tarball que se baja el PKGBUILD del AUR es el que genera GitHub a
       # partir de la etiqueta. Se descarga con el MISMO nombre con el que lo
       # guarda makepkg («$pkgname-$pkgver.tar.gz») para que la línea de
@@ -147,15 +196,25 @@ jobs:
             "https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${RELEASE_TAG}.tar.gz"
           ls -l dist
 
-      # SHA256SUMS lleva las tres sumas (wheel, sdist y tarball de la etiqueta).
-      # Como quien descarga normalmente solo se lleva una parte, en la
-      # documentación la comprobación se explica con `--ignore-missing`.
+      # SHA256SUMS lleva las sumas de todo lo que se publica: wheel, sdist,
+      # tarball de la etiqueta y los dos ficheros de GekkoApp. Los nombres con
+      # «+» aparecen dos veces (nombre original y nombre tal como lo publica
+      # GitHub, con «+» → «.»; ver la cabecera). Como quien descarga solo se
+      # lleva una parte, la comprobación se documenta con `--ignore-missing`, y
+      # aquí hace falta por lo mismo: los nombres renombrados aún no existen.
       - name: Generar SHA256SUMS
         working-directory: dist
         run: |
-          sha256sum -- *.whl *.tar.gz > SHA256SUMS
+          sha256sum -- *.whl *.tar.gz *.tar.zst *.manifest.json > SHA256SUMS.orig
+          while read -r suma nombre; do
+            printf '%s  %s\n' "$suma" "$nombre"
+            if [[ "$nombre" == *+* ]]; then
+              printf '%s  %s\n' "$suma" "${nombre//+/.}"
+            fi
+          done < SHA256SUMS.orig > SHA256SUMS
+          rm -f SHA256SUMS.orig
           cat SHA256SUMS
-          sha256sum --check SHA256SUMS
+          sha256sum --check --ignore-missing SHA256SUMS
 
       # Copia de los artefactos accesible aunque la publicación falle.
       - uses: actions/upload-artifact@v4
@@ -173,8 +232,16 @@ jobs:
 
               sha256sum --check --ignore-missing SHA256SUMS
 
-          `SHA256SUMS` cubre el wheel, el sdist y el tarball de código fuente de
-          esta etiqueta (el que usa el paquete del AUR).
+          `SHA256SUMS` cubre el wheel, el sdist, el tarball de código fuente de
+          esta etiqueta (el que usa el paquete del AUR) y los dos ficheros que
+          consume GekkoApp (`bauh-fork-the-gekko-*.tar.zst` y su manifiesto
+          `.manifest.json`).
+
+          Los nombres con `+` (wheel, sdist y tarball de la etiqueta) los
+          renombra GitHub al publicarlos, sustituyendo el `+` por `.`. Por eso
+          `SHA256SUMS` lleva dos líneas para cada uno de ellos: la del nombre
+          original y la del nombre con el que se descargan de aquí. La
+          comprobación anterior vale igual en los dos casos.
 
           El procedimiento completo de publicación e instalación está en
           `docs/DISTRIBUCION.md`.
@@ -219,7 +286,8 @@ jobs:
       #      el trabajo sí necesitaría añadir `id-token: write` a `permissions`.
       #
       # Además habría que subir solo el wheel y el sdist: en dist/ también están
-      # el tarball de la etiqueta y el SHA256SUMS, que PyPI no acepta.
+      # el tarball de la etiqueta, los ficheros de GekkoApp y el SHA256SUMS, que
+      # PyPI no acepta.
       #
       # - name: Publicar en PyPI
       #   uses: pypa/gh-action-pypi-publish@release/v1

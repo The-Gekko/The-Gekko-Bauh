@@ -2,10 +2,17 @@
 #
 # Tests de install.sh.
 #
-# Cada caso ejecuta el instalador real en un HOME temporal, con `pipx`, `sudo`,
-# `pacman`, `curl` e `id` falsos delante del PATH. Los falsos registran sus
-# argumentos en un fichero de log, de modo que se puede comprobar tanto lo que el
-# instalador crea en disco como los comandos que decide ejecutar (o no ejecutar).
+# Cada caso ejecuta el instalador real en un HOME temporal, con `pipx`, `uv`,
+# `sudo`, `pacman`, `curl` e `id` falsos delante del PATH. Los falsos registran
+# sus argumentos en un fichero de log, de modo que se puede comprobar tanto lo
+# que el instalador crea en disco como los comandos que decide ejecutar (o no
+# ejecutar).
+#
+# El `uv` falso hace que pipx elija (como el real cuando encuentra uv) el
+# backend uv, y el `pipx` falso reproduce la comprobación de uv sobre
+# UV_NO_BUILD_PACKAGE: con una lista separada por comas aborta, igual que uv al
+# crear el venv. Así todos los casos de instalación pasan por el backend que
+# rompía el instalador en cualquier host con uv.
 #
 # Todo lo que se escribe queda dentro del directorio temporal: el `id` falso
 # devuelve un usuario ficticio para que el directorio temporal que borra --purge
@@ -141,6 +148,7 @@ make_sandbox() {
     : > "$FAKE_LOG"
 
     write_fake_pipx
+    write_fake_uv
     write_fake_sudo
     write_fake_pacman
     write_fake_id
@@ -179,6 +187,33 @@ case "${1:-}" in
                 exit 0
             fi
         done
+        # Backend: uv si hay un `uv` en el PATH y no se pidió --backend pip, como
+        # hace pipx de verdad (resolve_backend_name: cli > metadata > env > auto).
+        backend='pip'
+        command -v uv >/dev/null 2>&1 && backend='uv'
+        prev=''
+        for arg in "$@"; do
+            [[ "$prev" == '--backend' ]] && backend="$arg"
+            prev="$arg"
+        done
+        printf 'pipx-backend %s\n' "$backend" >> "$FAKE_LOG"
+        printf 'env UV_NO_BUILD_PACKAGE=%s\n' "${UV_NO_BUILD_PACKAGE-<sin definir>}" >> "$FAKE_LOG"
+        printf 'env PIP_ONLY_BINARY=%s\n' "${PIP_ONLY_BINARY-<sin definir>}" >> "$FAKE_LOG"
+
+        # uv rechaza la variable con comas al crear el venv (mensaje literal de uv 0.12).
+        if [[ "$backend" == 'uv' && "${UV_NO_BUILD_PACKAGE:-}" == *,* ]]; then
+            echo "error: Failed to parse environment variable \`UV_NO_BUILD_PACKAGE\` with invalid value \`$UV_NO_BUILD_PACKAGE\`: Not a valid package or extra name" >&2
+            exit 2
+        fi
+
+        # La fuente es el último argumento. Si es un directorio, se guarda su
+        # árbol para poder comprobar qué llega de verdad a pipx.
+        source="${*: -1}"
+        printf 'pipx-source %s\n' "$source" >> "$FAKE_LOG"
+        if [[ -d "$source" ]]; then
+            (cd "$source" && find . -mindepth 1 | sed 's|^\./||' | LC_ALL=C sort) > "$SANDBOX/pipx-source-tree.txt"
+        fi
+
         mkdir -p "$venvs/gekko-bauh/bin" "$bins"
         cat > "$venvs/gekko-bauh/bin/python" <<'PYFAKE'
 #!/usr/bin/env bash
@@ -204,6 +239,17 @@ esac
 exit 0
 FAKE
     chmod +x "$FAKE_BIN/pipx"
+}
+
+# Basta con que exista: install.sh solo hace `command -v uv` para decidir si
+# pipx va a usar el backend uv.
+write_fake_uv() {
+    cat > "$FAKE_BIN/uv" <<'FAKE'
+#!/usr/bin/env bash
+echo 'uv 0.0.0 (falso para los tests del instalador)'
+exit 0
+FAKE
+    chmod +x "$FAKE_BIN/uv"
 }
 
 write_fake_sudo() {
@@ -302,6 +348,14 @@ run_installer_local() {
     "${RUNNER[@]}" bash "$INSTALLER" "$@" > "$OUTPUT" 2>&1 < /dev/null
 }
 
+# Ejecuta una copia del instalador colocada en otro checkout (ver
+# test_local_install_uses_a_clean_copy).
+run_installer_from() {
+    local installer="$1"
+    shift
+    "${RUNNER[@]}" bash "$installer" "$@" > "$OUTPUT" 2>&1 < /dev/null
+}
+
 # Ejecuta el instalador en modo remoto: al leer el script por la entrada
 # estándar, BASH_SOURCE queda vacío, igual que con `curl ... | bash`.
 run_installer_remote() {
@@ -317,7 +371,13 @@ test_local_install() {
     assert_status 0 "$?" 'el instalador termina bien'
 
     assert_contains "$FAKE_LOG" 'pipx install --force --python python3'
-    assert_contains "$FAKE_LOG" "$REPO_ROOT"
+
+    # Se instala desde una copia limpia del checkout, nunca desde el checkout mismo.
+    assert_contains "$FAKE_LOG" 'pipx-source '
+    assert_not_contains "$FAKE_LOG" "pipx-source $REPO_ROOT"
+    assert_contains "$SANDBOX/pipx-source-tree.txt" 'bauh/__init__.py'
+    assert_contains "$SANDBOX/pipx-source-tree.txt" 'pyproject.toml'
+    assert_contains "$VENVS_DIR/gekko-bauh/.gekko-source-ref" "local:$REPO_ROOT"
 
     local apps="$HOME/.local/share/applications"
     assert_file "$apps/gekko-bauh.desktop"
@@ -473,6 +533,25 @@ test_uninstall_without_installation() {
 
     assert_contains "$OUTPUT" 'No se encontró ninguna instalación'
     assert_not_contains "$OUTPUT" 'desinstalado correctamente'
+
+    cleanup_sandbox
+}
+
+test_uninstall_purge_without_installation() {
+    start_case 'uninstall --purge sin nada instalado purga los datos y termina con 0'
+
+    mkdir -p "$HOME/.config/gekko-bauh" "$HOME/.cache/gekko-bauh"
+    : > "$HOME/.config/gekko-bauh/config.yml"
+    : > "$HOME/.cache/gekko-bauh/marca"
+
+    run_installer_local uninstall --purge --yes
+    assert_status 0 "$?" 'la purga sin instalación previa no es un error'
+
+    assert_contains "$OUTPUT" 'No se encontró ninguna instalación'
+    assert_contains "$OUTPUT" 'se termina sin error'
+    assert_not_contains "$OUTPUT" 'desinstalado correctamente'
+    assert_no_dir "$HOME/.config/gekko-bauh"
+    assert_no_dir "$HOME/.cache/gekko-bauh"
 
     cleanup_sandbox
 }
@@ -746,7 +825,170 @@ test_foreign_bauh_binary_is_not_a_leftover() {
     cleanup_sandbox
 }
 
+test_uv_backend_gets_a_space_separated_list() {
+    start_case 'backend uv: UV_NO_BUILD_PACKAGE va separada por espacios y PIP_ONLY_BINARY por comas'
+
+    run_installer_local --yes --no-autostart
+    assert_status 0 "$?" 'el instalador termina bien con el backend uv'
+
+    # Con el `uv` falso en el PATH, install.sh no debe forzar --backend pip.
+    assert_contains "$FAKE_LOG" 'pipx-backend uv'
+    assert_not_contains "$FAKE_LOG" '--backend pip'
+
+    # uv espera una lista separada por espacios; con comas aborta al crear el venv.
+    assert_contains "$FAKE_LOG" 'env UV_NO_BUILD_PACKAGE=pyqt5 pyqt5-sip pyqt5-qt5 pyyaml requests colorama python-dateutil six urllib3 certifi idna charset-normalizer'
+    assert_not_contains "$OUTPUT" 'Not a valid package or extra name'
+    # pip sí usa comas.
+    assert_contains "$FAKE_LOG" 'env PIP_ONLY_BINARY=pyqt5,pyqt5-sip,pyqt5-qt5,pyyaml,requests,colorama,python-dateutil,six,urllib3,certifi,idna,charset-normalizer'
+
+    cleanup_sandbox
+}
+
+test_allow_build_from_source_unsets_the_wheel_only_lists() {
+    start_case '--allow-build-from-source no restringe a wheels'
+
+    run_installer_local --yes --no-autostart --allow-build-from-source
+    assert_status 0 "$?" 'el instalador termina bien'
+
+    assert_contains "$FAKE_LOG" 'env UV_NO_BUILD_PACKAGE=<sin definir>'
+    assert_contains "$FAKE_LOG" 'env PIP_ONLY_BINARY=<sin definir>'
+
+    cleanup_sandbox
+}
+
+test_ref_is_an_error_in_local_mode() {
+    start_case 'modo local: --ref no se ignora en silencio, sale con 2'
+
+    run_installer_local --yes --no-autostart --ref v0.10.7
+    assert_status 2 "$?" '--ref desde un checkout sale con 2'
+
+    assert_contains "$OUTPUT" "no tiene efecto desde un checkout"
+    assert_contains "$OUTPUT" 'v0.10.7'
+    assert_not_contains "$FAKE_LOG" 'pipx install'
+    assert_no_file "$HOME/.local/share/applications/gekko-bauh.desktop"
+
+    # La forma --ref=valor se trata igual.
+    run_installer_local --yes --no-autostart --ref=master
+    assert_status 2 "$?" '--ref=master desde un checkout sale con 2'
+
+    cleanup_sandbox
+}
+
+test_local_install_uses_a_clean_copy() {
+    start_case 'modo local: pipx recibe una copia sin build/, dist/, egg-info, __pycache__ ni .git'
+
+    # Un checkout de mentira con restos de construcciones antiguas: build/lib
+    # conserva gems ya borradas del árbol (debian, snap) y paquetes espurios.
+    local checkout="$SANDBOX/checkout"
+    mkdir -p "$checkout/bauh/desktop" "$checkout/bauh/__pycache__" \
+             "$checkout/build/lib/bauh/gems/debian" "$checkout/build/lib/bauh/gems/snap" \
+             "$checkout/build/lib/tools" "$checkout/build/lib/build" \
+             "$checkout/dist" "$checkout/gekko_bauh.egg-info" "$checkout/.git" \
+             "$checkout/.venv/bin" "$checkout/tools"
+    cp "$INSTALLER" "$checkout/install.sh"
+    cp "$REPO_ROOT/pyproject.toml" "$checkout/pyproject.toml"
+    cp "$REPO_ROOT/bauh/__init__.py" "$checkout/bauh/__init__.py"
+    cp "$REPO_ROOT"/bauh/desktop/gekko-bauh.desktop "$REPO_ROOT"/bauh/desktop/gekko-bauh-tray.desktop "$checkout/bauh/desktop/"
+    : > "$checkout/bauh/__pycache__/__init__.cpython-312.pyc"
+    : > "$checkout/build/lib/bauh/gems/debian/__init__.py"
+    : > "$checkout/build/lib/bauh/gems/snap/__init__.py"
+    : > "$checkout/build/lib/tools/check_locales.py"
+    : > "$checkout/build/lib/build/__init__.py"
+    : > "$checkout/dist/gekko_bauh-0.0.0-py3-none-any.whl"
+    : > "$checkout/gekko_bauh.egg-info/PKG-INFO"
+    : > "$checkout/.git/HEAD"
+    : > "$checkout/.venv/bin/python"
+    : > "$checkout/tools/check_locales.py"
+
+    run_installer_from "$checkout/install.sh" --yes --no-autostart
+    assert_status 0 "$?" 'el instalador termina bien'
+
+    local tree="$SANDBOX/pipx-source-tree.txt"
+    assert_file "$tree"
+    assert_not_contains "$FAKE_LOG" "pipx-source $checkout"
+
+    # Lo que sí tiene que llegar.
+    assert_contains "$tree" 'pyproject.toml'
+    assert_contains "$tree" 'bauh/__init__.py'
+    assert_contains "$tree" 'bauh/desktop/gekko-bauh.desktop'
+    assert_contains "$tree" 'tools/check_locales.py'
+
+    # Lo que no.
+    assert_not_contains "$tree" 'build/'
+    assert_not_contains "$tree" 'gems/debian'
+    assert_not_contains "$tree" 'gems/snap'
+    assert_not_contains "$tree" 'dist/'
+    assert_not_contains "$tree" 'egg-info'
+    assert_not_contains "$tree" '__pycache__'
+    assert_not_contains "$tree" '.pyc'
+    assert_not_contains "$tree" '.git'
+    assert_not_contains "$tree" '.venv'
+
+    # La copia temporal se retira al terminar y la marca apunta al checkout real.
+    local source_dir
+    source_dir="$(sed -n 's/^pipx-source //p' "$FAKE_LOG" | tail -n1)"
+    if [[ -n "$source_dir" && ! -e "$source_dir" ]]; then
+        pass "la copia temporal ${source_dir#"$SANDBOX"/} se borró al terminar"
+    else
+        fail "la copia temporal sigue existiendo: $source_dir"
+    fi
+    assert_contains "$VENVS_DIR/gekko-bauh/.gekko-source-ref" "local:$checkout"
+
+    # El checkout original no se toca.
+    assert_file "$checkout/build/lib/bauh/gems/debian/__init__.py"
+
+    cleanup_sandbox
+}
+
+test_purge_does_not_repeat_paths_when_xdg_equals_the_defaults() {
+    start_case 'uninstall --purge no repite rutas cuando XDG_DATA_HOME es ~/.local/share'
+
+    # XDG_CONFIG_HOME y XDG_CACHE_HOME ya valen lo mismo que las rutas fijas en
+    # el sandbox; se añade XDG_DATA_HOME para cubrir las tres.
+    export XDG_DATA_HOME="$HOME/.local/share/"
+
+    run_installer_local --yes --no-autostart
+    assert_status 0 "$?" 'la instalación previa termina bien'
+
+    local repos="$HOME/.local/share/gekko-bauh/github/repos"
+    mkdir -p "$repos/usuario/proyecto" "$HOME/.config/gekko-bauh" "$HOME/.cache/gekko-bauh"
+    : > "$repos/usuario/proyecto/trabajo.txt"
+    : > "$HOME/.config/gekko-bauh/config.yml"
+    : > "$HOME/.cache/gekko-bauh/marca"
+
+    run_installer_local uninstall --purge --yes
+    assert_status 0 "$?" 'el desinstalador termina bien'
+
+    local warnings deletions
+    warnings="$(grep -c 'no se han borrado' "$OUTPUT")"
+    deletions="$(grep -c "Eliminado: $HOME/.local/share/gekko-bauh" "$OUTPUT")"
+    if [[ "$warnings" == '1' ]]; then
+        pass 'el aviso de los clones conservados aparece una sola vez'
+    else
+        fail "el aviso de los clones conservados aparece $warnings veces"
+    fi
+    if [[ "$deletions" == '1' ]]; then
+        pass 'la ruta de datos se trata una sola vez'
+    else
+        fail "la ruta de datos se trató $deletions veces"
+    fi
+    if [[ "$(grep -c 'Eliminado: ' "$OUTPUT")" == '3' ]]; then
+        pass 'se eliminan exactamente config, caché y datos (sin duplicados)'
+    else
+        fail "líneas «Eliminado:» inesperadas: $(grep -c 'Eliminado: ' "$OUTPUT")"
+    fi
+    assert_file "$repos/usuario/proyecto/trabajo.txt"
+
+    unset XDG_DATA_HOME
+    cleanup_sandbox
+}
+
 test_local_install
+test_uv_backend_gets_a_space_separated_list
+test_allow_build_from_source_unsets_the_wheel_only_lists
+test_ref_is_an_error_in_local_mode
+test_local_install_uses_a_clean_copy
+test_purge_does_not_repeat_paths_when_xdg_equals_the_defaults
 test_autostart
 test_legacy_migration
 test_foreign_venv_untouched
@@ -755,6 +997,7 @@ test_remove_system_bauh_flag
 test_remote_ref_unresolvable
 test_remote_installs_resolved_commit
 test_uninstall_without_installation
+test_uninstall_purge_without_installation
 test_uninstall_after_install
 test_uninstall_purge
 test_purge_also_resets_fork_theme

@@ -27,14 +27,17 @@ considera enviarlo **también** al proyecto original
 
 ## Entorno de desarrollo
 
-Requisitos: Python 3.9 o superior (3.12+ recomendado; ver la nota de
-compatibilidad en `README.md`) y, para ejecutar la interfaz o sus tests, PyQt5.
+Requisitos: Python 3.9 o superior para desarrollar (3.12+ recomendado; la
+aplicación admite 3.8 a 3.14, ver la nota de compatibilidad en `README.md`) y,
+para ejecutar la interfaz o sus tests, PyQt5. Sin `pyyaml` y `colorama`
+(`requirements-dev.txt`) `unittest discover` falla al importar buena parte de
+los módulos, así que crea siempre el entorno virtual antes de lanzar la suite.
 
 Con `venv`:
 
 ```bash
-git clone https://github.com/The-Gekko/Bauh-Fork-The-Gekko.git
-cd Bauh-Fork-The-Gekko
+git clone https://github.com/The-Gekko/The-Gekko-Bauh.git
+cd The-Gekko-Bauh
 python3 -m venv .venv
 .venv/bin/pip install -U pip
 .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
@@ -54,6 +57,18 @@ colorama, PyYAML, python-dateutil) y `requirements-dev.txt` las de desarrollo
 para trabajar en las gems o en `commons/`: los tests que lo necesitan se omiten
 automáticamente cuando no está instalado. Para probar la aplicación instalada
 como lo hace un usuario, `./install.sh` desde el checkout la instala con pipx.
+
+Sobre `./install.sh` desde un checkout: pipx no recibe el directorio del
+checkout tal cual, sino una **copia temporal limpia** (sin `build/`, `dist/`,
+`releases/`, `*.egg-info`, `__pycache__`, `.git` ni entornos virtuales). El
+motivo es que setuptools reutiliza lo que haya en `build/lib` sin vaciarlo: un
+checkout con construcciones antiguas arrastraba al venv módulos ya borrados del
+árbol (las gems `debian` y `snap`) y paquetes espurios (`build`, `tools`). Se
+copia el árbol de trabajo, con tus cambios sin confirmar incluidos, y no
+`git archive HEAD`, que los ignoraría. La opción `--ref` solo tiene sentido en
+el modo remoto (por `curl`): desde un checkout el instalador avisa y sale con
+código 2, porque siempre instala el árbol local. Desde un checkout **siempre** se
+reconstruye el entorno (la comparación de commits solo existe en modo remoto).
 
 ## Ejecutar los tests
 
@@ -86,15 +101,19 @@ Reglas para los tests nuevos:
 ## Lint y comprobaciones estáticas
 
 ```bash
-.venv/bin/ruff check bauh tests            # estilo y errores (configuración en pyproject.toml)
-shellcheck install.sh                      # el instalador es bash
+.venv/bin/ruff check bauh tests tools      # estilo y errores (configuración en pyproject.toml)
+shellcheck install.sh tests/installer/run_tests.sh tools/build-gekkoapp-release.sh
 .venv/bin/python -m py_compile <archivo>   # compilación rápida de un archivo
 python3 tools/check_locales.py             # paridad de claves entre idiomas
 ```
 
-La CI (GitHub Actions) ejecuta la suite en Python 3.9, 3.12 y 3.14, `ruff`,
-`shellcheck`, `python -m build` y `tools/check_locales.py`. Un pull request no
-se integra con la CI en rojo.
+La CI (GitHub Actions, `.github/workflows/ci.yml`) ejecuta la suite sin Qt en
+Python 3.9, 3.12 y 3.14 y con Qt en 3.12, `ruff`, `shellcheck` y los tests del
+instalador (`tests/installer/run_tests.sh`), `python -m build` con comprobación
+del wheel, los tests de integración con binarios simulados y
+`tools/check_locales.py`. Los scripts de shell que pasan por `shellcheck` son
+`install.sh`, `tests/installer/run_tests.sh` y `tools/build-gekkoapp-release.sh`.
+Un pull request no se integra con la CI en rojo.
 
 ## Traducciones e internacionalización
 

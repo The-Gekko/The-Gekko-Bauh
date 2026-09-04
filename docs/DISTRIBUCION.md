@@ -5,6 +5,14 @@ cambia en el repositorio, qué hace solo el workflow de GitHub, qué hay que hac
 a mano en el AUR y cómo comprueba un usuario que lo que ha descargado es lo que
 publicamos.
 
+**Estado a día de hoy.** El único release publicado es `v0.10.7`, anterior al
+cambio de identidad (se instala como distribución `bauh`, sin `SHA256SUMS`). La
+versión en desarrollo es `0.10.8+gekko.1` (etiqueta prevista `v0.10.8-gekko.1`,
+todavía sin publicar), y los paquetes `gekko-bauh` y `gekko-bauh-git` **aún no
+están en el AUR**: la receta vive en `packaging/aur/` a la espera de la
+etiqueta. Todo lo que sigue describe lo que hará el workflow a partir de esa
+primera etiqueta con identidad propia.
+
 Índice:
 
 1. [Esquema de versión](#1-esquema-de-versión)
@@ -20,13 +28,20 @@ publicamos.
 
 ## 1. Esquema de versión
 
-El mismo número aparece en tres sitios con dos grafías distintas:
+El mismo número aparece en varios sitios con dos grafías distintas:
 
 | Dónde | Forma | Ejemplo |
 | --- | --- | --- |
 | `bauh.__version__` (`bauh/__init__.py`, primera línea) | `X.Y.Z+gekko.N` | `0.10.8+gekko.1` |
 | Etiqueta git y nombre de la release | `vX.Y.Z-gekko.N` | `v0.10.8-gekko.1` |
 | `pkgver` del PKGBUILD del AUR | `X.Y.Z+gekko.N` | `0.10.8+gekko.1` |
+| Manifiesto de GekkoApp: `product.version` / `release.tag` | `X.Y.Z+gekko.N` / `vX.Y.Z-gekko.N` | `0.10.8+gekko.1` / `v0.10.8-gekko.1` |
+| Nombre del artefacto de GekkoApp | `bauh-fork-the-gekko-X.Y.Z.gekko.N.tar.zst` | `bauh-fork-the-gekko-0.10.8.gekko.1.tar.zst` |
+
+El artefacto de GekkoApp lleva el `+` convertido en `.` en el **nombre de
+fichero** porque GitHub renombra los assets con caracteres especiales y
+GekkoApp localiza el asset por el nombre exacto que declara el manifiesto; la
+versión y la etiqueta dentro del manifiesto conservan su grafía.
 
 **Por qué dos grafías.** `makepkg` rechaza un `pkgver` que contenga dos puntos,
 barras, **guiones** o espacios; lo comprueba
@@ -94,7 +109,7 @@ etiqueta se pone **después**, sobre el commit ya fusionado.
    El PKGBUILD del paquete `-git` **no** se toca en cada versión: su `pkgver()`
    calcula el número en cada construcción.
 
-5. **Regenerar los `.SRCINFO`** (hace falta `pacman`, es decir, una máquina Arch):
+5. **Regenerar los `.SRCINFO`** (hace falta `makepkg`, es decir, una máquina Arch):
 
    ```sh
    ( cd packaging/aur/gekko-bauh     && makepkg --printsrcinfo > .SRCINFO )
@@ -146,21 +161,55 @@ borrarla: el workflow `release` se puede lanzar a mano desde la pestaña
 
 4. **Los valida** con `twine check`.
 
-5. **Descarga el tarball de código fuente** que GitHub genera para la etiqueta
+5. **Genera el artefacto de GekkoApp** con `tools/build-gekkoapp-release.sh`
+   (copia vendorizada de `scripts/build-bauh-release.sh` del repositorio
+   [GekkoApp](https://github.com/The-Gekko/GekkoApp); los dos scripts deben
+   mantenerse equivalentes): `bauh-fork-the-gekko-<X.Y.Z.gekko.N>.tar.zst`,
+   con el árbol fuente que `pipx` construye, y el manifiesto
+   `bauh-fork-the-gekko-x86_64-unknown-linux-gnu.manifest.json` (contrato
+   `kitotsu.release-artifact` 1.0, `install_method` `python_pipx`), que
+   declara tamaño y SHA-256 del artefacto, la distribución `gekko-bauh`, los
+   tres ejecutables y las dos entradas de menú (`org.thegekko.bauh` y
+   `org.thegekko.bauh.tray`). El workflow comprueba que `release.tag` del
+   manifiesto es la etiqueta que se está publicando.
+
+6. **Descarga el tarball de código fuente** que GitHub genera para la etiqueta
    —el mismo que se baja el PKGBUILD del AUR— y lo guarda con el nombre exacto
    que le da `makepkg`: `gekko-bauh-<pkgver>.tar.gz`.
 
-6. **Genera `SHA256SUMS`** con las sumas de los tres ficheros y lo comprueba
-   ahí mismo con `sha256sum --check`.
+7. **Genera `SHA256SUMS`** con las sumas de todo lo anterior y lo comprueba ahí
+   mismo con `sha256sum --check --ignore-missing`. Los ficheros cuyo nombre
+   lleva `+` (wheel, sdist y tarball de la etiqueta) aparecen **dos veces**,
+   porque GitHub los renombra al publicarlos (ver el punto 6 de este documento).
 
-7. **Publica la release** con `gh` (la CLI oficial que traen los runners) y le
-   adjunta el wheel, el sdist, el tarball de código fuente y el `SHA256SUMS`.
+8. **Publica la release** con `gh` (la CLI oficial que traen los runners) y le
+   adjunta el wheel, el sdist, el tarball de código fuente, el artefacto y el
+   manifiesto de GekkoApp y el `SHA256SUMS`.
 
 No publica en PyPI ni sube nada al AUR: eso es el paso siguiente, y es manual.
+
+Para probar el paso 5 en local (deja los dos ficheros en `releases/dist/`, que
+git ignora):
+
+```sh
+bash tools/build-gekkoapp-release.sh            # lee la versión de bauh/__init__.py
+bash tools/build-gekkoapp-release.sh 0.10.8+gekko.1 x86_64-unknown-linux-gnu dist
+```
 
 ---
 
 ## 5. Actualizar el paquete del AUR
+
+**Los paquetes todavía no existen en el AUR.** La primera publicación exige,
+además de lo de abajo, crear los repositorios `gekko-bauh` y `gekko-bauh-git`
+desde la cuenta del AUR (basta con el primer `git push` a la URL SSH de cada
+uno) y que exista la etiqueta `v0.10.8-gekko.1` en GitHub, porque el paquete
+estable descarga el tarball de esa etiqueta. Hasta entonces, lo único que se
+puede construir es `gekko-bauh-git` en local:
+
+```sh
+cd packaging/aur/gekko-bauh-git && makepkg -si
+```
 
 El AUR es un repositorio git independiente; lo que hay en `packaging/aur/` es la
 fuente de la que se copia. Cada paquete tiene su propio repositorio:
@@ -187,7 +236,7 @@ updpkgsums
 
 # 2. Contrastarla con la que publicó el workflow. La línea de SHA256SUMS usa
 #    exactamente el mismo nombre de fichero, así que la comprobación es directa:
-curl -fsSLO https://github.com/The-Gekko/Bauh-Fork-The-Gekko/releases/download/v0.10.9-gekko.1/SHA256SUMS
+curl -fsSLO https://github.com/The-Gekko/The-Gekko-Bauh/releases/download/v0.10.9-gekko.1/SHA256SUMS
 sha256sum --check --ignore-missing SHA256SUMS
 
 # 3. Construir e instalar de verdad antes de subir nada.
@@ -219,8 +268,10 @@ namcap gekko-bauh-*.pkg.tar.zst
 
 ## 6. Verificar las sumas antes de instalar
 
-Cada release lleva un fichero `SHA256SUMS` con las sumas del wheel, del sdist y
-del tarball de código fuente. Descárgalo junto con lo que te lleves y comprueba:
+A partir de la primera etiqueta con identidad propia, cada release lleva un
+fichero `SHA256SUMS` con las sumas del wheel, del sdist, del tarball de código
+fuente y de los dos ficheros de GekkoApp (`v0.10.7`, el único release publicado
+hoy, no lo tiene). Descárgalo junto con lo que te lleves y comprueba:
 
 ```sh
 sha256sum --check --ignore-missing SHA256SUMS
@@ -228,6 +279,20 @@ sha256sum --check --ignore-missing SHA256SUMS
 
 `--ignore-missing` es lo que permite comprobar solo los ficheros que hayas
 descargado sin que falle por los que no.
+
+**Nombres con `+`.** GitHub renombra los assets de una release cuyo nombre lleva
+caracteres especiales y sustituye el `+` por `.`: el wheel
+`gekko_bauh-0.10.8+gekko.1-py3-none-any.whl` se descarga como
+`gekko_bauh-0.10.8.gekko.1-py3-none-any.whl`, y lo mismo con el sdist y el
+tarball de la etiqueta. Por eso `SHA256SUMS` lleva **dos líneas** por cada uno
+de esos ficheros, una con cada nombre, y la comprobación anterior funciona
+tanto con el fichero recién descargado como con uno renombrado a su nombre
+original. El artefacto de GekkoApp se genera ya sin `+` (`...-0.10.8.gekko.1.tar.zst`)
+y no cambia de nombre.
+
+**Instalación desde GekkoApp.** El Control Center no usa `SHA256SUMS`: descarga
+el manifiesto y el `.tar.zst` del último release, comprueba el tamaño y el
+SHA-256 que declara el manifiesto y solo entonces ejecuta `pipx install`.
 
 **Instalación por `curl` (`install.sh`).** El instalador no usa `SHA256SUMS`:
 resuelve la referencia que le pidas contra la API de GitHub, obtiene el SHA-1
@@ -262,6 +327,12 @@ activarse, pero **no está activo**. Hay dos cosas que decidir antes:
 Mientras tanto el wheel y el sdist se publican en la release de GitHub, que es
 suficiente para instalar con `pipx` o `pip` desde una URL.
 
+Sobre el instalador por `curl`: con pipx, las dependencias se instalan solo
+desde wheels (`PIP_ONLY_BINARY` para el backend pip, separada por comas, y
+`UV_NO_BUILD_PACKAGE` para el backend uv, separada por espacios: uv rechaza la
+lista con comas al crear el entorno). `--allow-build-from-source` quita esa
+restricción.
+
 ---
 
 ## 8. Comprobaciones locales, sin red
@@ -275,6 +346,10 @@ bash -n packaging/aur/gekko-bauh-git/PKGBUILD
 
 # Coherencia PKGBUILD ↔ .SRCINFO, versión, dependencias y ficheros instalados
 QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -p 'test_aur.py'
+
+# Sintaxis del generador del artefacto de GekkoApp y una construcción de prueba
+bash -n tools/build-gekkoapp-release.sh
+bash tools/build-gekkoapp-release.sh     # deja el .tar.zst y el manifiesto en releases/dist/
 ```
 
 Con `shellcheck` instalado (SC2164 se excluye porque `makepkg` ya aborta si un
@@ -283,6 +358,7 @@ en el fichero):
 
 ```sh
 shellcheck --shell=bash --exclude=SC2034,SC2154,SC2164 packaging/aur/*/PKGBUILD
+shellcheck install.sh tests/installer/run_tests.sh tools/build-gekkoapp-release.sh
 ```
 
 En una máquina Arch, además:

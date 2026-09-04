@@ -12,7 +12,7 @@ from bauh.view.util.translation import I18n
 
 # Repositorio del fork cuyos releases se consultan. El upstream (vinifmor/bauh) comparte el mismo esquema
 # numérico de versiones, así que avisar de sus releases llevaría al usuario a sustituir el fork por el original.
-FORK_REPOSITORY = 'The-Gekko/Bauh-Fork-The-Gekko'
+FORK_REPOSITORY = 'The-Gekko/The-Gekko-Bauh'
 RELEASES_URL = f'https://api.github.com/repos/{FORK_REPOSITORY}/releases'
 
 # Etiqueta git del fork: 'v<X.Y.Z>-gekko.<N>' (equivale a la versión PEP 440 '<X.Y.Z>+gekko.<N>' de bauh/__init__.py).

@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 Primera versión etiquetada de **bauh Gekko Edition** (etiqueta git `v0.10.8-gekko.1`),
 fork de [vinifmor/bauh](https://github.com/vinifmor/bauh) mantenido por
-[The-Gekko](https://github.com/The-Gekko/Bauh-Fork-The-Gekko).
+[The-Gekko](https://github.com/The-Gekko/The-Gekko-Bauh).
 
 **Base upstream**: rama `staging` en `3a38a666` (0.10.8 sin publicar, incluye
 todo `master` hasta `b1ea479a`) más la rama `fix-qt-wayland-crash`. Los cambios
@@ -84,6 +84,17 @@ El esquema de versiones del fork es `<versión upstream>+gekko.N`
   Qt incompleta.
 - Gem GitHub: retirada la afirmación de «protección anti-scripts», que no
   tenía respaldo en el código.
+- `install.sh`: con el backend `uv` de pipx (el que pipx elige solo cuando
+  encuentra `uv`), `UV_NO_BUILD_PACKAGE` se pasa separada por espacios; con la
+  lista separada por comas uv rechazaba la variable al crear el entorno y la
+  instalación fallaba en cualquier equipo con uv.
+- `install.sh`: desde un checkout se instala una copia temporal limpia (sin
+  `build/`, `dist/`, `*.egg-info`, `__pycache__` ni `.git`); antes un `build/lib`
+  antiguo arrastraba al entorno las gems `debian` y `snap` ya eliminadas y
+  paquetes espurios (`build`, `tools`). `--ref` desde un checkout avisa y sale
+  con código 2 en vez de ignorarse; `uninstall --purge` no repite rutas cuando
+  `XDG_DATA_HOME`/`XDG_CONFIG_HOME` coinciden con las rutas por defecto; el
+  directorio temporal de trabajo se borra siempre al salir.
 
 ### Security
 - La contraseña de administrador se entrega por `stdin` a `sudo -S -k` y
@@ -127,6 +138,17 @@ El esquema de versiones del fork es `<versión upstream>+gekko.N`
   `~/.config/bauh` (que pertenece al bauh oficial) y conserva los clones de la gem
   GitHub. El ofrecimiento de restablecer `ui.theme` en la configuración del bauh
   oficial se hace tanto con `--purge` como sin él.
+- Repositorio renombrado a `The-Gekko/The-Gekko-Bauh` (GitHub redirige el nombre
+  anterior, `Bauh-Fork-The-Gekko`): actualizadas las URL del código, del
+  instalador, de los PKGBUILD y de la documentación.
+- Artefacto para [GekkoApp](https://github.com/The-Gekko/GekkoApp):
+  `tools/build-gekkoapp-release.sh` (copia vendorizada del script de GekkoApp)
+  genera `bauh-fork-the-gekko-<X.Y.Z.gekko.N>.tar.zst` y el manifiesto
+  `bauh-fork-the-gekko-x86_64-unknown-linux-gnu.manifest.json` con
+  `release.tag = vX.Y.Z-gekko.N`, dos entradas de menú (`org.thegekko.bauh` y
+  `org.thegekko.bauh.tray`) e icono hicolor de 512 px; `release.yml` los
+  adjunta a cada release y `SHA256SUMS` lleva dos líneas para cada asset cuyo
+  nombre GitHub renombra (`+` → `.`).
 
 ### Known issues
 - En compositores Wayland que solo implementan `xdg-shell` (Hyprland, Niri,

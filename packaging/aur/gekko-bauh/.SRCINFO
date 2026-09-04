@@ -2,7 +2,7 @@ pkgbase = gekko-bauh
 	pkgdesc = Graphical package manager for Arch/AUR, Chaotic AUR, Flatpak and Solus (eopkg)
 	pkgver = 0.10.8+gekko.1
 	pkgrel = 1
-	url = https://github.com/The-Gekko/Bauh-Fork-The-Gekko
+	url = https://github.com/The-Gekko/The-Gekko-Bauh
 	arch = any
 	license = custom:zlib
 	makedepends = python-build
@@ -23,7 +23,7 @@ pkgbase = gekko-bauh
 	optdepends = python-lxml: required by the optional web gem
 	optdepends = python-beautifulsoup4: required by the optional web gem
 	options = !debug
-	source = gekko-bauh-0.10.8+gekko.1.tar.gz::https://github.com/The-Gekko/Bauh-Fork-The-Gekko/archive/refs/tags/v0.10.8-gekko.1.tar.gz
+	source = gekko-bauh-0.10.8+gekko.1.tar.gz::https://github.com/The-Gekko/The-Gekko-Bauh/archive/refs/tags/v0.10.8-gekko.1.tar.gz
 	sha256sums = SKIP
 
 pkgname = gekko-bauh

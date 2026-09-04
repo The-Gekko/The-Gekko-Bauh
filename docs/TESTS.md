@@ -1,17 +1,27 @@
 # Cómo se prueba este proyecto
 
-La suite usa `unittest` de la biblioteca estándar, sin pytest. Se ejecuta entera con:
+La suite usa `unittest` de la biblioteca estándar, sin pytest.
+
+**Requisito previo: un entorno virtual con `requirements-dev.txt`.** Sin `pyyaml` y
+`colorama`, `unittest discover` falla al **importar** 24 módulos de test (21 por `yaml` y 3
+por `colorama`: los que cargan `bauh.api.abstract.controller` o `bauh.commons.config`), y
+esos fallos de importación cuentan como errores, no como tests omitidos. Con el Python del
+sistema y sin esas dependencias la suite termina en `FAILED (errors=24, ...)`, y eso no
+significa que el código esté roto.
 
 ```bash
-python -m unittest discover -s tests -t .
+python3 -m venv .venv
+.venv/bin/pip install -r requirements-dev.txt          # suite sin Qt
+.venv/bin/python -m unittest discover -s tests -t .
 ```
 
 Los tests que necesitan PyQt5 se saltan solos si no está instalado, así que el comando
-anterior funciona igual en un entorno sin Qt. Para ejecutarlos, instala PyQt5 y usa la
-plataforma `offscreen`:
+anterior funciona igual en un entorno sin Qt. Para ejecutarlos, instala también
+`requirements.txt` (trae PyQt5) y usa la plataforma `offscreen`:
 
 ```bash
-QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -t .
+.venv/bin/pip install -r requirements.txt
+QT_QPA_PLATFORM=offscreen .venv/bin/python -m unittest discover -s tests -t .
 ```
 
 ## Qué cubre cada carpeta
@@ -22,8 +32,8 @@ QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -t .
 | `tests/gems/<gem>/` | Cada backend por separado, parcheando la frontera con el sistema. |
 | `tests/view/` | Temas, hojas de estilo, modelo de la tabla y ciclo de vida de las ventanas. |
 | `tests/integration/` | Las gems contra **binarios simulados en el `PATH`** (ver abajo). |
-| `tests/installer/` | `tools/check_locales.py` y el empaquetado. Los 21 casos de `install.sh` viven en `tests/installer/run_tests.sh`. |
-| `tests/packaging/` | Las recetas del AUR: que `PKGBUILD` y `.SRCINFO` concuerden. |
+| `tests/installer/` | `tools/check_locales.py`, `tools/build-gekkoapp-release.sh` y el empaquetado (`pyproject.toml`, `.desktop`, invariantes de `install.sh`). Los 26 casos de `install.sh` viven en `tests/installer/run_tests.sh`. |
+| `tests/packaging/` | Las recetas del AUR (que `PKGBUILD` y `.SRCINFO` concuerden) y el workflow de release. |
 
 ## Tests de integración con binarios simulados
 
@@ -64,17 +74,23 @@ Estas pruebas cubren dos cosas que las unitarias no pueden:
 
 ## Tests del instalador
 
-`install.sh` se prueba aparte, en bash, dentro de un `HOME` de mentira y con `pipx`, `curl`
-y `sudo` simulados:
+`install.sh` se prueba aparte, en bash, dentro de un `HOME` de mentira y con `pipx`, `uv`,
+`curl` y `sudo` simulados:
 
 ```bash
 bash tests/installer/run_tests.sh
 ```
 
-Son 21 casos: instalación local y remota, reinstalación del mismo commit, `--force`,
-`--ref`, respaldo de iconos, migración desde el entorno antiguo, desinstalación con y sin
-`--purge`, conservación de los clones de la gem GitHub y respeto por una instalación ajena
-del bauh oficial. Ninguno usa red ni `sudo` de verdad.
+Son 26 casos: instalación local y remota, backend uv de pipx (`UV_NO_BUILD_PACKAGE`
+separada por espacios y `PIP_ONLY_BINARY` por comas; el `pipx` falso aborta con comas
+igual que uv), `--allow-build-from-source`, `--ref` rechazado en modo local, instalación
+local desde una copia limpia (sin `build/`, `dist/`, `*.egg-info`, `__pycache__` ni
+`.git`), reinstalación del mismo commit, `--force`, `--ref` remoto, respaldo de iconos,
+migración desde el entorno antiguo, desinstalación con y sin `--purge` (también con
+`XDG_DATA_HOME` igual a `~/.local/share`, sin rutas repetidas), conservación de los
+clones de la gem GitHub y respeto por una instalación ajena del bauh oficial. Ninguno usa
+red ni `sudo` de verdad; el `uv` falso solo existe para que `install.sh` no fuerce
+`--backend pip`.
 
 ## Comprobación de traducciones
 
@@ -89,16 +105,21 @@ por completo.
 
 ## Lo que ejecuta la integración continua
 
-`.github/workflows/ci.yml` corre seis trabajos:
+`.github/workflows/ci.yml` corre siete trabajos (los nombres son los `id` de los jobs):
 
-| Trabajo | Qué hace |
-|---|---|
-| `tests` | La suite **sin PyQt5** en Python 3.9, 3.12 y 3.14. Garantiza que ningún módulo importe Qt en el nivel superior. |
-| `tests-qt` | La suite **completa** con Qt `offscreen` en 3.12. |
-| `lint` | `ruff check bauh tests tools`. |
-| `installer` | `shellcheck` sobre los dos scripts y los 21 casos de `run_tests.sh`. |
-| `build` | `python -m build`, `twine check` y comprobación de que el wheel lleva locales, imágenes, estilos, lanzadores y los datos vendorizados de la gem Arch. |
-| `locales` | Informe de traducciones y puerta bloqueante. |
+| Trabajo | Nombre visible | Qué hace |
+|---|---|---|
+| `tests` | tests (py3.9/3.12/3.14, sin Qt) | La suite **sin PyQt5** en Python 3.9, 3.12 y 3.14. Garantiza que ningún módulo importe Qt en el nivel superior. |
+| `qt` | tests con PyQt5 (offscreen) | La suite **completa** con Qt `offscreen` en 3.12, instalando `requirements.txt` solo desde wheels. |
+| `lint` | lint (ruff + shellcheck) | `ruff check bauh tests tools` (bloqueante), un informe de la deuda heredada (no bloquea), `ruff` estricto sobre `tools`, `tests/installer` y `bauh/__init__.py`, `bash -n` y `shellcheck` sobre `install.sh`, `tests/installer/run_tests.sh` y `tools/build-gekkoapp-release.sh`. |
+| `installer` | tests del instalador | Los 26 casos de `tests/installer/run_tests.sh`. |
+| `build` | build + twine check | `python -m build`, `twine check` y comprobación de que el wheel lleva locales, imágenes, estilos, lanzadores y los datos vendorizados de la gem Arch. |
+| `integration` | integracion (binarios simulados) | `tests/integration/` con `pacman`, `eopkg` y `flatpak` simulados. |
+| `locales` | paridad de traducciones | Informe de traducciones y puerta bloqueante. |
+
+El workflow de release (`release.yml`, etiquetas `v*`) no repite la suite: construye el
+wheel y el sdist, genera el artefacto de GekkoApp con `tools/build-gekkoapp-release.sh` y
+publica todo con `SHA256SUMS` (ver `docs/DISTRIBUCION.md`).
 
 ## Escribir un test nuevo
 

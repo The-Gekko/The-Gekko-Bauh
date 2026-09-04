@@ -22,7 +22,7 @@ I18N = {
 
 def release(tag: str, draft: bool = False, prerelease: bool = False, html_url: Optional[str] = None) -> dict:
     return {'tag_name': tag, 'draft': draft, 'prerelease': prerelease,
-            'html_url': html_url or f'https://github.com/The-Gekko/Bauh-Fork-The-Gekko/releases/tag/{tag}'}
+            'html_url': html_url or f'https://github.com/The-Gekko/The-Gekko-Bauh/releases/tag/{tag}'}
 
 
 class ParseReleaseTagTest(TestCase):
@@ -121,7 +121,7 @@ class CheckForUpdateTest(TestCase):
         self.http_client = Mock()
 
     def test_must_query_the_fork_releases_and_not_the_upstream(self):
-        self.assertIn('The-Gekko/Bauh-Fork-The-Gekko', RELEASES_URL)
+        self.assertIn('The-Gekko/The-Gekko-Bauh', RELEASES_URL)
         self.assertNotIn('vinifmor', RELEASES_URL)
 
         self.http_client.get_json.return_value = []
@@ -136,7 +136,7 @@ class CheckForUpdateTest(TestCase):
 
         self.assertIsNotNone(msg)
         self.assertIn('v0.10.8-gekko.1', msg)
-        self.assertIn('https://github.com/The-Gekko/Bauh-Fork-The-Gekko/releases/tag/v0.10.8-gekko.1', msg)
+        self.assertIn('https://github.com/The-Gekko/The-Gekko-Bauh/releases/tag/v0.10.8-gekko.1', msg)
         self.assertTrue(os.path.isfile(f'{self.cache_dir.name}/updates/v0.10.8-gekko.1'))
 
     def test_must_not_notify_the_same_release_twice(self):
