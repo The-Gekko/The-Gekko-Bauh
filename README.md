@@ -119,7 +119,16 @@ punto es comprobable en el código o en la propia interfaz.
     específico de Chaotic AUR.
 - **eopkg (Solus)**: gem nueva. Se activa cuando existe el binario `eopkg`
   (no detecta «Solus» como tal). Lista los paquetes instalados con su versión
-  real y detecta actualizaciones con `eopkg list-upgrades`.
+  real y detecta actualizaciones con `eopkg list-upgrades`. Ese comando no
+  consulta la red: responde desde el índice local de `/var/lib/eopkg/index`,
+  así que al arrancar bauh ejecuta `sudo eopkg ur` **como mucho una vez al
+  día**, y sólo si el índice no se refrescó hoy (por eso unos días pide la
+  contraseña de administrador y otros no). Si esa sincronización no ocurre
+  (contraseña cancelada, `eopkg ur` fallido o la opción desactivada), un aviso
+  explica que el «sin actualizaciones» sale de un índice viejo; se desactiva
+  con la clave `sync_repos_startup` de `~/.config/gekko-bauh/eopkg.yml`. La
+  CLI (`gekko-bauh-cli updates`) y la bandeja **no** sincronizan, porque no
+  tienen privilegios: informan según el último índice descargado.
 - **GitHub**: gem nueva y **opt-in** para clonar un repositorio y compilarlo
   en tu equipo. Detecta el método de build (PKGBUILD, `setup.py`/`pyproject`,
   Cargo, ...), **muestra el comando exacto que va a ejecutar y pide
@@ -554,8 +563,8 @@ del upstream.
 | Ruta | Contenido |
 |---|---|
 | `~/.config/gekko-bauh/config.yml` | Configuración general: `gems` activas, `ui.theme`, `custom_theme`, actualizaciones, descargas, copias de seguridad. |
-| `~/.config/gekko-bauh/<gem>.yml` | Configuración de cada gem (`arch.yml`, `eopkg.yml`, `github.yml`, ...). |
-| `~/.cache/gekko-bauh/` | Caché de paquetes, iconos y sugerencias. |
+| `~/.config/gekko-bauh/<gem>.yml` | Configuración de cada gem (`arch.yml`, `eopkg.yml`, `github.yml`, ...). En `eopkg.yml`, `sync_repos_startup` decide si al arrancar se ejecuta `sudo eopkg ur` (como mucho una vez al día). |
+| `~/.cache/gekko-bauh/` | Caché de paquetes, iconos y sugerencias. Incluye `eopkg/repo_sync`, la marca de la última sincronización de repositorios que hizo bauh. |
 | `~/.local/share/gekko-bauh/` | Datos compartidos, temas de usuario (`themes/`) y clones de la gem GitHub (`github/repos/`). |
 | `~/.cache/gekko-bauh/tmp` | Archivos temporales de la sesión, con permisos `0700`. No se usa `$XDG_RUNTIME_DIR` porque es un tmpfs pequeño (10 % de la RAM). |
 | `~/.cache/gekko-bauh/logs` | Logs de la sesión (`gekko-bauh --logs` los muestra además en el terminal). |
@@ -569,7 +578,7 @@ configuración, caché y temporales), `gekko-bauh --version`,
 ## Cómo ejecutar los tests
 
 La suite usa `unittest` (sin pytest). **Necesita un entorno virtual con
-`requirements-dev.txt`**: sin `pyyaml` y `colorama`, 24 módulos de test fallan
+`requirements-dev.txt`**: sin `pyyaml` y `colorama`, 25 módulos de test fallan
 al importarse y la suite termina en error aunque el código esté bien. Los tests
 de la interfaz necesitan además PyQt5 (`requirements.txt`) y una plataforma Qt
 sin pantalla; si PyQt5 no está instalado se omiten solos.

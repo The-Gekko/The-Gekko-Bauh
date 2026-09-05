@@ -27,6 +27,15 @@ El esquema de versiones del fork es `<versión upstream>+gekko.N`
   opacidad e imagen de fondo; clave `custom_theme` de `config.yml`).
 - Gem **eopkg** (Solus): búsqueda, instalados, instalación, desinstalación y
   actualizaciones. Se activa cuando existe el binario `eopkg`.
+- eopkg: **sincronización de los repositorios al arrancar**. Como
+  `eopkg list-upgrades` responde desde el índice local de
+  `/var/lib/eopkg/index`, bauh lanza `sudo eopkg ur` al arrancar como mucho una
+  vez al día, y sólo si el índice no se refrescó hoy (clave
+  `sync_repos_startup` de `eopkg.yml`, activa por defecto; la marca propia se
+  guarda en `~/.cache/gekko-bauh/eopkg/repo_sync`). Si la sincronización no
+  llega a ocurrir, un aviso explica que el «sin actualizaciones» viene de un
+  índice desfasado. La CLI (`gekko-bauh-cli updates`) y la bandeja no
+  sincronizan, porque no tienen privilegios.
 - Gem **GitHub** (opt-in): clona un repositorio, detecta el método de build
   (PKGBUILD, `setup.py`/`pyproject`, Cargo, ...), muestra el comando exacto,
   pide confirmación antes de ejecutarlo y separa la compilación (usuario) de
@@ -76,6 +85,11 @@ El esquema de versiones del fork es `<versión upstream>+gekko.N`
 - eopkg: los paquetes instalados muestran su versión real y la lista de
   actualizaciones funciona (antes ambas quedaban vacías). Aclarado que `-N`
   es `--no-color`; el modo no interactivo lo da `-y`.
+- eopkg: `eopkg info` parte la línea «Name : x, version: v, release: n» cuando
+  el nombre del paquete es largo (`nvidia-580-glx-driver-common`) y deja el
+  resto en una línea indentada; el analizador vuelve a juntarlas, así que esos
+  paquetes vuelven a mostrar su versión y `get_info` los encuentra (antes se
+  quedaban sin número de versión en la lista de actualizaciones).
 - Temas: `gtk` y `matugen` vuelven a aparecer en el selector de temas de
   Ajustes.
 - Arch: los repositorios con guion ya no se ignoran al leer `/etc/pacman.conf`.

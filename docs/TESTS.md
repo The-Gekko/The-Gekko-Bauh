@@ -3,10 +3,10 @@
 La suite usa `unittest` de la biblioteca estándar, sin pytest.
 
 **Requisito previo: un entorno virtual con `requirements-dev.txt`.** Sin `pyyaml` y
-`colorama`, `unittest discover` falla al **importar** 24 módulos de test (21 por `yaml` y 3
+`colorama`, `unittest discover` falla al **importar** 25 módulos de test (22 por `yaml` y 3
 por `colorama`: los que cargan `bauh.api.abstract.controller` o `bauh.commons.config`), y
 esos fallos de importación cuentan como errores, no como tests omitidos. Con el Python del
-sistema y sin esas dependencias la suite termina en `FAILED (errors=24, ...)`, y eso no
+sistema y sin esas dependencias la suite termina en `FAILED (errors=25, ...)`, y eso no
 significa que el código esté roto.
 
 ```bash

@@ -19,4 +19,7 @@ class EopkgConfigManager(YAMLConfigManager):
             'command_timeout': DEFAULT_COMMAND_TIMEOUT,
             # 'sudo eopkg ur' antes de actualizar, tal y como recomienda el flujo oficial
             'sync_repos_before_upgrade': True,
+            # 'sudo eopkg ur' al arrancar: sin él 'eopkg list-upgrades' responde con el índice
+            # local, que puede llevar días sin refrescar, y bauh no ve ninguna actualización
+            'sync_repos_startup': True,
         }

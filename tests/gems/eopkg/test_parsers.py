@@ -365,3 +365,128 @@ class SummaryWithSeparatorsTest(unittest.TestCase):
                   'vlc 3.0.20 1 VLC media player\n')
 
         self.assertEqual(['gnome-shell', 'vlc'], [p['name'] for p in parsers.parse_package_list(output)])
+
+
+class WrappedInfoNameLineTest(unittest.TestCase):
+    """Salida real de Solus 4.9 (eopkg 5.0.0) para un paquete de nombre largo.
+
+    eopkg parte 'Name : x, version: v, release: n' cuando no cabe en el ancho de línea.
+    Antes de rejuntarla, el bloque se identificaba por el texto entero y se quedaba sin
+    versión: la lista de actualizaciones enseñaba esos paquetes con la versión en blanco.
+    """
+
+    OUTPUT = """Installed package:
+Name                : nvidia-580-glx-driver-common, version: 580.178.04,
+                      release: 13
+Summary             : Shared assets for the NVIDIA 580.xx Binary Driver
+Component           : xorg.driver
+
+Package found in Solus repository:
+Name                : nvidia-580-glx-driver-common, version: 580.178.04,
+                      release: 14
+Summary             : Shared assets for the NVIDIA 580.xx Binary Driver
+Component           : xorg.driver
+"""
+
+    def test_the_wrapped_name_line_must_yield_name_version_and_release(self):
+        blocks = parsers.parse_info_blocks(self.OUTPUT)
+
+        self.assertEqual(2, len(blocks))
+
+        for block in blocks:
+            self.assertEqual('nvidia-580-glx-driver-common', block['name'])
+            self.assertEqual('580.178.04', block['version'])
+
+        self.assertEqual('13', blocks[0]['release'])
+        self.assertEqual('14', blocks[1]['release'])
+
+    def test_the_package_must_be_indexed_by_its_real_name(self):
+        sections = parsers.index_info_blocks(parsers.parse_info_blocks(self.OUTPUT))
+
+        self.assertEqual(['nvidia-580-glx-driver-common'], list(sections))
+        entry = sections['nvidia-580-glx-driver-common']
+        self.assertEqual('580.178.04-13', parsers.format_version(entry['installed']['version'],
+                                                                entry['installed']['release']))
+        self.assertEqual('580.178.04-14', parsers.format_version(entry['repository']['version'],
+                                                                entry['repository']['release']))
+
+    def test_the_fields_after_the_wrap_must_still_be_read(self):
+        # la continuación no puede tragarse los campos siguientes, que van sin indentar
+        blocks = parsers.parse_info_blocks(self.OUTPUT)
+
+        self.assertEqual('xorg.driver', blocks[0]['component'])
+        self.assertEqual('Shared assets for the NVIDIA 580.xx Binary Driver', blocks[0]['summary'])
+
+    def test_a_name_line_that_does_not_wrap_must_keep_working(self):
+        output = "Name                : vlc, version: 3.0.23, release: 203\n"
+
+        block = parsers.parse_info_blocks(output)[0]
+
+        self.assertEqual(('vlc', '3.0.23', '203'),
+                         (block['name'], block['version'], block['release']))
+
+
+class WrappedInfoNameLineCutPointsTest(unittest.TestCase):
+    """Los tres puntos por donde eopkg puede partir la línea compuesta.
+
+    ``align()`` (``pisi/cli/__init__.py``) retrocede hasta el último espacio anterior a la
+    columna ``ancho - 22`` (58 con las 80 columnas de reserva de ``shutil.get_terminal_size``),
+    y en esta línea sólo hay espacios detrás de una coma y detrás de ``version:`` /
+    ``release:``.  Las salidas de abajo están renderizadas con ese algoritmo a partir de los
+    nombres, versiones y releases del índice real de Solus (``shannon``): de los 11660
+    paquetes, 325 envuelven la línea (167 cortan tras la coma, 153 tras ``release:`` y 5 tras
+    ``version:``).
+    """
+
+    # anoise-media-community-extension1 0.0.17-10 (índice de Solus): corte tras la coma
+    CUT_AFTER_COMMA = ("Name                : anoise-media-community-extension1, version: 0.0.17,\n"
+                       "                      release: 10\n")
+
+    # gnome-shell-extension-native-window-placement 48.3-58: corte tras 'version:'
+    CUT_AFTER_VERSION = ("Name                : gnome-shell-extension-native-window-placement, "
+                         "version:\n                      48.3, release: 58\n")
+
+    # gstreamer-1.0-plugins-bad-libs 1.26.7-120: corte tras 'release:', el caso que dejaba
+    # 'release' valiendo ':' y el número pegado al final del nombre
+    CUT_AFTER_RELEASE = ("Name                : gstreamer-1.0-plugins-bad-libs, version: 1.26.7, "
+                         "release:\n                      120\n")
+
+    # vlc 3.0.21-190: cabe entera, control sin envoltura
+    NO_CUT = "Name                : vlc, version: 3.0.21, release: 190\n"
+
+    def _parse(self, output: str):
+        block = parsers.parse_info_blocks(output)[0]
+        return block['name'], block['version'], block['release']
+
+    def test_a_cut_after_the_comma(self):
+        self.assertEqual(('anoise-media-community-extension1', '0.0.17', '10'),
+                         self._parse(self.CUT_AFTER_COMMA))
+
+    def test_a_cut_after_the_version_key(self):
+        self.assertEqual(('gnome-shell-extension-native-window-placement', '48.3', '58'),
+                         self._parse(self.CUT_AFTER_VERSION))
+
+    def test_a_cut_after_the_release_key(self):
+        # antes se leía ('gstreamer-1.0-plugins-bad-libs 120', '1.26.7', ':')
+        self.assertEqual(('gstreamer-1.0-plugins-bad-libs', '1.26.7', '120'),
+                         self._parse(self.CUT_AFTER_RELEASE))
+
+    def test_a_line_that_does_not_wrap(self):
+        self.assertEqual(('vlc', '3.0.21', '190'), self._parse(self.NO_CUT))
+
+    def test_the_release_must_never_be_a_stray_colon(self):
+        # la mitad de línea suelta no puede casar por sí sola: sin esto, ':' pasaba por release
+        half = "Name                : gstreamer-1.0-plugins-bad-libs, version: 1.26.7, release:"
+
+        self.assertIsNone(parsers.RE_INFO_NAME_LINE.match(half))
+
+    def test_the_fields_after_a_release_cut_must_still_be_read(self):
+        output = (self.CUT_AFTER_RELEASE
+                  + "Summary             : GStreamer bad plugins libraries\n"
+                    "Component           : multimedia.library\n")
+
+        block = parsers.parse_info_blocks(output)[0]
+
+        self.assertEqual('gstreamer-1.0-plugins-bad-libs', block['name'])
+        self.assertEqual('GStreamer bad plugins libraries', block['summary'])
+        self.assertEqual('multimedia.library', block['component'])

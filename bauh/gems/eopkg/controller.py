@@ -4,6 +4,7 @@ import subprocess
 import traceback
 from typing import Dict, Generator, List, Optional, Set, Tuple, Type
 
+from bauh.api import user
 from bauh.api.abstract.context import ApplicationContext
 from bauh.api.abstract.controller import (
     SearchResult,
@@ -26,17 +27,21 @@ from bauh.api.abstract.view import (
     FormComponent,
     MessageType,
     PanelComponent,
+    SingleSelectComponent,
     TextInputComponent,
 )
+from bauh.commons.boot import CreateConfigFile
 from bauh.commons.html import bold
 from bauh.commons.system import ProcessHandler, SimpleProcess
-from bauh.gems.eopkg import EOPKG_CACHE_DIR, commands, get_icon_path, parsers
+from bauh.commons.view_utils import new_select
+from bauh.gems.eopkg import EOPKG_CACHE_DIR, commands, get_icon_path, index, parsers
 from bauh.gems.eopkg.config import (
     DEFAULT_COMMAND_TIMEOUT,
     DEFAULT_SEARCH_LIMIT,
     EopkgConfigManager,
 )
 from bauh.gems.eopkg.model import EopkgPackage
+from bauh.gems.eopkg.worker import SyncRepositories
 
 # la salida de eopkg está traducida al idioma del sistema: se fuerza la locale C (manteniendo
 # UTF-8 para no romper la descodificación de los resúmenes) para poder analizarla
@@ -45,6 +50,11 @@ EOPKG_ENV = {'LANG': 'C.UTF-8', 'LC_ALL': 'C.UTF-8', 'LANGUAGE': 'C'}
 # a partir de este número de paquetes actualizables se deja de consultar 'eopkg info' para
 # resolver la versión disponible: la línea de comandos resultante sería desmesurada
 MAX_INFO_BATCH = 60
+
+# tiempo máximo que 'prepare' espera al 'eopkg ur' del arranque. Cinco minutos: una
+# sincronización real tarda segundos, y ni el peor de los mirrores lentos se acerca a ese
+# número, así que sólo se alcanza cuando la descarga se ha quedado colgada de verdad
+SYNC_TIMEOUT = 300
 
 
 class EopkgManager(SoftwareManager, SettingsController):
@@ -394,7 +404,9 @@ class EopkgManager(SoftwareManager, SettingsController):
             synced, _ = handler.handle_simple(
                 self._new_root_process(commands.update_repos_command(), root_password))
 
-            if not synced:
+            if synced:
+                index.register_sync(self.logger)
+            else:
                 self.logger.warning("No se pudieron actualizar los repositorios de eopkg antes "
                                     "de la actualización")
 
@@ -459,13 +471,68 @@ class EopkgManager(SoftwareManager, SettingsController):
         return True, None
 
     def requires_root(self, action: SoftwareAction, pkg: Optional[SoftwarePackage] = None) -> bool:
+        # la contraseña del arranque sólo se pide si de verdad toca sincronizar: si el índice
+        # ya se refrescó hoy no hay motivo para molestar al usuario
+        if action == SoftwareAction.PREPARE:
+            return SyncRepositories.should_sync(self._get_config(), self.logger)
+
         # instalar, desinstalar y actualizar con eopkg exige siempre privilegios de root
         return action in (SoftwareAction.INSTALL, SoftwareAction.UNINSTALL,
                           SoftwareAction.UPGRADE)
 
     def prepare(self, task_manager: Optional[TaskManager], root_password: Optional[str],
                 internet_available: Optional[bool]):
-        pass
+        """Sincroniza los índices de los repositorios antes de que nadie pida actualizaciones.
+
+        ``eopkg list-upgrades`` no consulta la red: contesta a partir del índice que
+        ``eopkg ur`` deja en ``/var/lib/eopkg/index``.  Sin esta tarea el índice podía llevar
+        días sin refrescar y bauh daba el sistema por actualizado aunque Solus hubiese
+        publicado paquetes ese mismo día.
+        """
+        if internet_available is False:
+            return
+
+        # La recarga de ajustes llama a prepare(None, None, None) ('bauh/view/qt/settings.py'),
+        # y ahí no hay panel de arranque en el que enseñar el progreso: sin gestor de tareas no
+        # se sincroniza. Comprobarlo hace falta aparte de la guarda de root, porque con bauh
+        # lanzado como root aquélla no corta y el guardado de ajustes se quedaría bloqueado
+        # ejecutando un 'eopkg ur' sin barra de progreso ni forma de cancelarlo.
+        if task_manager is None:
+            self.logger.info("Se omite la sincronización de repositorios de eopkg: "
+                             "no hay gestor de tareas (recarga de ajustes)")
+            return
+
+        # 'eopkg ur' exige root: sin contraseña no hay nada que sincronizar y pedirla aquí
+        # sería intrusivo.
+        if root_password is None and not user.is_root():
+            self.logger.info("Se omite la sincronización de repositorios de eopkg: "
+                             "no se dispone de privilegios de root")
+            return
+
+        create_config = CreateConfigFile(taskman=task_manager, configman=self.configman,
+                                         i18n=self.i18n, task_icon_path=get_icon_path(),
+                                         logger=self.logger)
+        create_config.start()
+
+        sync = SyncRepositories(taskman=task_manager, root_password=root_password, i18n=self.i18n,
+                                logger=self.logger, create_config=create_config,
+                                extra_env=dict(EOPKG_ENV),
+                                on_synchronized=self._invalidate_installed_cache)
+        sync.start()
+
+        # se espera a que termine: 'read_installed' y 'list_updates' se ejecutan justo después
+        # y deben ver el índice ya refrescado, no el de la sesión anterior. La espera se acota
+        # porque la vista Qt no emite 'signal_started' hasta que prepare() vuelve
+        # ('bauh/view/qt/prepare.py'): un 'eopkg ur' colgado contra un mirror que no responde
+        # dejaría el panel de arranque sin botones de Saltar ni de Cerrar. El límite es
+        # holgado a propósito, muy por encima de lo que tarda una sincronización real incluso
+        # con una conexión mala, para no cortar ninguna que fuese a terminar.
+        sync.join(SYNC_TIMEOUT)
+
+        if sync.is_alive():
+            self.logger.warning(f"La sincronización de los repositorios de eopkg sigue en curso "
+                                f"tras {SYNC_TIMEOUT} segundos: 'list_updates' usará el índice "
+                                f"anterior hasta que termine")
 
     def list_updates(self, internet_available: bool) -> List[PackageUpdate]:
         if not internet_available:
@@ -490,7 +557,25 @@ class EopkgManager(SoftwareManager, SettingsController):
                 for name in names]
 
     def list_warnings(self, internet_available: bool) -> Optional[List[str]]:
-        return None
+        if not internet_available:
+            return None
+
+        # si la sincronización del arranque no llegó a ocurrir (sin red o con el mirror caído,
+        # sudo denegado, opción desactivada), 'list-upgrades' seguirá contestando con un índice
+        # viejo. Ese silencio es indistinguible de un sistema al día, así que se avisa
+        # explícitamente.
+        if not index.should_sync(self.logger):
+            return None
+
+        moment = index.last_sync(self.logger)
+
+        if moment is None:
+            return [self.i18n['eopkg.warning.repos_never_synced']]
+
+        # fecha en ISO: el aviso se traduce a diez idiomas y '04/09/2026' se lee como el 9 de
+        # abril en inglés; además es el formato que ya usa el registro de 'index.py'
+        return [self.i18n['eopkg.warning.repos_outdated'].format(
+            bold(moment.strftime('%Y-%m-%d %H:%M')))]
 
     def is_default_enabled(self) -> bool:
         return True
@@ -529,6 +614,11 @@ class EopkgManager(SoftwareManager, SettingsController):
                                value=str(config.get('command_timeout', DEFAULT_COMMAND_TIMEOUT)),
                                only_int=True,
                                id_='command_timeout'),
+            new_select(label=self.i18n['eopkg.config.sync_repos_startup'],
+                       tip=self.i18n['eopkg.config.sync_repos_startup.tip'],
+                       id_='sync_repos_startup',
+                       opts=[(self.i18n['yes'], True, None), (self.i18n['no'], False, None)],
+                       value=bool(config.get('sync_repos_startup', True))),
         ]
 
         yield SettingsView(self, PanelComponent([FormComponent(fields, self.i18n['eopkg.config'])]),
@@ -548,6 +638,9 @@ class EopkgManager(SoftwareManager, SettingsController):
                 value = default
 
             config[key] = value if value > 0 else default
+
+        config['sync_repos_startup'] = bool(
+            form.get_component('sync_repos_startup', SingleSelectComponent).get_selected())
 
         try:
             self.configman.save_config(config)
@@ -596,6 +689,10 @@ class EopkgManager(SoftwareManager, SettingsController):
         handler = ProcessHandler(watcher)
         success, _ = handler.handle_simple(
             self._new_root_process(commands.update_repos_command(), root_password))
+
+        if success:
+            index.register_sync(self.logger)
+
         self._invalidate_installed_cache()
         return success
 

@@ -103,10 +103,11 @@ class EopkgManagerTransactionTest(unittest.TestCase):
         self.assertEqual(['discord', 'libayatana-appindicator'],
                          [p.name for p in result.removed])
 
+    @patch('bauh.gems.eopkg.controller.index')
     @patch('bauh.gems.eopkg.controller.ProcessHandler')
     @patch('bauh.gems.eopkg.controller.SimpleProcess')
     def test_upgrade__must_run_a_single_transaction(self, simple_process: Mock,
-                                                    process_handler: Mock):
+                                                    process_handler: Mock, index: Mock):
         process_handler.return_value.handle_simple.return_value = (True, '')
         requirements = Mock()
         requirements.to_upgrade = [Mock(pkg=EopkgPackage(name='a')),
@@ -118,10 +119,12 @@ class EopkgManagerTransactionTest(unittest.TestCase):
         self.assertEqual(['eopkg', 'up', '--no-color', '-y', 'a', 'b'],
                          simple_process.call_args[0][0])
 
+    @patch('bauh.gems.eopkg.controller.index')
     @patch('bauh.gems.eopkg.controller.ProcessHandler')
     @patch('bauh.gems.eopkg.controller.SimpleProcess')
     def test_upgrade__must_sync_repositories_first_when_configured(self, simple_process: Mock,
-                                                                   process_handler: Mock):
+                                                                   process_handler: Mock,
+                                                                   index: Mock):
         self.manager.configman.get_config.return_value['sync_repos_before_upgrade'] = True
         process_handler.return_value.handle_simple.return_value = (True, '')
         requirements = Mock()
@@ -132,6 +135,24 @@ class EopkgManagerTransactionTest(unittest.TestCase):
         called = [call[0][0] for call in simple_process.call_args_list]
         self.assertEqual([['eopkg', 'ur', '--no-color'],
                           ['eopkg', 'up', '--no-color', '-y', 'a']], called)
+        # esa sincronización cuenta como tal: evita repetirla al arrancar acto seguido
+        index.register_sync.assert_called_once()
+
+    @patch('bauh.gems.eopkg.controller.index')
+    @patch('bauh.gems.eopkg.controller.ProcessHandler')
+    @patch('bauh.gems.eopkg.controller.SimpleProcess')
+    def test_upgrade__must_not_register_a_failed_pre_sync(self, simple_process: Mock,
+                                                          process_handler: Mock, index: Mock):
+        self.manager.configman.get_config.return_value['sync_repos_before_upgrade'] = True
+        # la sincronización falla y la actualización sigue adelante con el índice que haya,
+        # pero no puede quedar registrada como hecha
+        process_handler.return_value.handle_simple.side_effect = [(False, ''), (True, '')]
+        requirements = Mock()
+        requirements.to_upgrade = [Mock(pkg=EopkgPackage(name='a'))]
+
+        self.manager.upgrade(requirements, 'secret', Mock())
+
+        index.register_sync.assert_not_called()
 
     def test_requires_root__install_uninstall_and_upgrade(self):
         for action in (SoftwareAction.INSTALL, SoftwareAction.UNINSTALL,
@@ -275,7 +296,8 @@ class EopkgManagerSettingsTest(unittest.TestCase):
         self.manager.configman = Mock()
         self.manager.configman.get_config.return_value = {'search_limit': 50,
                                                           'command_timeout': 60,
-                                                          'sync_repos_before_upgrade': True}
+                                                          'sync_repos_before_upgrade': True,
+                                                          'sync_repos_startup': True}
 
     def test_get_settings__must_expose_the_editable_options(self):
         views = list(self.manager.get_settings())
@@ -284,6 +306,7 @@ class EopkgManagerSettingsTest(unittest.TestCase):
         form = views[0].component.get_component_by_idx(0, FormComponent)
         self.assertIsNotNone(form.get_component('search_limit'))
         self.assertIsNotNone(form.get_component('command_timeout'))
+        self.assertIsNotNone(form.get_component('sync_repos_startup'))
 
     def test_save_settings__must_persist_the_values(self):
         views = list(self.manager.get_settings())
@@ -298,6 +321,7 @@ class EopkgManagerSettingsTest(unittest.TestCase):
         config = self.manager.configman.save_config.call_args[0][0]
         self.assertEqual(12, config['search_limit'])
         self.assertEqual(90, config['command_timeout'])
+        self.assertTrue(config['sync_repos_startup'])
 
     def test_save_settings__must_fall_back_on_an_invalid_value(self):
         views = list(self.manager.get_settings())
@@ -316,13 +340,40 @@ class EopkgManagerSettingsTest(unittest.TestCase):
                          [a.manager_method for a in actions])
         self.assertTrue(all(a.requires_root for a in actions))
 
+    @patch('bauh.gems.eopkg.controller.index')
     @patch('bauh.gems.eopkg.controller.ProcessHandler')
     @patch('bauh.gems.eopkg.controller.SimpleProcess')
-    def test_update_repositories_action(self, simple_process: Mock, process_handler: Mock):
+    def test_update_repositories_action(self, simple_process: Mock, process_handler: Mock,
+                                        index: Mock):
         process_handler.return_value.handle_simple.return_value = (True, '')
 
         self.assertTrue(self.manager.update_repositories('secret', Mock()))
         self.assertEqual(['eopkg', 'ur', '--no-color'], simple_process.call_args[0][0])
+
+    @patch('bauh.gems.eopkg.controller.index')
+    @patch('bauh.gems.eopkg.controller.ProcessHandler')
+    @patch('bauh.gems.eopkg.controller.SimpleProcess')
+    def test_update_repositories_action__must_register_the_sync(self, simple_process: Mock,
+                                                                process_handler: Mock,
+                                                                index: Mock):
+        process_handler.return_value.handle_simple.return_value = (True, '')
+
+        self.manager.update_repositories('secret', Mock())
+
+        index.register_sync.assert_called_once()
+
+    @patch('bauh.gems.eopkg.controller.index')
+    @patch('bauh.gems.eopkg.controller.ProcessHandler')
+    @patch('bauh.gems.eopkg.controller.SimpleProcess')
+    def test_update_repositories_action__must_not_register_a_failed_sync(self, simple_process: Mock,
+                                                                         process_handler: Mock,
+                                                                         index: Mock):
+        # registrar una sincronización fallida dejaría a bauh creyendo que el índice está al día
+        # y volvería a esconder las actualizaciones durante el resto del día
+        process_handler.return_value.handle_simple.return_value = (False, '')
+
+        self.assertFalse(self.manager.update_repositories('secret', Mock()))
+        index.register_sync.assert_not_called()
 
     @patch('bauh.gems.eopkg.controller.ProcessHandler')
     @patch('bauh.gems.eopkg.controller.SimpleProcess')

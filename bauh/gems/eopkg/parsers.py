@@ -65,11 +65,23 @@ RE_NO_UPGRADES = re.compile(
     r'(no packages? to upgrade|no hay paquetes (?:que|para) actualizar)', re.IGNORECASE)
 
 # línea compuesta de 'eopkg info': "Name : vlc, version: 3.0.20, release: 78"
+# El release se acota con [^\s:]+ y no con \S+: eopkg envuelve esta línea (ver
+# _merge_wrapped_name_lines) y puede dejarla cortada justo detrás de 'release:', y con \S+
+# ese resto casaba con release=':', dando por buena media línea.  Tampoco se usa \d+ aunque
+# el release de eopkg sea siempre un entero: el módulo prefiere ser tolerante con formatos
+# ajenos, y excluir los dos puentes (espacio y dos puntos) ya basta para el corte.
 RE_INFO_NAME_LINE = re.compile(
     r'^(?:name|nombre)\s*:\s*(?P<name>[^\s,]+)\s*,\s*'
     r'(?:version|versi[oó]n)\s*:?\s*(?P<version>[^\s,]+)\s*,\s*'
-    r'(?:release|lanzamiento|revisi[oó]n)\s*:?\s*(?P<release>\S+)\s*$',
+    r'(?:release|lanzamiento|revisi[oó]n)\s*:?\s*(?P<release>[^\s:]+)\s*$',
     re.IGNORECASE)
+
+# inicio de la línea compuesta, que eopkg parte en dos cuando el nombre es largo
+RE_INFO_NAME_START = re.compile(r'^(?:name|nombre)\s*:', re.IGNORECASE)
+
+# final de una línea compuesta cortada: eopkg parte por el último espacio, y ahí sólo hay
+# espacios detrás de una coma o de 'version:'/'release:'
+RE_INFO_NAME_CUT = re.compile(r'[,:]$')
 
 RE_INFO_FIELD = re.compile(r'^(?P<key>[^:]{1,60}?)\s*:\s*(?P<value>.*)$')
 RE_INFO_BLOCK_HEADER = re.compile(r'^(?P<title>[^:]{1,80}):\s*$')
@@ -290,6 +302,53 @@ def parse_upgradable_entries(output: Optional[str]) -> List[Dict[str, Optional[s
     return entries
 
 
+def _merge_wrapped_name_lines(lines: List[str]) -> List[str]:
+    """Rejunta la línea compuesta de ``eopkg info`` cuando el nombre del paquete la parte.
+
+    eopkg envuelve ``Name : x, version: v, release: n`` si el nombre es largo (por ejemplo
+    ``nvidia-580-glx-driver-common``) y deja el resto en una línea indentada aparte.  Sin
+    rejuntarlas, :data:`RE_INFO_NAME_LINE` no casaba y el bloque acababa identificado por el
+    texto entero (``'nvidia-...-common, version: 580.178.04,'``) y sin versión: la lista de
+    actualizaciones mostraba esos paquetes sin número de versión y ``get_info`` no los
+    encontraba.
+
+    El corte no cae siempre detrás de la coma.  ``align()`` (``pisi/cli/__init__.py``)
+    retrocede hasta el último espacio anterior a la columna ``ancho - 22`` (58 con el ancho
+    de reserva de 80 columnas), y en esta línea los únicos espacios van detrás de una coma o
+    detrás de ``version:`` / ``release:``.  Barriendo el índice real de Solus con ese
+    algoritmo, de los 325 paquetes cuya línea se envuelve, 167 cortan tras la coma
+    (``anoise-media-community-extension1``), 153 tras ``release:``
+    (``abseil-cpp-32bit-dbginfo``) y 5 tras ``version:``
+    (``gnome-shell-extension-native-window-placement``): por eso se admiten los dos finales.
+    """
+    merged: List[str] = []
+    idx = 0
+
+    while idx < len(lines):
+        line = lines[idx]
+        stripped = line.strip()
+
+        if (RE_INFO_NAME_START.match(stripped) and not RE_INFO_NAME_LINE.match(stripped)
+                and RE_INFO_NAME_CUT.search(stripped)):
+            joined = stripped
+
+            # sólo se absorben continuaciones indentadas, y sólo hasta completar la línea:
+            # los campos siguientes ('Summary', 'Licenses'...) empiezan en la columna cero
+            while idx + 1 < len(lines) and lines[idx + 1][:1].isspace():
+                joined = f'{joined} {lines[idx + 1].strip()}'
+                idx += 1
+
+                if RE_INFO_NAME_LINE.match(joined):
+                    break
+
+            line = joined
+
+        merged.append(line)
+        idx += 1
+
+    return merged
+
+
 def _classify_section(title: str) -> Optional[str]:
     """Clasifica la cabecera de un bloque de 'eopkg info'."""
     lowered = title.strip().lower()
@@ -323,7 +382,7 @@ def parse_info_blocks(output: Optional[str]) -> List[Dict[str, Optional[str]]]:
         pending_section = None
         last_key = 'name'
 
-    for raw in strip_ansi(output).splitlines():
+    for raw in _merge_wrapped_name_lines(strip_ansi(output).splitlines()):
         line = raw.strip()
 
         if not line or is_noise_line(line):
