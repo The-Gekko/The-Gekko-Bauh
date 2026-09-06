@@ -100,7 +100,7 @@ source=("$pkgname-$pkgver.tar.gz::https://github.com/$_gh_user/$_gh_repo/archive
 #
 # El tarball de una versión no existe hasta que su etiqueta está publicada, así
 # que la suma no se puede escribir aquí por adelantado. El procedimiento de
-# publicación (docs/DISTRIBUCION.md) obliga a ejecutar `updpkgsums` justo
+# publicación obliga a ejecutar `updpkgsums` justo
 # después de crear la release y ANTES de subir el paquete al AUR, de modo que lo
 # que llega al AUR siempre lleva la suma real. El workflow de release publica
 # además un fichero SHA256SUMS con el que contrastarla.

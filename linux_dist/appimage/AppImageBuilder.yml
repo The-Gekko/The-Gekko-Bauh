@@ -7,7 +7,7 @@
 # `rm setup.cfg setup.py requirements.txt` tampoco aplica ya: los metadatos
 # viven en la tabla [project] de pyproject.toml.
 #
-# Se conserva solo como referencia histórica. Ver linux_dist/README.md.
+# Se conserva solo como referencia histórica; no se construye ni se publica.
 # El canal soportado es install.sh + pipx.
 
 version: 1

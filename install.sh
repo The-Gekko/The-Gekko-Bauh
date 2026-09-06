@@ -556,7 +556,7 @@ remove_venv_manually() {
 purge_dir_preserving_repos() {
     # Borra un directorio de datos conservando "github/repos", donde la gem GitHub clona los
     # repositorios del usuario. Pueden contener trabajo local sin publicar, así que ni --purge
-    # los toca: es lo que prometen el README, docs/MIGRACION.md y la propia gem.
+    # los toca: es lo que prometen el README y la propia gem.
     local path="$1"
     local repos="$path/github/repos"
 

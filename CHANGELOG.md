@@ -14,8 +14,7 @@ fork de [vinifmor/bauh](https://github.com/vinifmor/bauh) mantenido por
 todo `master` hasta `b1ea479a`) más la rama `fix-qt-wayland-crash`. Los cambios
 del upstream integrados se listan en «Contributions (upstream)» y, con más
 detalle, en la sección `## NEXT` del propio upstream que se conserva más abajo.
-El esquema de versiones del fork es `<versión upstream>+gekko.N`
-(ver `docs/SINCRONIZACION_UPSTREAM.md`).
+El esquema de versiones del fork es `<versión upstream>+gekko.N`.
 
 ### Features
 - Tema **Aurora** (oscuro), ahora tema por defecto.
@@ -75,11 +74,11 @@ El esquema de versiones del fork es `<versión upstream>+gekko.N`
 - Tabla de paquetes: repintado suspendido mientras se rellena
   (`setUpdatesEnabled(False)`), sin parpadeo.
 - Compatibilidad con Python 3.13 y 3.14.
-- Documentación reescrita en español y verificable: `README.md`
-  (qué añade el fork frente a lo heredado), `CONTRIBUTING.md` (entorno, tests,
-  lint, traducciones, commits), `CREDITS.md`, `docs/MIGRACION.md`,
-  `docs/SINCRONIZACION_UPSTREAM.md`, `DOCUMENTACION_PROYECTO.md` y plantillas
-  de issues/pull requests bilingües.
+- Documentación reescrita en español y verificable, más plantillas de issues
+  y de pull requests bilingües. Del conjunto solo se publican `README.md` y este
+  `CHANGELOG.md`; el resto (guías de contribución, créditos, migración,
+  sincronización con upstream, tests y distribución) es documentación interna
+  del proyecto y no viaja en el repositorio.
 
 ### Fixes
 - eopkg: los paquetes instalados muestran su versión real y la lista de

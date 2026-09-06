@@ -1,6 +1,6 @@
 <!--
-ES: Gracias por contribuir. Rellena las secciones y marca la lista. Lee CONTRIBUTING.md.
-EN: Thanks for contributing. Fill in the sections and tick the list. Read CONTRIBUTING.md.
+ES: Gracias por contribuir. Rellena las secciones y marca la lista. Lee la sección «Contribuir» del README.
+EN: Thanks for contributing. Fill in the sections and tick the list. Read the «Contribuir» section of the README.
 -->
 
 ## Qué cambia / What changes

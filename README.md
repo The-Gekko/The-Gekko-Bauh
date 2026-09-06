@@ -24,7 +24,7 @@
 > sus errores se reportan
 > [aquí](https://github.com/The-Gekko/The-Gekko-Bauh/issues), nunca en el
 > proyecto original. La mayor parte del código sigue siendo obra suya y de sus
-> colaboradores: el crédito completo está en [CREDITS.md](CREDITS.md).
+> colaboradores: el crédito completo está en [Créditos](#créditos).
 >
 > Se instala como `gekko-bauh`, guarda su configuración en `~/.config/gekko-bauh` y
 > convive sin interferir con una instalación del bauh oficial.
@@ -160,8 +160,9 @@ punto es comprobable en el código o en la propia interfaz.
 
 ### Instalación y empaquetado
 
-- **`install.sh`**: instalador y desinstalador por `curl` basado en `pipx`, que
-  funciona tanto con el backend `pip` como con el backend `uv` de pipx (ver
+- **`install.sh`**: instalador y desinstalador basado en `pipx`, el mismo para
+  las dos vías (por `curl` y desde el repositorio clonado), que funciona tanto
+  con el backend `pip` como con el backend `uv` de pipx (ver
   [Instalación](#instalación)).
 - **Identidad propia en el sistema**: distribución `gekko-bauh`, ejecutables
   `gekko-bauh`, `gekko-bauh-tray` y `gekko-bauh-cli`, configuración en
@@ -172,7 +173,8 @@ punto es comprobable en el código o en la propia interfaz.
   original. Versión PEP 440 `0.10.8+gekko.1`, `pyproject.toml` con la sección
   `[project]` completa.
 - **Receta para el AUR** (`packaging/aur/`: `gekko-bauh` y `gekko-bauh-git`),
-  todavía sin publicar en el AUR, y **artefacto para GekkoApp**
+  todavía sin publicar en el AUR —material de empaquetado para el mantenedor,
+  no una vía de instalación—, y **artefacto para GekkoApp**
   (`tools/build-gekkoapp-release.sh`), que el workflow de release adjunta a
   cada etiqueta.
 - **CI en GitHub Actions** (`.github/workflows/ci.yml`): la suite sin PyQt5 en
@@ -225,13 +227,21 @@ son mérito de este proyecto:
   prefiere su binario frente a AUR en las búsquedas y ofrece «Cambiar al
   binario del repositorio» para los paquetes que ya tengas compilados desde
   AUR. Sin él, todo funciona igual, compilando desde AUR.
+- **Dependencias opcionales**: instala con tu gestor de paquetes solo lo que
+  vayas a usar: `flatpak`, `git` y `base-devel` (gem de GitHub y compilación
+  de paquetes del AUR), `timeshift` (copias de seguridad), y `python-lxml`
+  con `python-beautifulsoup4` (gem web).
 
 ## Instalación
+
+Hay **dos formas** de instalar gekko-bauh: **por curl** y **clonando el
+repositorio**. Las dos usan el mismo `install.sh` y dejan el mismo resultado
+(entorno pipx, iconos y accesos directos); cambia de dónde sale el código.
 
 Este README describe la instalación **de gekko-bauh por sí solo** («1x1»). Si
 usas varias herramientas de The-Gekko, el Control Center
 [GekkoApp](https://github.com/The-Gekko/GekkoApp) las instala y desinstala de
-forma **conjunta**; ver [Desde GekkoApp](#desde-gekkoapp).
+forma **conjunta**; ver [Nota sobre GekkoApp](#nota-sobre-gekkoapp).
 
 > **Elige una sola vía por proyecto; para cambiar de vía, desinstala primero
 > con la misma con la que instalaste.** Mezclarlas deja restos: GekkoApp retira
@@ -301,38 +311,7 @@ curl -fsSL https://raw.githubusercontent.com/The-Gekko/The-Gekko-Bauh/master/ins
 
 La lista completa y actualizada de opciones está en `install.sh --help`.
 
-### Desde el AUR (Arch, Garuda, EndeavourOS…)
-
-La receta está lista en [`packaging/aur/`](packaging/aur) (`gekko-bauh`,
-estable desde la etiqueta, y `gekko-bauh-git`, que compila `master`), pero
-**aún no está publicada en el AUR**: `paru -S gekko-bauh` o `yay -S gekko-bauh`
-no encuentran nada todavía. Lo que sí puedes hacer hoy es construir el paquete
-de desarrollo en local:
-
-```bash
-git clone https://github.com/The-Gekko/The-Gekko-Bauh.git
-cd The-Gekko-Bauh/packaging/aur/gekko-bauh-git
-makepkg -si
-```
-
-El paquete estable necesita que exista la etiqueta `v0.10.8-gekko.1` (su
-`PKGBUILD` descarga el tarball de esa etiqueta y lleva `sha256sums=('SKIP')`
-hasta entonces; la suma real se rellena con `updpkgsums` antes de subirlo al
-AUR). El alta en el AUR y el procedimiento completo están en
-[`docs/DISTRIBUCION.md`](docs/DISTRIBUCION.md).
-
-El paquete **convive con el `bauh` original**: los ejecutables (`gekko-bauh`,
-`gekko-bauh-tray`, `gekko-bauh-cli`), el icono, los lanzadores y la
-configuración (`~/.config/gekko-bauh`) llevan nombres propios, y el código se
-instala en `/usr/share/gekko-bauh` en vez de en `site-packages`, así que pacman
-no ve ni un fichero compartido. Puedes tener los dos a la vez.
-
-Instala además lo que vayas a usar de sus dependencias opcionales: `flatpak`,
-`git` y `base-devel` (gem de GitHub y compilación de paquetes del AUR),
-`timeshift` (copias de seguridad), y `python-lxml` con `python-beautifulsoup4`
-(gem web).
-
-### Desde un checkout (contribuidores)
+### Clonando el repositorio
 
 ```bash
 git clone https://github.com/The-Gekko/The-Gekko-Bauh.git
@@ -340,69 +319,44 @@ cd The-Gekko-Bauh
 ./install.sh          # detecta el checkout local y lo instala con pipx
 ```
 
+Sirve tanto para usar el proyecto como para desarrollarlo: `install.sh` detecta
+que se está ejecutando dentro de una copia del repositorio e instala **ese
+árbol**, con los mismos iconos, `.desktop` y pregunta de autoarranque que la vía
+por curl. Admite las mismas opciones (`--yes`, `--autostart`, `--no-autostart`,
+`--allow-build-from-source`, `--install-pipx`, `--remove-system-bauh`,
+`PYTHON_BIN`) **salvo `--ref`**, que aquí es un error y termina con código de
+salida **2**: lo que se instala es el árbol local, así que para probar otra rama
+o commit sitúa antes el repositorio en esa referencia con `git`, o usa la vía
+por curl con `--ref`.
+
 En este modo pipx no recibe el checkout tal cual, sino una **copia temporal
 limpia** del árbol de trabajo (sin `build/`, `dist/`, `releases/`,
 `*.egg-info`, `__pycache__`, `.git` ni entornos virtuales): setuptools
 reutiliza lo que haya en `build/lib`, y un checkout con construcciones antiguas
 arrastraba al venv módulos ya borrados del árbol. Tus cambios sin confirmar sí
 se instalan. Desde un checkout **siempre se reconstruye** el entorno (la
-comparación de commits solo existe en modo remoto) y `--ref` es un error, porque
-lo que se instala es el árbol local.
+comparación de commits solo existe en modo remoto), así que `--force` se acepta
+pero no cambia nada.
 
-### Manual con pipx o pip (avanzado)
-
-```bash
-pipx install --force "https://github.com/The-Gekko/The-Gekko-Bauh/archive/refs/heads/master.zip"
-# o en un entorno virtual propio:
-python3 -m venv bauh_env
-bauh_env/bin/pip install "https://github.com/The-Gekko/The-Gekko-Bauh/archive/refs/heads/master.zip"
-bauh_env/bin/gekko-bauh
-```
-
-Así no se instalan ni el icono ni los `.desktop`, y `pipx` no deja la marca
-`.gekko-source-ref` que usan `install.sh uninstall` y la plantilla de issues.
+Para actualizar, `git pull` y vuelve a ejecutar `./install.sh`; para
+desinstalar, `./install.sh uninstall` (ver [Desinstalación](#desinstalación)).
 
 > [!WARNING]
 > `pip install bauh` o `pacman -S bauh` **no** instalan este proyecto: instalan el
 > bauh original (PyPI / repositorios), sin el tema Aurora, las gems eopkg y
 > GitHub, ni los cambios de la gem Arch.
 
-### Desde GekkoApp
+### Nota sobre GekkoApp
 
+No es una tercera forma de instalar este proyecto, sino la vía **conjunta**:
 [GekkoApp](https://github.com/The-Gekko/GekkoApp) (el Control Center de
-The-Gekko, en Rust + Tauri) instala gekko-bauh **desde un release verificado**,
-no ejecutando `install.sh`:
-
-1. Resuelve el último release de `The-Gekko/The-Gekko-Bauh` y descarga el
-   manifiesto `bauh-fork-the-gekko-x86_64-unknown-linux-gnu.manifest.json` y
-   el artefacto `bauh-fork-the-gekko-<X.Y.Z.gekko.N>.tar.zst` que lo acompaña
-   (el `+` de la versión va como `.` en el nombre del archivo; hoy,
-   `bauh-fork-the-gekko-0.10.7.tar.zst`).
-2. Comprueba el **tamaño y el SHA-256** del artefacto contra el manifiesto.
-3. Si el paquete `bauh` de pacman está instalado, pide confirmación y lo
-   desinstala; después instala `python-pipx` (Arch) o `pipx` (Solus) si falta.
-4. Ejecuta `pipx install --force` sobre el árbol verificado y materializa el
-   lanzador con id `org.thegekko.bauh` y su icono `hicolor` de 512 px.
-
-Hoy el último release es `v0.10.7`, anterior al cambio de identidad, así que
-GekkoApp instala por ahora la distribución `bauh`. Cuando se publique
-`v0.10.8-gekko.1`, el mismo flujo instalará `gekko-bauh` con sus tres
-ejecutables y las dos entradas de menú (`org.thegekko.bauh` y
-`org.thegekko.bauh.tray`); ese release lo genera `release.yml` con
-`tools/build-gekkoapp-release.sh` (ver [`docs/DISTRIBUCION.md`](docs/DISTRIBUCION.md)),
-y la aceptación de etiquetas con guion (`v0.10.8-gekko.1`) forma parte de la
-versión 1.2.0 de GekkoApp, en preparación. **Orden de publicación
-recomendado**: primero GekkoApp 1.2.0 y después `v0.10.8-gekko.1`, porque
-GekkoApp 1.1.0 (la publicada) rechaza la etiqueta con guion.
-
-Lo que instala GekkoApp se **desinstala desde el propio Control Center**, no con
-`install.sh uninstall`. Esta vía es la conjunta; la de este README, la 1x1.
-Elige una sola vía por proyecto; para cambiar de vía, desinstala primero con la
-misma con la que instalaste: GekkoApp retira el venv pipx `gekko-bauh` que creó
-`install.sh` pero no sus `.desktop`, iconos ni autostart, e `install.sh
-uninstall` no conoce `org.thegekko.bauh.desktop` ni el estado de GekkoApp. Los
-paquetes del sistema que GekkoApp instaló con sudo (`python-pipx`/`pipx`) no se
-desinstalan.
+The-Gekko, en Rust + Tauri) instala gekko-bauh **desde un release verificado**
+—comprueba el tamaño y el SHA-256 del artefacto contra el manifiesto que publica
+el propio release—, en vez de ejecutar `install.sh`, y lo **desinstala desde el
+propio Control Center**, no con `install.sh uninstall`. Hoy el último release
+publicado es `v0.10.7`, anterior al cambio de identidad, así que instala todavía
+la distribución `bauh`. Cada release publica el artefacto, su manifiesto y un
+fichero `SHA256SUMS` con el que GekkoApp comprueba lo que descarga.
 
 ## Actualización
 
@@ -412,8 +366,8 @@ solo reconstruye el entorno si hay cambios; por eso actualizar es rápido y no
 depende de que cambie el número de versión. Usa `--force` para reconstruir de
 todos modos.
 
-**Desde un checkout**: `./install.sh` reconstruye siempre el entorno. La
-comparación de commits solo aplica al modo remoto.
+**Desde el repositorio clonado**: `git pull` y `./install.sh`, que reconstruye
+siempre el entorno. La comparación de commits solo aplica al modo remoto.
 
 Desde la propia aplicación, el aviso de «nueva versión disponible» consulta
 las releases de este repositorio (`bauh/view/core/update.py`).
@@ -444,13 +398,13 @@ GekkoApp ya se genera sin `+` (`bauh-fork-the-gekko-X.Y.Z.gekko.N.tar.zst`).
 La instalación **por curl no usa ese fichero**: `install.sh` resuelve la
 referencia que le pidas contra la API de GitHub, obtiene el SHA-1 del commit
 exacto y descarga e instala ese commit, dejando la marca dentro del entorno de
-pipx. La integridad viene ahí del identificador del commit y de HTTPS. El
-`PKGBUILD` estable lleva `sha256sums=('SKIP')` hasta que exista la etiqueta;
-GekkoApp, por su parte, verifica el SHA-256 que declara el manifiesto del
-release.
+pipx. La integridad viene ahí del identificador del commit y de HTTPS; clonando el
+repositorio, de `git` sobre HTTPS. GekkoApp, por su parte, verifica el
+SHA-256 que declara el manifiesto del release.
 
-Los detalles están en
-[`docs/DISTRIBUCION.md`](docs/DISTRIBUCION.md#6-verificar-las-sumas-antes-de-instalar).
+Si prefieres comprobarlo a mano, descarga el fichero `SHA256SUMS` que acompaña
+al release junto con el artefacto y ejecuta
+`sha256sum --check --ignore-missing SHA256SUMS` en el mismo directorio.
 
 ## Desinstalación
 
@@ -482,7 +436,7 @@ con **0** (avisando de que no había nada instalado).
 Con `--purge` y sin él, el desinstalador **ofrece restablecer `ui.theme`** en
 `~/.config/bauh/config.yml` si prefieres volver al bauh oficial, que no conoce
 los temas Aurora, GTK ni Matugen y arrancaría sin hoja de estilos. Detalles en
-[docs/MIGRACION.md](docs/MIGRACION.md).
+[Migración desde y hacia el bauh oficial](#migración-desde-y-hacia-el-bauh-oficial).
 
 ## Migración desde y hacia el bauh oficial
 
@@ -506,8 +460,15 @@ los datos de usuario. En resumen:
   el oficial no conoce los temas Aurora, GTK ni Matugen y arrancaría sin hoja de
   estilos.
 
-La guía completa, con la tabla de rutas y de claves de configuración que el
-upstream no entiende, está en [docs/MIGRACION.md](docs/MIGRACION.md).
+Las rutas no se solapan en ningún punto: este proyecto usa
+`~/.config/gekko-bauh`, `~/.cache/gekko-bauh` y `~/.local/share/gekko-bauh`, y
+solo **lee una vez** las del oficial (`~/.config/bauh`, `~/.cache/bauh`,
+`~/.local/share/bauh`) para copiar tus ajustes, sin modificarlas nunca. Los
+ejecutables tampoco chocan: aquí son `gekko-bauh`, `gekko-bauh-tray` y
+`gekko-bauh-cli` frente a `bauh`, `bauh-tray` y `bauh-cli`. La única ruta que se
+comparte a propósito es la de gems prohibidas por el administrador: se leen
+`/etc/bauh/gems.forbidden` y `/etc/gekko-bauh/gems.forbidden` y se unen las dos
+listas, para respetar la política que ya tuviera el sistema.
 
 ## Wayland, Hyprland y Niri
 
@@ -593,30 +554,30 @@ Además de los tests unitarios, `tests/integration/` ejecuta las gems contra
 **binarios `pacman`, `eopkg` y `flatpak` simulados en el `PATH`**: comprueban los
 argumentos que llegan de verdad al proceso y el análisis de salidas reales, algo
 que un test que parchea `subprocess` no puede ver. El instalador tiene sus
-propios **26 casos** en bash, con `pipx`, `uv`, `curl` y `sudo` simulados:
+propios **27 casos** en bash, con `pipx`, `uv`, `curl` y `sudo` simulados:
 `bash tests/installer/run_tests.sh`.
 
 Lint: `.venv/bin/ruff check bauh tests tools` y
 `shellcheck install.sh tests/installer/run_tests.sh tools/build-gekkoapp-release.sh`.
-Paridad de traducciones: `python3 tools/check_locales.py`. El detalle está en
-[docs/TESTS.md](docs/TESTS.md) y en [CONTRIBUTING.md](CONTRIBUTING.md).
+Paridad de traducciones: `python3 tools/check_locales.py`. La integración
+continua (`.github/workflows/ci.yml`) ejecuta esos mismos comandos en cada
+cambio, sobre un clon limpio del repositorio.
 
 ## Sincronización con upstream
 
 Este proyecto sigue a `vinifmor/bauh` (`master` y `staging`) mediante **merges** (no
 rebase) sobre `master`, registra la base upstream de cada versión en el
 `CHANGELOG.md` y numera sus versiones como `<versión upstream>+gekko.N`. La
-política completa (remotes, cadencia, cómo se resuelven los conflictos en los
-archivos que este proyecto reestructuró y cómo devolver arreglos al proyecto
-original) está
-en [docs/SINCRONIZACION_UPSTREAM.md](docs/SINCRONIZACION_UPSTREAM.md).
+En los archivos que este proyecto reestructuró (la ventana principal, los
+hilos de Qt, la identidad del paquete) el conflicto se resuelve conservando la
+versión de aquí e incorporando a mano lo que aporte el upstream; los arreglos que
+sirven a los dos proyectos se le proponen a él.
 
 ## Compatibilidad con Python
 
 - **Rango admitido**: 3.8 a 3.14, el mismo en `install.sh` (rechaza cualquier
   otro intérprete) y en `pyproject.toml` (`requires-python = ">=3.8"`,
-  clasificadores de 3.8 a 3.14). Para desarrollar se pide 3.9 o superior
-  (ver [CONTRIBUTING.md](CONTRIBUTING.md)).
+  clasificadores de 3.8 a 3.14). Para desarrollar se pide 3.9 o superior.
 - **Probado en CI**: 3.9, 3.12 y 3.14 (3.10, 3.11 y 3.13 funcionan pero no se
   prueban en cada cambio).
 - **3.8, «best effort»**: el código sigue declarando `>=3.8` y no se ha roto a
@@ -627,15 +588,34 @@ en [docs/SINCRONIZACION_UPSTREAM.md](docs/SINCRONIZACION_UPSTREAM.md).
 
 ## Contribuir
 
-Lee [CONTRIBUTING.md](CONTRIBUTING.md): entorno de desarrollo, tests, lint,
-traducciones, convención de commits y flujo de pull requests. Para reportar un
-error usa la plantilla de issue (pide la salida de `gekko-bauh --logs`, `pipx list` y
-el commit instalado).
+Las incidencias y los pull requests se abren
+[en este repositorio](https://github.com/The-Gekko/The-Gekko-Bauh/issues). Para
+reportar un error usa la plantilla de issue (pide la salida de
+`gekko-bauh --logs`, `pipx list` y el commit instalado). Para un cambio de
+código, monta el entorno como se explica en
+[Cómo ejecutar los tests](#cómo-ejecutar-los-tests) y comprueba antes de enviarlo
+que pasan los tests, `ruff`, `shellcheck` y la paridad de traducciones: es
+exactamente lo que ejecuta la integración continua. Las cadenas de la interfaz se
+traducen en `bauh/view/resources/locale/` y en `bauh/gems/*/resources/locale/`,
+con `en` y `es` como mínimo.
 
 ## Créditos
 
 `gekko-bauh` no existiría sin el trabajo del que parte. La mayor parte del código
 de este repositorio no es nuestra.
+
+**Aviso de versión alterada (licencia zlib/libpng, cláusula 2).** `gekko-bauh`
+(«bauh Gekko Edition») es una **versión alterada** de
+[bauh](https://github.com/vinifmor/bauh), software original de **Vinícius
+Moreira** (© 2019, licencia zlib/libpng, ver [LICENSE](LICENSE)). No es el
+software original y no debe presentarse como tal: lo mantiene
+[The-Gekko](https://github.com/The-Gekko) en
+<https://github.com/The-Gekko/The-Gekko-Bauh>, se distribuye con el nombre
+`gekko-bauh` y numera sus versiones como `<versión de origen>+gekko.N`. El texto
+de la licencia se conserva sin cambios y sigue aplicándose a todo el código,
+incluido el añadido aquí. **Los errores de esta edición se reportan
+[en este repositorio](https://github.com/The-Gekko/The-Gekko-Bauh/issues), nunca
+en el del proyecto original.**
 
 - **Proyecto original**: [bauh](https://github.com/vinifmor/bauh), creado y
   mantenido por **Vinicius Moreira** ([@vinifmor](https://github.com/vinifmor)).
@@ -643,12 +623,19 @@ de este repositorio no es nuestra.
   dependencias, claves PGP y conflictos, la capa Qt, el sistema de temas y los
   diez idiomas de la interfaz. Este proyecto se limita a construir encima.
 - **Colaboradores del proyecto original** cuyo trabajo se incluye aquí:
-  albanobattistella, KoromeloDev, antipeth, Boria138, EGYT5453 y NoobKozlegeny,
-  entre muchos otros en el historial anterior a la versión 0.10.7. El detalle
-  está en [CREDITS.md](CREDITS.md) y [CHANGELOG.md](CHANGELOG.md).
+  albanobattistella (traducciones al italiano), KoromeloDev (traducciones al
+  ruso), antipeth (traducción al chino simplificado), Boria138 (detección de
+  sistemas basados en Arch mediante `/etc/os-release`), EGYT5453 (limpieza de
+  espacios en las traducciones inglesas) y NoobKozlegeny (marcar y desmarcar de
+  una vez todas las dependencias opcionales en Arch), entre muchos otros en el
+  historial anterior a la versión 0.10.7. El detalle, versión a versión, está en
+  la sección «Contributions (upstream)» de [CHANGELOG.md](CHANGELOG.md).
 - **Este proyecto**: [The-Gekko](https://github.com/The-Gekko). Lo que aporta,
   y solo eso, está listado en [Qué aporta este proyecto](#qué-aporta-este-proyecto).
-- **Arte**: la imagen `pictures/gekko-bauh.png` fue **generada con IA**.
+- **Arte**: la imagen `pictures/gekko-bauh.png` y los iconos derivados de ella
+  fueron **generados con IA** para este proyecto. Los iconos y recursos gráficos
+  de `bauh/view/resources/img/` y `bauh/gems/*/resources/img/` pertenecen al
+  proyecto original.
 
 Si `gekko-bauh` te resulta útil, considera darle una estrella también al
 [proyecto original](https://github.com/vinifmor/bauh).
@@ -658,4 +645,5 @@ Si `gekko-bauh` te resulta útil, considera darle una estrella también al
 Este software se distribuye bajo la licencia **zlib/libpng**, la misma del
 proyecto original; el texto íntegro está en [LICENSE](LICENSE). Conforme a su
 cláusula 2, esta edición está marcada como **versión alterada** del bauh
-original (ver el aviso al inicio de este archivo y [CREDITS.md](CREDITS.md)).
+original (ver el aviso al inicio de este archivo y la sección
+[Créditos](#créditos)).

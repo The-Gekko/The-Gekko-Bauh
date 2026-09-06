@@ -11,11 +11,11 @@ assignees: ''
 ES: Pregúntate antes si la mejora sirve a más de una persona y si es propia del
     fork o debería proponerse en el upstream (https://github.com/vinifmor/bauh).
     Lo que no es específico del fork (gem Arch, traducciones, interfaz) suele
-    encajar mejor allí; ver docs/SINCRONIZACION_UPSTREAM.md.
+    encajar mejor allí; ver la sección «Sincronización con upstream» del README.
 EN: Ask yourself whether the improvement helps more than one person and whether
     it belongs to this fork or to the upstream (https://github.com/vinifmor/bauh).
     Anything not fork-specific (Arch gem, translations, UI) usually fits better
-    there; see docs/SINCRONIZACION_UPSTREAM.md.
+    there; see the «Sincronización con upstream» section of the README.
 -->
 
 ## Problema que resuelve / Problem it solves

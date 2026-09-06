@@ -14,7 +14,7 @@
 #   DIST_DIR  directorio de salida (archivo .tar.zst + <product>-<target>.manifest.json).
 #            Default: $BAUH_REPO_ROOT/releases/dist
 #
-# Esquema de versiones del fork (docs/DISTRIBUCION.md del fork):
+# Esquema de versiones del fork:
 #   bauh.__version__      X.Y.Z+gekko.N   (PEP 440, local version)  -> product.version
 #   etiqueta git          vX.Y.Z-gekko.N  (con GUION)               -> release.tag
 #   nombre del artefacto  bauh-fork-the-gekko-X.Y.Z.gekko.N.tar.zst (el '+' se
@@ -112,7 +112,7 @@ mkdir -p "$STAGE/$ROOT"
 cp -a "$BAUH_SRC/bauh" "$STAGE/$ROOT/"
 find "$STAGE/$ROOT" -name __pycache__ -type d -prune -exec rm -rf {} +
 rm -rf "$STAGE/$ROOT/bauh.egg-info" "$STAGE/$ROOT/build"
-for file in setup.py setup.cfg pyproject.toml requirements.txt MANIFEST.in README.md CHANGELOG.md LICENSE CREDITS.md CONTRIBUTING.md; do
+for file in setup.py setup.cfg pyproject.toml requirements.txt MANIFEST.in README.md CHANGELOG.md LICENSE; do
   [ -e "$BAUH_SRC/$file" ] && cp -a "$BAUH_SRC/$file" "$STAGE/$ROOT/"
 done
 

@@ -26,7 +26,7 @@ name: release
 # localiza por su nombre exacto).
 #
 # El procedimiento completo, incluido el paso manual de actualizar el AUR, está
-# en docs/DISTRIBUCION.md.
+# en la documentación interna del proyecto (no se publica en el repositorio).
 
 on:
   push:
@@ -74,8 +74,8 @@ jobs:
       # ── Puerta 1: la etiqueta y el código tienen que decir lo mismo ────────
       #
       # La etiqueta usa «-gekko.N» y bauh.__version__ usa «+gekko.N» porque
-      # pacman prohíbe el guion en pkgver (ver packaging/aur/gekko-bauh/PKGBUILD
-      # y docs/DISTRIBUCION.md). Aquí se comprueba justo esa equivalencia, para
+      # pacman prohíbe el guion en pkgver (ver packaging/aur/gekko-bauh/PKGBUILD).
+      # Aquí se comprueba justo esa equivalencia, para
       # que no se pueda publicar una etiqueta que no corresponde al código.
       - name: Comprobar que la etiqueta coincide con bauh.__version__
         id: version
@@ -243,8 +243,8 @@ jobs:
           original y la del nombre con el que se descargan de aquí. La
           comprobación anterior vale igual en los dos casos.
 
-          El procedimiento completo de publicación e instalación está en
-          `docs/DISTRIBUCION.md`.
+          Las instrucciones de instalación están en el `README.md` del
+          repositorio.
           NOTAS
           cat "$RUNNER_TEMP/notas-release.md"
 

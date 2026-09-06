@@ -4,13 +4,13 @@
 #
 # Tal y como está, descarga y empaqueta el código del proyecto ORIGINAL
 # (vinifmor/bauh), no el de este fork, y el AppImage resultante se
-# auto-actualizaría contra las releases del upstream. Ver linux_dist/README.md
-# para el detalle y para lo que habría que cambiar si se quiere revivir.
+# auto-actualizaría contra las releases del upstream. Se conserva solo como
+# referencia histórica; habría que reescribirla entera para revivirla.
 #
 # El canal soportado es install.sh + pipx.
 if [ "${BAUH_APPIMAGE_UNSUPPORTED_OK:-}" != "1" ]; then
     echo "[bauh] linux_dist/appimage no está soportado: construiría el bauh original, no este fork." >&2
-    echo "[bauh] Lee linux_dist/README.md. Si aun así quieres ejecutarlo:" >&2
+    echo "[bauh] Se conserva solo como referencia histórica. Si aun así quieres ejecutarlo:" >&2
     echo "[bauh]   BAUH_APPIMAGE_UNSUPPORTED_OK=1 BAUH_VERSION=... bash build.sh" >&2
     exit 1
 fi
