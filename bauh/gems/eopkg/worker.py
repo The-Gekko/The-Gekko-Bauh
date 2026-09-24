@@ -14,7 +14,7 @@ from typing import Callable, Optional
 from bauh.api.abstract.handler import TaskManager
 from bauh.commons.boot import CreateConfigFile
 from bauh.commons.html import bold
-from bauh.commons.system import RE_SUDO_OUTPUT, SimpleProcess
+from bauh.commons.system import SimpleProcess, strip_sudo_prompt
 from bauh.gems.eopkg import commands, get_icon_path, index
 from bauh.view.util.translation import I18n
 
@@ -90,11 +90,9 @@ class SyncRepositories(Thread):
                 except UnicodeDecodeError:
                     continue
 
-                if line.startswith('[sudo]'):
-                    # sudo escribe su petición de contraseña en esta misma salida; se recorta
-                    # igual que hace 'ProcessHandler.handle_simple'
-                    without_prompt = RE_SUDO_OUTPUT.split(line, maxsplit=1)
-                    line = without_prompt[1] if len(without_prompt) > 1 else line
+                # sudo escribe su petición de contraseña en esta misma salida; se recorta
+                # igual que hace 'ProcessHandler.handle_simple'
+                line = strip_sudo_prompt(line)
 
                 line = line.strip()
 

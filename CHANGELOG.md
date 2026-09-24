@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+
+### Fixes
+- Las operaciones con contraseña de root (instalar, desinstalar y actualizar
+  paquetes de Arch, y también las de eopkg) se cortaban en cuanto el nombre de
+  usuario llevaba un carácter que no fuera letra, número o `_`, como
+  `the-gekko` o `juan.perez`. `sudo -S` escribe su petición de contraseña pegada
+  a la primera línea del comando, y la expresión que la recortaba no
+  reconocía esos nombres: `ProcessHandler.handle_simple` fallaba con
+  `IndexError` y bauh daba la descarga por fallida justo después de lanzar
+  `pacman -Swdd`, aunque pacman estuviera funcionando. Ahora se recorta hasta
+  el primer `:` (también el `：` de las traducciones CJK), que un nombre de
+  usuario no puede contener.
+
 ## [0.10.8+gekko.1] 2026-09-03
 
 Primera versión etiquetada de **bauh Gekko Edition** (etiqueta git `v0.10.8-gekko.1`),

@@ -24,11 +24,20 @@ if GLOBAL_PY_LIBS not in PATH:
 
 USE_GLOBAL_INTERPRETER = bool(os.getenv('VIRTUAL_ENV'))
 
-RE_SUDO_OUTPUT = re.compile(r'[sudo]\s*[\w\s]+:\s*')
+# Petición de contraseña que 'sudo -S' escribe, sin salto de línea, en la misma salida que el comando:
+# «[sudo] password for <usuario>: ». Llega hasta el primer ':' (o el '：' de las traducciones CJK) porque un
+# nombre de usuario no puede contenerlo; la versión anterior solo aceptaba letras y números en el nombre y con
+# usuarios como 'the-gekko' o 'juan.perez' no encontraba el prompt y 'handle_simple' fallaba con IndexError.
+RE_SUDO_OUTPUT = re.compile(r'^\[sudo\][^:：\n]*[:：][ \t]*')
 
 # '-S' lee la contraseña de la entrada estándar; '-k' obliga a autenticar cada operación e impide que sudo
 # guarde credenciales en caché reutilizables por otros procesos del usuario (ver 'man sudo').
 SUDO_ARGS = ('sudo', '-S', '-k')
+
+
+def strip_sudo_prompt(line: str) -> str:
+    """Quita del principio de una línea de salida la petición de contraseña de sudo, si la lleva."""
+    return RE_SUDO_OUTPUT.sub('', line, count=1)
 
 
 def feed_root_password(proc: subprocess.Popen, root_password: str) -> None:
@@ -248,8 +257,7 @@ class ProcessHandler:
                 except UnicodeDecodeError:
                     continue
 
-                if line.startswith('[sudo]'):
-                    line = RE_SUDO_OUTPUT.split(line)[1]
+                line = strip_sudo_prompt(line)
 
                 output.write(line)
 

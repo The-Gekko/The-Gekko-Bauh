@@ -11,6 +11,7 @@ from bauh.commons.system import (
     SimpleProcess,
     gen_env,
     new_root_subprocess,
+    strip_sudo_prompt,
 )
 
 # 'sudo' simulado: registra los argumentos y la contraseña leída de stdin y ejecuta el comando restante
@@ -18,6 +19,20 @@ FAKE_SUDO_TEMPLATE = """#!/bin/sh
 printf '%s\\n' "$@" > {args_file}
 IFS= read -r password
 printf '%s' "$password" > {password_file}
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        -*) shift ;;
+        *) break ;;
+    esac
+done
+exec "$@"
+"""
+
+# 'sudo' simulado que, como el real con '-S', escribe la petición de contraseña en stderr sin salto de
+# línea, así que la primera línea del comando llega pegada a ella
+PROMPTING_SUDO_TEMPLATE = """#!/bin/sh
+printf '%s' {prompt} >&2
+IFS= read -r password
 while [ "$#" -gt 0 ]; do
     case "$1" in
         -*) shift ;;
@@ -221,6 +236,65 @@ class ShellQuotingTest(unittest.TestCase):
 
             self.assertEqual(['-a', 'bauh', '-i', '/icon.png', "it's done; $(touch /tmp/pwned)"],
                              read_file(args_file).splitlines())
+
+
+class StripSudoPromptTest(unittest.TestCase):
+
+    def test__must_strip_the_prompt_when_the_user_name_has_a_hyphen_or_a_dot(self):
+        for user in ('the-gekko', 'juan.perez', 'user_1', 'john'):
+            with self.subTest(user=user):
+                self.assertEqual('resolving dependencies...\n',
+                                 strip_sudo_prompt(f'[sudo] password for {user}: resolving dependencies...\n'))
+
+    def test__must_strip_only_the_prompt_when_the_output_also_has_colons(self):
+        self.assertEqual('error: target not found: foo',
+                         strip_sudo_prompt('[sudo] password for the-gekko: error: target not found: foo'))
+
+    def test__must_strip_translated_prompts(self):
+        for prompt in ('[sudo] contraseña para the-gekko: ',
+                       '[sudo] Mot de passe de the-gekko : ',
+                       '[sudo] the-gekko 的密码：'):
+            with self.subTest(prompt=prompt):
+                self.assertEqual('ok\n', strip_sudo_prompt(prompt + 'ok\n'))
+
+    def test__must_keep_the_line_untouched_when_it_has_no_prompt(self):
+        for line in ('resolving dependencies...\n', 'error: [sudo] foo: bar', ''):
+            with self.subTest(line=line):
+                self.assertEqual(line, strip_sudo_prompt(line))
+
+    def test__must_keep_the_line_break_of_a_line_with_only_the_prompt(self):
+        self.assertEqual('\n', strip_sudo_prompt('[sudo] password for the-gekko: \n'))
+
+
+class HandleSimpleSudoPromptTest(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.bin_dir = os.path.join(self.tmp.name, 'bin')
+        os.mkdir(self.bin_dir)
+
+    def fake_sudo(self, prompt: str):
+        write_executable(os.path.join(self.bin_dir, 'sudo'), PROMPTING_SUDO_TEMPLATE.format(prompt=shlex.quote(prompt)))
+
+    def test__must_not_fail_when_the_user_name_has_a_hyphen(self):
+        # reproduce la actualización que se cortaba tras 'pacman -Swdd' con el usuario 'the-gekko'
+        self.fake_sudo('[sudo] password for the-gekko: ')
+        proc = SimpleProcess(['printf', 'resolving dependencies...\\nok\\n'], root_password='pass',
+                             extra_paths={self.bin_dir})
+        success, output = handle_simple(proc)
+
+        self.assertTrue(success, output)
+        self.assertEqual('resolving dependencies...\nok\n', output)
+
+    def test__must_still_detect_error_phrases_after_the_prompt(self):
+        self.fake_sudo('[sudo] password for juan.perez: ')
+        proc = SimpleProcess(['printf', 'error: target not found: foo\\n'], root_password='pass',
+                             extra_paths={self.bin_dir}, error_phrases={'error: target not found'})
+        success, output = handle_simple(proc)
+
+        self.assertFalse(success)
+        self.assertEqual('error: target not found: foo\n', output)
 
 
 if __name__ == '__main__':
