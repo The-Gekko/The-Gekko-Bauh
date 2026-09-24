@@ -11,7 +11,7 @@ import urllib3
 from PyQt5.QtCore import QCoreApplication, Qt, QTimer
 
 from bauh import __app_name__, app_args
-from bauh.migration import migrate_legacy_user_data
+from bauh.migration import migrate_legacy_user_data, remove_legacy_tray_launchers
 from bauh.view.core.config import CoreConfigManager
 from bauh.view.util import logs
 
@@ -206,6 +206,7 @@ def main(tray: bool = False):
     # Debe ejecutarse antes de leer la configuración, para que la primera ejecución tras
     # el cambio de nombre encuentre los ajustes heredados de «bauh».
     migrate_legacy_user_data(__app_name__, logger)
+    remove_legacy_tray_launchers(logger)
 
     try:
         locale.setlocale(locale.LC_NUMERIC, '')

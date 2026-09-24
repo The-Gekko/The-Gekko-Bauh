@@ -26,7 +26,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 pkgname=gekko-bauh-git
-pkgver=0.10.8+gekko.1.r0.g0000000
+pkgver=0.10.8+gekko.2.r0.g0000000
 pkgrel=1
 pkgdesc="Graphical package manager for Arch/AUR, Chaotic AUR, Flatpak and Solus (eopkg) - development version"
 arch=('any')
@@ -132,10 +132,10 @@ package() {
   _write_launcher 'gekko-bauh-tray' 'bauh.app' 'tray'
   _write_launcher 'gekko-bauh-cli' 'bauh.cli.app' 'main'
 
+  # Un único lanzador. La bandeja (gekko-bauh-tray) no tiene entrada de menú: con
+  # ella aparecían dos «bauh Gekko Edition» en la cuadrícula de aplicaciones.
   install -Dm644 bauh/desktop/gekko-bauh.desktop \
     "$pkgdir/usr/share/applications/gekko-bauh.desktop"
-  install -Dm644 bauh/desktop/gekko-bauh-tray.desktop \
-    "$pkgdir/usr/share/applications/gekko-bauh-tray.desktop"
 
   local _size
   for _size in 16 32 48 64 128 256 512; do

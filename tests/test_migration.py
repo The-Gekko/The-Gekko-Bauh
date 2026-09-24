@@ -8,7 +8,7 @@ from unittest.mock import patch
 import yaml
 
 from bauh import __app_name__, __package_name__
-from bauh.migration import LEGACY_APP_NAME, migrate_legacy_user_data
+from bauh.migration import LEGACY_APP_NAME, migrate_legacy_user_data, remove_legacy_tray_launchers
 
 
 class MigrateLegacyUserDataTest(unittest.TestCase):
@@ -180,3 +180,89 @@ class MigrateLegacyUserDataTest(unittest.TestCase):
 
         # un fallo no debe marcar la migración como hecha: se reintenta al resolver la causa
         self.assertEqual([self._current_config()], migrate_legacy_user_data(__app_name__))
+
+
+class RemoveLegacyTrayLaunchersTest(unittest.TestCase):
+    """La bandeja ya no tiene lanzador de menú: se retiran los que dejaron versiones anteriores."""
+
+    def setUp(self):
+        self.home = TemporaryDirectory()
+        self.addCleanup(self.home.cleanup)
+        self.data_home = os.path.join(self.home.name, '.local', 'share')
+        self.apps = os.path.join(self.data_home, 'applications')
+        self.icon = os.path.join(self.data_home, 'icons', 'hicolor', '512x512', 'apps', 'org.thegekko.bauh.tray.png')
+        os.makedirs(self.apps)
+        os.makedirs(os.path.dirname(self.icon))
+
+        patcher = patch.object(Path, 'home', staticmethod(lambda: Path(self.home.name)))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+        env_patcher = patch.dict(os.environ, {'XDG_DATA_HOME': self.data_home})
+        env_patcher.start()
+        self.addCleanup(env_patcher.stop)
+
+        root_patcher = patch(f'{__package_name__}.migration.user.is_root', return_value=False)
+        self.is_root = root_patcher.start()
+        self.addCleanup(root_patcher.stop)
+
+    def _write(self, path: str, content: str):
+        with open(path, 'w') as f:
+            f.write(content)
+
+    def test__must_remove_the_launchers_of_install_sh_and_gekkoapp_and_the_orphan_icon(self):
+        self._write(os.path.join(self.apps, 'gekko-bauh-tray.desktop'),
+                    '[Desktop Entry]\nExec=/x/gekko-bauh-tray\nX-Gekko-Edition=true\n')
+        self._write(os.path.join(self.apps, 'org.thegekko.bauh.tray.desktop'),
+                    '[Desktop Entry]\nExec="/home/u/.local/bin/gekko-bauh-tray"\n')
+        self._write(self.icon, 'png')
+        main_launcher = os.path.join(self.apps, 'org.thegekko.bauh.desktop')
+        self._write(main_launcher, '[Desktop Entry]\nExec="/home/u/.local/bin/gekko-bauh"\n')
+
+        removed = remove_legacy_tray_launchers()
+
+        self.assertEqual(3, len(removed))
+        self.assertFalse(os.path.exists(os.path.join(self.apps, 'gekko-bauh-tray.desktop')))
+        self.assertFalse(os.path.exists(os.path.join(self.apps, 'org.thegekko.bauh.tray.desktop')))
+        self.assertFalse(os.path.exists(self.icon))
+        self.assertTrue(os.path.exists(main_launcher), 'el lanzador principal no se toca')
+
+    def test__must_keep_launchers_without_our_mark(self):
+        foreign = os.path.join(self.apps, 'gekko-bauh-tray.desktop')
+        self._write(foreign, '[Desktop Entry]\nName=Mi bandeja\nExec=/x/gekko-bauh-tray\n')
+
+        self.assertEqual([], remove_legacy_tray_launchers())
+        self.assertTrue(os.path.exists(foreign))
+
+    def test__must_keep_the_icon_while_its_launcher_is_not_ours(self):
+        launcher = os.path.join(self.apps, 'org.thegekko.bauh.tray.desktop')
+        self._write(launcher, '[Desktop Entry]\nExec=/opt/otra-cosa\n')
+        self._write(self.icon, 'png')
+
+        self.assertEqual([], remove_legacy_tray_launchers())
+        self.assertTrue(os.path.exists(launcher))
+        self.assertTrue(os.path.exists(self.icon))
+
+    def test__must_not_touch_the_autostart_entry(self):
+        autostart = os.path.join(self.home.name, '.config', 'autostart', 'gekko-bauh-tray.desktop')
+        os.makedirs(os.path.dirname(autostart))
+        self._write(autostart, '[Desktop Entry]\nExec=/x/gekko-bauh-tray\nX-Gekko-Edition=true\n')
+
+        remove_legacy_tray_launchers()
+        self.assertTrue(os.path.exists(autostart))
+
+    def test__must_use_the_default_data_home_when_xdg_data_home_is_unset(self):
+        self._write(os.path.join(self.apps, 'org.thegekko.bauh.tray.desktop'), 'Exec=gekko-bauh-tray\n')
+
+        with patch.dict(os.environ):
+            os.environ.pop('XDG_DATA_HOME', None)
+            removed = remove_legacy_tray_launchers()
+
+        self.assertEqual([os.path.join(self.apps, 'org.thegekko.bauh.tray.desktop')], removed)
+
+    def test__must_do_nothing_as_root(self):
+        self.is_root.return_value = True
+        self._write(os.path.join(self.apps, 'org.thegekko.bauh.tray.desktop'), 'Exec=gekko-bauh-tray\n')
+
+        self.assertEqual([], remove_legacy_tray_launchers())
+        self.assertTrue(os.path.exists(os.path.join(self.apps, 'org.thegekko.bauh.tray.desktop')))

@@ -4,7 +4,27 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [Unreleased]
+## [0.10.8+gekko.2] 2026-09-23
+
+Etiqueta git `v0.10.8-gekko.2`.
+
+### Improvements
+- **Un solo lanzador en el menú.** La bandeja (`gekko-bauh-tray`) instalaba su
+  propia entrada, «bauh Gekko Edition (bandeja)», y la cuadrícula de
+  aplicaciones mostraba dos bauh casi iguales sin que se supiera cuál abrir.
+  Ya no la instala ninguna vía: ni `install.sh`, ni el release que consume
+  GekkoApp, ni la receta del AUR. La bandeja sigue disponible: el ejecutable
+  `gekko-bauh-tray` se mantiene y `install.sh --autostart` la deja arrancando
+  con la sesión (su plantilla lleva ahora `NoDisplay=true`). Los lanzadores de
+  bandeja que dejaron versiones anteriores se retiran solos: `install.sh` al
+  actualizar, GekkoApp al actualizar Bauh (a partir de su próxima versión) y el
+  propio bauh al arrancar (`bauh/migration.py`), que cubre también a quien
+  actualice con un GekkoApp anterior, que deja el suyo huérfano. Solo se borran los que llevan nuestra marca, y el autoarranque
+  no se toca.
+  Además, el lanzador declara una sola categoría principal
+  (`Categories=System;PackageManager;`): con `System;Settings;` los menús por
+  categorías (KDE, Xfce, Cinnamon) podían mostrarlo en «Sistema» y en
+  «Configuración» a la vez.
 
 ### Fixes
 - Las operaciones con contraseña de root (instalar, desinstalar y actualizar

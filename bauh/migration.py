@@ -47,6 +47,16 @@ MIGRATION_STAMP_NAME = '.migrated-from-bauh'
 # de la instalación original.
 SHARED_SUBDIRS_TO_MIGRATE = ('themes',)
 
+# Lanzadores de menú que tuvo la bandeja hasta 0.10.8+gekko.1, con el texto que demuestra que son
+# nuestros: el de `install.sh` lleva su marca y el que generaba GekkoApp desde el manifiesto del
+# release apunta al ejecutable de la bandeja. Con ellos la cuadrícula de aplicaciones mostraba dos
+# «bauh Gekko Edition».
+LEGACY_TRAY_LAUNCHERS = (('gekko-bauh-tray.desktop', 'X-Gekko-Edition=true'),
+                         ('org.thegekko.bauh.tray.desktop', 'gekko-bauh-tray'))
+
+# Icono que GekkoApp instalaba solo para su lanzador de bandeja.
+LEGACY_TRAY_ICON = os.path.join('icons', 'hicolor', '512x512', 'apps', 'org.thegekko.bauh.tray.png')
+
 
 def _config_dir(app_name: str) -> str:
     return f'{Path.home()}/.config/{app_name}'
@@ -148,6 +158,53 @@ def _write_stamp(app_name: str, logger: Optional[Logger] = None):
     except OSError as e:
         if logger:
             logger.warning(f"could not write the migration stamp '{stamp}': {e}")
+
+
+def remove_legacy_tray_launchers(logger: Optional[Logger] = None) -> List[str]:
+    """Retira del menú los lanzadores de la bandeja que dejaron versiones anteriores.
+
+    Los instaladores ya no los crean, pero no basta con eso: GekkoApp 1.2.0, al actualizar a esta
+    versión, deja de registrar su lanzador de bandeja sin borrarlo del disco, y ya nadie lo vería.
+    Solo se borran ficheros con nuestra marca; el autoarranque (`~/.config/autostart`) no se toca.
+    Devuelve las rutas borradas y no lanza excepciones.
+    """
+    if user.is_root():
+        return []
+
+    data_home = os.getenv('XDG_DATA_HOME') or os.path.join(str(Path.home()), '.local', 'share')
+    applications_dir = os.path.join(data_home, 'applications')
+    removed = []
+
+    def remove(path: str):
+        try:
+            os.remove(path)
+            removed.append(path)
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            if logger:
+                logger.warning(f"could not remove the old tray launcher '{path}': {e}")
+
+    for name, mark in LEGACY_TRAY_LAUNCHERS:
+        path = os.path.join(applications_dir, name)
+
+        try:
+            with open(path, encoding='utf-8', errors='replace') as f:
+                ours = mark in f.read()
+        except OSError:
+            continue
+
+        if ours:
+            remove(path)
+
+    # sin su lanzador el icono queda huérfano (su nombre es del espacio org.thegekko)
+    if not os.path.exists(os.path.join(applications_dir, 'org.thegekko.bauh.tray.desktop')):
+        remove(os.path.join(data_home, LEGACY_TRAY_ICON))
+
+    if removed and logger:
+        logger.info(f"old tray launchers removed from the application menu: {', '.join(removed)}")
+
+    return removed
 
 
 def migrate_legacy_user_data(app_name: str, logger: Optional[Logger] = None) -> List[str]:

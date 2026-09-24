@@ -32,8 +32,8 @@
 #  A PROPÓSITO no se declara conflicts=('bauh') ni provides=('bauh'):
 #
 #    * No hay conflicto porque este paquete no toca ninguno de los nombres del
-#      proyecto original. Los ejecutables son gekko-bauh{,-tray,-cli}, los
-#      lanzadores gekko-bauh{,-tray}.desktop, el icono del tema es gekko-bauh y
+#      proyecto original. Los ejecutables son gekko-bauh{,-tray,-cli}, el
+#      lanzador gekko-bauh.desktop, el icono del tema es gekko-bauh y
 #      la configuración vive en ~/.config/gekko-bauh. El único fichero que sí
 #      chocaría es el paquete importable, que se sigue llamando «bauh» para
 #      poder seguir integrando las correcciones del proyecto original sin
@@ -50,7 +50,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 pkgname=gekko-bauh
-pkgver=0.10.8+gekko.1
+pkgver=0.10.8+gekko.2
 pkgrel=1
 pkgdesc="Graphical package manager for Arch/AUR, Chaotic AUR, Flatpak and Solus (eopkg)"
 arch=('any')
@@ -151,10 +151,10 @@ package() {
   _write_launcher 'gekko-bauh-tray' 'bauh.app' 'tray'
   _write_launcher 'gekko-bauh-cli' 'bauh.cli.app' 'main'
 
+  # Un único lanzador. La bandeja (gekko-bauh-tray) no tiene entrada de menú: con
+  # ella aparecían dos «bauh Gekko Edition» en la cuadrícula de aplicaciones.
   install -Dm644 bauh/desktop/gekko-bauh.desktop \
     "$pkgdir/usr/share/applications/gekko-bauh.desktop"
-  install -Dm644 bauh/desktop/gekko-bauh-tray.desktop \
-    "$pkgdir/usr/share/applications/gekko-bauh-tray.desktop"
 
   # Un PNG propio por tamaño. El nombre con el que se instala es el que usan
   # «Icon=gekko-bauh» de los .desktop y el icono de la bandeja.

@@ -914,13 +914,19 @@ install_desktop_entries() {
         warning 'No se encontró la plantilla gekko-bauh.desktop; el lanzador principal no se instalará.'
     fi
 
-    if [[ ! -f "$desktop_dir/gekko-bauh-tray.desktop" ]]; then
-        warning 'No se encontró la plantilla gekko-bauh-tray.desktop; la bandeja no tendrá lanzador.'
-        return 0
+    # La bandeja no tiene lanzador en el menú: con él la cuadrícula de aplicaciones
+    # mostraba dos «bauh Gekko Edition» y no se sabía cuál abrir. Su plantilla solo
+    # sirve para el arranque automático. Se retira el lanzador que dejaron
+    # versiones anteriores de este instalador (llevan nuestra marca).
+    local old_tray_launcher="$applications_dir/$TRAY_DESKTOP_ID.desktop"
+    if [[ -f "$old_tray_launcher" ]] && grep -q 'X-Gekko-Edition=true' "$old_tray_launcher"; then
+        rm -f "$old_tray_launcher"
     fi
 
-    local tray_desktop="$applications_dir/$TRAY_DESKTOP_ID.desktop"
-    render_desktop "$desktop_dir/gekko-bauh-tray.desktop" "$pipx_bin/$PKG_NAME-tray" "$tray_desktop"
+    if [[ ! -f "$desktop_dir/gekko-bauh-tray.desktop" ]]; then
+        warning 'No se encontró la plantilla gekko-bauh-tray.desktop; la bandeja no podrá arrancar con la sesión.'
+        return 0
+    fi
 
     local enable_autostart="$AUTOSTART_TRAY"
     if [[ -z "$enable_autostart" ]]; then
@@ -933,7 +939,7 @@ install_desktop_entries() {
 
     if [[ "$enable_autostart" == true ]]; then
         mkdir -p "$autostart_dir"
-        cp "$tray_desktop" "$autostart_dir/$TRAY_DESKTOP_ID.desktop"
+        render_desktop "$desktop_dir/gekko-bauh-tray.desktop" "$pipx_bin/$PKG_NAME-tray" "$autostart_dir/$TRAY_DESKTOP_ID.desktop"
         info "Bandeja configurada para arrancar con la sesión ($autostart_dir/$TRAY_DESKTOP_ID.desktop)."
     else
         rm -f "$autostart_dir/$TRAY_DESKTOP_ID.desktop"

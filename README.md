@@ -29,12 +29,12 @@
 > Se instala como `gekko-bauh`, guarda su configuración en `~/.config/gekko-bauh` y
 > convive sin interferir con una instalación del bauh oficial.
 >
-> **Versión en desarrollo**: `0.10.8+gekko.1` (será la etiqueta `v0.10.8-gekko.1`,
-> **pendiente de publicar**), construida sobre la rama `staging` del proyecto
-> original. **Último release publicado**: [`v0.10.7`](https://github.com/The-Gekko/The-Gekko-Bauh/releases/tag/v0.10.7),
-> anterior al cambio de identidad: se instala como distribución `bauh`, no como
-> `gekko-bauh`. Lo que hay en `master` es lo que instala `install.sh`. Detalles en
-> [CHANGELOG.md](CHANGELOG.md).
+> **Versión**: `0.10.8+gekko.2` (etiqueta `v0.10.8-gekko.2`), construida sobre la
+> rama `staging` del proyecto original. Los releases están en
+> [Releases](https://github.com/The-Gekko/The-Gekko-Bauh/releases); desde
+> `v0.10.8-gekko.1` se instalan como distribución `gekko-bauh` (`v0.10.7`, anterior
+> al cambio de identidad, todavía se instalaba como `bauh`). Lo que hay en `master`
+> es lo que instala `install.sh`. Detalles en [CHANGELOG.md](CHANGELOG.md).
 >
 > El repositorio se llamaba `The-Gekko/Bauh-Fork-The-Gekko`; GitHub redirige el
 > nombre antiguo, pero usa siempre el actual: `The-Gekko/The-Gekko-Bauh`.
@@ -170,7 +170,7 @@ punto es comprobable en el código o en la propia interfaz.
   una instalación del bauh oficial, y la primera ejecución copia los ajustes
   heredados de `~/.config/bauh` sin tocar el original. El paquete Python interno
   sigue llamándose `bauh` para poder integrar las correcciones del proyecto
-  original. Versión PEP 440 `0.10.8+gekko.1`, `pyproject.toml` con la sección
+  original. Versión PEP 440 `0.10.8+gekko.2`, `pyproject.toml` con la sección
   `[project]` completa.
 - **Receta para el AUR** (`packaging/aur/`: `gekko-bauh` y `gekko-bauh-git`),
   todavía sin publicar en el AUR —material de empaquetado para el mantenedor,
@@ -272,10 +272,12 @@ Qué hace el instalador:
    dice y ofrece dos salidas: otro `PYTHON_BIN` o `--allow-build-from-source`.
    Si encuentra el entorno `bauh` de una versión anterior de este proyecto, lo
    **migra** a `gekko-bauh` y elimina el antiguo.
-4. Instala el icono en los tamaños estándar de `hicolor` (16 a 512 px) y dos
-   `.desktop` con traducciones y `StartupWMClass=gekko-bauh` en
-   `~/.local/share/applications/` (aplicación y bandeja), pregunta si quieres
-   que la bandeja arranque con la sesión y refresca las cachés del escritorio.
+4. Instala el icono en los tamaños estándar de `hicolor` (16 a 512 px) y **un
+   solo** `.desktop`, con traducciones y `StartupWMClass=gekko-bauh`, en
+   `~/.local/share/applications/`. La bandeja no tiene lanzador propio en el
+   menú (si lo dejó una versión anterior, lo retira): el instalador pregunta si
+   quieres que arranque con la sesión y, en ese caso, la deja en
+   `~/.config/autostart/`. Al final refresca las cachés del escritorio.
 
 Si detecta el bauh **oficial** instalado por pacman o eopkg, avisa del
 conflicto pero **no lo desinstala** a menos que se lo pidas (ver flags).
@@ -353,9 +355,8 @@ No es una tercera forma de instalar este proyecto, sino la vía **conjunta**:
 The-Gekko, en Rust + Tauri) instala gekko-bauh **desde un release verificado**
 —comprueba el tamaño y el SHA-256 del artefacto contra el manifiesto que publica
 el propio release—, en vez de ejecutar `install.sh`, y lo **desinstala desde el
-propio Control Center**, no con `install.sh uninstall`. Hoy el último release
-publicado es `v0.10.7`, anterior al cambio de identidad, así que instala todavía
-la distribución `bauh`. Cada release publica el artefacto, su manifiesto y un
+propio Control Center**, no con `install.sh uninstall`. Instala el mismo único
+lanzador que `install.sh`. Cada release publica el artefacto, su manifiesto y un
 fichero `SHA256SUMS` con el que GekkoApp comprueba lo que descarga.
 
 ## Actualización
@@ -374,11 +375,10 @@ las releases de este repositorio (`bauh/view/core/update.py`).
 
 ### Verificar las descargas (SHA256)
 
-A partir del próximo release (el primero con identidad propia), `release.yml`
-publicará un fichero `SHA256SUMS` con las sumas del wheel, del sdist, del
-tarball de código fuente de la etiqueta y de los dos ficheros que consume
-GekkoApp. **`v0.10.7` no lo tiene.** Descárgalo junto a lo que te lleves y
-comprueba antes de instalar:
+Desde `v0.10.8-gekko.1`, `release.yml` publica un fichero `SHA256SUMS` con las
+sumas del wheel, del sdist, del tarball de código fuente de la etiqueta y de los
+dos ficheros que consume GekkoApp (`v0.10.7` no lo tiene). Descárgalo junto a lo
+que te lleves y comprueba antes de instalar:
 
 ```bash
 sha256sum --check --ignore-missing SHA256SUMS
@@ -413,7 +413,8 @@ curl -fsSL https://raw.githubusercontent.com/The-Gekko/The-Gekko-Bauh/master/ins
 ```
 
 Elimina el entorno pipx (`gekko-bauh`, y `bauh` si quedara de una versión
-anterior), los `.desktop` (aplicación, bandeja y autoarranque) y los iconos, y
+anterior), los `.desktop` (aplicación, autoarranque de la bandeja y el lanzador
+de bandeja de versiones anteriores) y los iconos, y
 refresca las cachés del escritorio. **No toca** tu configuración. Si no había
 ninguna instalación hecha por `install.sh`, limpia igualmente iconos y accesos
 directos sueltos, lo avisa y termina con código de salida **1**.

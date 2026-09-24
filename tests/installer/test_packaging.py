@@ -41,7 +41,7 @@ class VersionMetadataTest(unittest.TestCase):
     """La versión y las URLs del fork (F103)."""
 
     def test_version_uses_the_fork_local_scheme(self):
-        self.assertEqual('0.10.8+gekko.1', bauh.__version__)
+        self.assertEqual('0.10.8+gekko.2', bauh.__version__)
 
     def test_version_matches_the_agreed_pattern(self):
         # <base upstream>+gekko.<n>: distingue el fork de la 0.10.8 del upstream.
@@ -191,6 +191,9 @@ class DesktopEntriesTest(unittest.TestCase):
     def test_tray_entry_exists_and_targets_the_tray_binary(self):
         entry = read_desktop('gekko-bauh-tray.desktop')
         self.assertIn(f'{bauh.__app_name__}-tray', entry['Exec'])
+        # Solo se usa para el arranque automático: nunca debe verse en el menú, o
+        # habría dos «bauh Gekko Edition» en la cuadrícula de aplicaciones.
+        self.assertEqual('true', entry.get('NoDisplay'))
         self.assertIn('Name[es]', entry)
         self.assertIn('Comment[es]', entry)
         self.assertEqual(bauh.__app_name__, entry['StartupWMClass'])
@@ -331,7 +334,12 @@ class BuildGekkoAppReleaseScriptTest(unittest.TestCase):
         self.assertIn('PRODUCT_ID="bauh-fork-the-gekko"', self.source)
         self.assertIn(f'REPOSITORY="{bauh.__repo_url__.split("github.com/")[1]}"', self.source)
         self.assertIn('APP_ID="org.thegekko.bauh"', self.source)
-        self.assertIn('TRAY_APP_ID="org.thegekko.bauh.tray"', self.source)
+
+    def test_declares_a_single_desktop_entry(self):
+        # La bandeja ya no declara entrada de menú: con ella GekkoApp instalaba dos
+        # «bauh Gekko Edition» en la cuadrícula de aplicaciones.
+        self.assertNotIn('TRAY_APP_ID=', self.source)
+        self.assertNotIn('bauh-tray.desktop.template', self.source)
 
 
 class CheckLocalesToolTest(unittest.TestCase):

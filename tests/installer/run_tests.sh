@@ -381,7 +381,8 @@ test_local_install() {
 
     local apps="$HOME/.local/share/applications"
     assert_file "$apps/gekko-bauh.desktop"
-    assert_file "$apps/gekko-bauh-tray.desktop"
+    # Un solo lanzador: la bandeja no tiene entrada propia en el menú.
+    assert_no_file "$apps/gekko-bauh-tray.desktop"
 
     # No se escribe bauh.desktop: taparía por precedencia XDG al bauh oficial.
     assert_no_file "$apps/bauh.desktop"
@@ -395,7 +396,6 @@ test_local_install() {
     assert_contains "$apps/gekko-bauh.desktop" 'Name[es]='
     assert_contains "$apps/gekko-bauh.desktop" 'Comment[es]='
     assert_contains "$apps/gekko-bauh.desktop" 'Keywords='
-    assert_contains "$apps/gekko-bauh-tray.desktop" "Exec=$BIN_DIR/gekko-bauh-tray"
 
     local icons="$HOME/.local/share/icons/hicolor"
     local size
@@ -421,6 +421,37 @@ test_autostart() {
     assert_status 0 "$?" 'el instalador termina bien'
     assert_file "$XDG_CONFIG_HOME/autostart/gekko-bauh-tray.desktop"
     assert_contains "$XDG_CONFIG_HOME/autostart/gekko-bauh-tray.desktop" "Exec=$BIN_DIR/gekko-bauh-tray"
+    assert_contains "$XDG_CONFIG_HOME/autostart/gekko-bauh-tray.desktop" 'NoDisplay=true'
+    assert_contains "$XDG_CONFIG_HOME/autostart/gekko-bauh-tray.desktop" 'X-Gekko-Edition=true'
+    # El autoarranque no necesita un lanzador de bandeja en el menú.
+    assert_no_file "$HOME/.local/share/applications/gekko-bauh-tray.desktop"
+
+    cleanup_sandbox
+}
+
+test_old_tray_launcher_is_removed() {
+    start_case 'actualizar retira el lanzador de bandeja de versiones anteriores (solo si es nuestro)'
+
+    local apps="$HOME/.local/share/applications"
+    mkdir -p "$apps"
+    printf '[Desktop Entry]\nName=bauh Gekko Edition (tray)\nExec=/x/gekko-bauh-tray\nX-Gekko-Edition=true\n' \
+        > "$apps/gekko-bauh-tray.desktop"
+
+    run_installer_local --yes --no-autostart
+    assert_status 0 "$?" 'el instalador termina bien'
+    assert_no_file "$apps/gekko-bauh-tray.desktop"
+    assert_file "$apps/gekko-bauh.desktop"
+
+    cleanup_sandbox
+    start_case 'un gekko-bauh-tray.desktop sin nuestra marca no se toca'
+
+    mkdir -p "$apps"
+    printf '[Desktop Entry]\nName=Mi bandeja\nExec=/x/gekko-bauh-tray\n' > "$apps/gekko-bauh-tray.desktop"
+
+    run_installer_local --yes --no-autostart
+    assert_status 0 "$?" 'el instalador termina bien'
+    assert_file "$apps/gekko-bauh-tray.desktop"
+    assert_contains "$apps/gekko-bauh-tray.desktop" 'Name=Mi bandeja'
 
     cleanup_sandbox
 }
@@ -990,6 +1021,7 @@ test_ref_is_an_error_in_local_mode
 test_local_install_uses_a_clean_copy
 test_purge_does_not_repeat_paths_when_xdg_equals_the_defaults
 test_autostart
+test_old_tray_launcher_is_removed
 test_legacy_migration
 test_foreign_venv_untouched
 test_yes_does_not_authorize_sudo

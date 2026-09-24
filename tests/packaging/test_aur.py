@@ -422,7 +422,8 @@ class FicherosInstaladosTest(unittest.TestCase):
                 self.assertIn('LICENSE', instalados,
                               'la licencia zlib es «custom:» y hay que instalarla')
                 self.assertIn('bauh/desktop/gekko-bauh.desktop', instalados)
-                self.assertIn('bauh/desktop/gekko-bauh-tray.desktop', instalados)
+                self.assertNotIn('bauh/desktop/gekko-bauh-tray.desktop', instalados,
+                                 'un solo lanzador: la bandeja no tiene entrada de menú')
 
                 iconos = [ruta for ruta in instalados if ruta.startswith('pictures/icons/')]
                 self.assertEqual(len(TAMANOS_ICONO), len(iconos),
