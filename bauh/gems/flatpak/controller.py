@@ -180,6 +180,8 @@ class FlatpakManager(SoftwareManager, SettingsController):
                     data_loaders.append(loader)
 
         if update_map:
+            installed_refs = None
+
             for update_id in update_map['full']:
                 model_with_update = models.get(update_id)
                 if model_with_update:
@@ -194,7 +196,19 @@ class FlatpakManager(SoftwareManager, SettingsController):
                                                  version=update_id_split[1],
                                                  arch='x86_64' if self.context.is_system_x86_64() else 'x86',
                                                  origin=update_id_split[3] if len(update_id_split) == 4 else None)
-                    new_app.update_component = True  # mark as "update component"
+
+                    # ...salvo que ya esté instalado y 'flatpak list' lo esconda (una '.Locale', una
+                    # '.Debug'): entonces es una actualización. 'flatpak install' lo daba por instalado
+                    # sin tocarlo («Saltando: ya está instalado») y volvía a salir en cada recarga
+                    already_installed = False
+
+                    if version >= VERSION_1_2:
+                        if installed_refs is None:
+                            installed_refs = flatpak.list_installed_refs()
+
+                        already_installed = tuple(update_id_split[0:3]) in installed_refs
+
+                    new_app.update_component = not already_installed  # mark as "update component"
                     new_app.installed = True  # faking the "installed" status to be displayed as an update
                     new_app.update = True
                     new_app.update_ref()

@@ -1,11 +1,16 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from bauh.api.abstract.controller import SoftwareAction
+from bauh.api.abstract.controller import SoftwareAction, UpgradeRequirement, UpgradeRequirements
 from bauh.api.abstract.view import FormComponent
 from bauh.gems.eopkg import commands
-from bauh.gems.eopkg.controller import EopkgManager
+from bauh.gems.eopkg.controller import CONTEXT_REPOS_SYNCED, EopkgManager
 from bauh.gems.eopkg.model import EopkgPackage
+
+
+def new_requirements(*names: str) -> UpgradeRequirements:
+    return UpgradeRequirements(None, None, [UpgradeRequirement(EopkgPackage(name=name))
+                                            for name in names], None)
 
 
 class CommandBuildersTest(unittest.TestCase):
@@ -109,9 +114,7 @@ class EopkgManagerTransactionTest(unittest.TestCase):
     def test_upgrade__must_run_a_single_transaction(self, simple_process: Mock,
                                                     process_handler: Mock, index: Mock):
         process_handler.return_value.handle_simple.return_value = (True, '')
-        requirements = Mock()
-        requirements.to_upgrade = [Mock(pkg=EopkgPackage(name='a')),
-                                   Mock(pkg=EopkgPackage(name='b'))]
+        requirements = new_requirements('a', 'b')
 
         self.assertTrue(self.manager.upgrade(requirements, 'secret', Mock()))
 
@@ -127,8 +130,7 @@ class EopkgManagerTransactionTest(unittest.TestCase):
                                                                    index: Mock):
         self.manager.configman.get_config.return_value['sync_repos_before_upgrade'] = True
         process_handler.return_value.handle_simple.return_value = (True, '')
-        requirements = Mock()
-        requirements.to_upgrade = [Mock(pkg=EopkgPackage(name='a'))]
+        requirements = new_requirements('a')
 
         self.manager.upgrade(requirements, 'secret', Mock())
 
@@ -147,12 +149,41 @@ class EopkgManagerTransactionTest(unittest.TestCase):
         # la sincronización falla y la actualización sigue adelante con el índice que haya,
         # pero no puede quedar registrada como hecha
         process_handler.return_value.handle_simple.side_effect = [(False, ''), (True, '')]
-        requirements = Mock()
-        requirements.to_upgrade = [Mock(pkg=EopkgPackage(name='a'))]
+        requirements = new_requirements('a')
 
         self.manager.upgrade(requirements, 'secret', Mock())
 
         index.register_sync.assert_not_called()
+
+    @patch('bauh.gems.eopkg.controller.index')
+    @patch('bauh.gems.eopkg.controller.ProcessHandler')
+    @patch('bauh.gems.eopkg.controller.SimpleProcess')
+    def test_upgrade__must_not_sync_again_if_the_requirements_already_did(self, simple_process: Mock,
+                                                                         process_handler: Mock,
+                                                                         index: Mock):
+        self.manager.configman.get_config.return_value['sync_repos_before_upgrade'] = True
+        process_handler.return_value.handle_simple.return_value = (True, '')
+        requirements = new_requirements('a')
+        requirements.context[CONTEXT_REPOS_SYNCED] = True
+
+        self.manager.upgrade(requirements, 'secret', Mock())
+
+        self.assertEqual([['eopkg', 'up', '--no-color', '-y', 'a']],
+                         [call[0][0] for call in simple_process.call_args_list])
+
+    @patch('bauh.gems.eopkg.controller.index')
+    @patch('bauh.gems.eopkg.controller.ProcessHandler')
+    @patch('bauh.gems.eopkg.controller.SimpleProcess')
+    def test_update_repos__must_keep_the_system_language(self, simple_process: Mock,
+                                                          process_handler: Mock, index: Mock):
+        # nadie analiza la salida de 'eopkg ur': se enseña como en un terminal
+        # («Actualizando repositorio: Solus»), sin forzar la locale C
+        process_handler.return_value.handle_simple.return_value = (True, '')
+
+        self.manager.update_repositories('secret', Mock())
+
+        self.assertIsNone(simple_process.call_args[1]['lang'])
+        self.assertIsNone(simple_process.call_args[1].get('extra_env'))
 
     def test_requires_root__install_uninstall_and_upgrade(self):
         for action in (SoftwareAction.INSTALL, SoftwareAction.UNINSTALL,
@@ -382,6 +413,117 @@ class EopkgManagerSettingsTest(unittest.TestCase):
 
         self.assertTrue(self.manager.clean_download_cache('secret', Mock()))
         self.assertEqual(['eopkg', 'dc', '--no-color'], simple_process.call_args[0][0])
+
+
+class UpgradeRequirementsTest(unittest.TestCase):
+    """El resumen de la actualización debe reflejar el índice recién sincronizado.
+
+    Fallo real: Solus publicaba su sincronización semanal y bauh enseñaba (y actualizaba) sólo
+    lo que decía el índice viejo, sin ningún «eopkg ur» a la vista en la consola.
+    """
+
+    def setUp(self):
+        context = Mock()
+        context.i18n = {}
+        self.manager = EopkgManager(context)
+        self.manager.configman = Mock()
+        self.manager.configman.get_config.return_value = {'command_timeout': 60,
+                                                          'sync_repos_before_upgrade': True}
+        self.manager.i18n = _DummyI18n()
+        self.watcher = Mock()
+        self.manager._read_installed_index = Mock(return_value={
+            'nano': {'version': '9.1', 'release': '217', 'summary': 'Editor'}})
+        self.manager._read_info_index = Mock(return_value={})
+
+    def _upgradable(self, before, after):
+        """'eopkg list-upgrades' antes y después del 'eopkg ur'."""
+        manager = self.manager
+
+        def read(refresh: bool = False):
+            if refresh:
+                manager._upgradable_names = list(after)
+            elif manager._upgradable_names is None:
+                manager._upgradable_names = list(before)
+
+            return manager._upgradable_names
+
+        manager._read_upgradable = Mock(side_effect=read)
+
+    def _requirements(self, *names: str) -> UpgradeRequirements:
+        return self.manager.get_upgrade_requirements([EopkgPackage(name=n, installed=True, update=True)
+                                                      for n in names], 'secret', self.watcher)
+
+    @patch('bauh.gems.eopkg.controller.index')
+    @patch('bauh.gems.eopkg.controller.ProcessHandler')
+    @patch('bauh.gems.eopkg.controller.SimpleProcess')
+    def test_must_sync_before_the_summary_and_add_the_new_updates(self, simple_process: Mock,
+                                                                  process_handler: Mock, index: Mock):
+        process_handler.return_value.handle_simple.return_value = (True, 'Package database updated.')
+        self._upgradable(before=['firefox'], after=['firefox', 'nano'])
+
+        requirements = self._requirements('firefox')
+
+        self.assertEqual(['eopkg', 'ur', '--no-color'], simple_process.call_args[0][0])
+        index.register_sync.assert_called_once()
+        self.assertEqual(['firefox', 'nano'], [req.pkg.name for req in requirements.to_upgrade])
+        nano = requirements.to_upgrade[1].pkg
+        self.assertEqual(('9.1-217', True, True), (nano.version, nano.installed, nano.update))
+        self.assertTrue(requirements.context[CONTEXT_REPOS_SYNCED])
+        self.watcher.print.assert_called_once()
+
+    @patch('bauh.gems.eopkg.controller.index')
+    @patch('bauh.gems.eopkg.controller.ProcessHandler')
+    @patch('bauh.gems.eopkg.controller.SimpleProcess')
+    def test_must_respect_the_updates_the_user_saw_and_did_not_select(self, simple_process: Mock,
+                                                                      process_handler: Mock,
+                                                                      index: Mock):
+        process_handler.return_value.handle_simple.return_value = (True, '')
+        self._upgradable(before=['firefox', 'vlc'], after=['firefox', 'vlc'])
+
+        requirements = self._requirements('firefox')
+
+        self.assertEqual(['firefox'], [req.pkg.name for req in requirements.to_upgrade])
+        self.watcher.print.assert_not_called()
+
+    @patch('bauh.gems.eopkg.controller.index')
+    @patch('bauh.gems.eopkg.controller.ProcessHandler')
+    @patch('bauh.gems.eopkg.controller.SimpleProcess')
+    def test_must_keep_the_selection_if_the_sync_fails(self, simple_process: Mock,
+                                                       process_handler: Mock, index: Mock):
+        # sin red: se sigue con lo que el usuario eligió y 'upgrade' no vuelve a intentarlo
+        process_handler.return_value.handle_simple.return_value = (False, '')
+        self._upgradable(before=['firefox'], after=['firefox', 'nano'])
+
+        requirements = self._requirements('firefox')
+
+        index.register_sync.assert_not_called()
+        self.assertEqual(['firefox'], [req.pkg.name for req in requirements.to_upgrade])
+        self.assertTrue(requirements.context[CONTEXT_REPOS_SYNCED])
+
+    @patch('bauh.gems.eopkg.controller.ProcessHandler')
+    @patch('bauh.gems.eopkg.controller.SimpleProcess')
+    def test_must_not_sync_when_disabled(self, simple_process: Mock, process_handler: Mock):
+        self.manager.configman.get_config.return_value['sync_repos_before_upgrade'] = False
+
+        requirements = self._requirements('firefox')
+
+        simple_process.assert_not_called()
+        self.assertEqual(['firefox'], [req.pkg.name for req in requirements.to_upgrade])
+        self.assertNotIn(CONTEXT_REPOS_SYNCED, requirements.context)
+
+    @patch('bauh.gems.eopkg.controller.index')
+    @patch('bauh.gems.eopkg.controller.ProcessHandler')
+    @patch('bauh.gems.eopkg.controller.SimpleProcess')
+    def test_must_keep_the_selection_if_nothing_is_left_to_upgrade(self, simple_process: Mock,
+                                                                   process_handler: Mock,
+                                                                   index: Mock):
+        # una lista vacía haría fallar 'upgrade' y cortaría también la de flatpak
+        process_handler.return_value.handle_simple.return_value = (True, '')
+        self._upgradable(before=['firefox'], after=[])
+
+        requirements = self._requirements('firefox')
+
+        self.assertEqual(['firefox'], [req.pkg.name for req in requirements.to_upgrade])
 
 
 class _DummyI18n(dict):

@@ -40,6 +40,43 @@ def strip_sudo_prompt(line: str) -> str:
     return RE_SUDO_OUTPUT.sub('', line, count=1)
 
 
+# Secuencias de escape de terminal: CSI (colores y borrado de línea, '\x1b[32m', '\x1b[K'), OSC (título de
+# la ventana, '\x1b]0;...\x07') y los escapes de un solo carácter.
+RE_TERMINAL_ESCAPE = re.compile(r'\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)?|[@-Z\\-_])')
+
+# caracteres de control que la consola de la interfaz pintaría como cajas vacías (se conserva el tabulador)
+RE_CONTROL_CHARS = re.compile(r'[\x00-\x08\x0b-\x1f\x7f-\x9f]')
+
+
+def clean_output_line(line: str) -> str:
+    """Deja una línea de salida de un comando tal y como se vería en un terminal.
+
+    Los programas que dibujan barras de progreso reescriben la línea con retornos de carro y
+    retrocesos ('\\r', '\\b'), y algunos colorean con ANSI aunque su salida no sea un terminal. La
+    consola de la interfaz (un QPlainTextEdit) no interpreta nada de eso y lo pinta como cajas vacías:
+    'usysconf', que eopkg ejecuta al final de cada transacción, escribe cientos de '\\b' seguidos.
+    """
+    line = RE_TERMINAL_ESCAPE.sub('', line)
+
+    if '\r' in line:
+        # '\r' vuelve al principio de la línea: lo que queda a la vista es el último tramo escrito
+        segments = [segment for segment in line.split('\r') if segment.strip()]
+        line = segments[-1] if segments else ''
+
+    if '\b' in line:
+        chars = []
+
+        for char in line:
+            if char != '\b':
+                chars.append(char)
+            elif chars:
+                chars.pop()
+
+        line = ''.join(chars)
+
+    return RE_CONTROL_CHARS.sub('', line)
+
+
 def feed_root_password(proc: subprocess.Popen, root_password: str) -> None:
     """Escribe la contraseña de root en la entrada estándar de un proceso 'sudo -S' y la cierra.
 
@@ -193,7 +230,7 @@ class ProcessHandler:
             for output in process.subproc.stdout:
 
                 try:
-                    line = output.decode().strip()
+                    line = clean_output_line(output.decode()).strip()
                 except UnicodeDecodeError:
                     line = None
 
@@ -215,7 +252,7 @@ class ProcessHandler:
         for output in process.subproc.stderr:
             if output:
                 try:
-                    line = output.decode().strip()
+                    line = clean_output_line(output.decode()).strip()
                 except UnicodeDecodeError:
                     line = None
 
@@ -261,7 +298,7 @@ class ProcessHandler:
 
                 output.write(line)
 
-                line = line.strip()
+                line = clean_output_line(line).strip()
 
                 if line:
                     if output_handler:

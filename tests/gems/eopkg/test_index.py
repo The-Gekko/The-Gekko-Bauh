@@ -5,6 +5,7 @@ local, así que sin un ``eopkg ur`` previo bauh daba el sistema por actualizado 
 hubiese publicado paquetes ese mismo día.
 """
 
+import hashlib
 import os
 import tempfile
 import time
@@ -43,8 +44,32 @@ class _Dirs:
         os.utime(index_file, (moment.timestamp(), moment.timestamp()))
         return index_file
 
+    def write_repo(self, local: bytes, remote_sha1: str = None) -> str:
+        """Repositorio con índice local ``local`` y un «mirror» en disco (URI file://)."""
+        mirror_dir = os.path.join(self.tmp.name, 'mirror')
+        os.makedirs(mirror_dir, exist_ok=True)
+        index_file = self.write_index(datetime.now())
+
+        with open(index_file, 'wb') as handle:
+            handle.write(local)
+
+        uri = f'file://{mirror_dir}/eopkg-index.xml.xz'
+
+        with open(os.path.join(os.path.dirname(index_file), 'uri'), 'w') as handle:
+            handle.write(uri + '\n')
+
+        if remote_sha1 is not None:
+            with open(os.path.join(mirror_dir, 'eopkg-index.xml.xz.sha1sum'), 'w') as handle:
+                handle.write(remote_sha1 + '\n')
+
+        return uri
+
     def cleanup(self):
         self.tmp.cleanup()
+
+
+def sha1(content: bytes) -> str:
+    return hashlib.sha1(content).hexdigest()
 
 
 class IndexSyncStateTest(unittest.TestCase):
@@ -56,6 +81,8 @@ class IndexSyncStateTest(unittest.TestCase):
                                  INDEX_DIR=self.dirs.index_dir)
         patcher.start()
         self.addCleanup(patcher.stop)
+        index.forget_remote_check()
+        self.addCleanup(index.forget_remote_check)
 
     def test_should_sync__when_it_was_never_synchronized(self):
         self.assertTrue(index.should_sync())
@@ -168,14 +195,103 @@ class IndexSyncStateTest(unittest.TestCase):
         self.dirs.write_index(datetime.now() + timedelta(days=5), name='eopkg-index.xml')
 
         self.assertAlmostEqual(recent.timestamp(), index._index_date().timestamp(), delta=2)
-        self.assertFalse(index.should_sync())
+        # 'reference' fija el «hoy» del índice: entre las 00:00 y las 02:00 'recent' es de ayer
+        self.assertFalse(index.should_sync(reference=recent.date()))
 
     def test_an_index_dated_only_a_bit_ahead_still_counts(self):
         # un desfase pequeño (husos horarios, reloj con unos minutos de más) no invalida nada
-        self.dirs.write_index(datetime.now() + timedelta(hours=2))
+        ahead = datetime.now() + timedelta(hours=2)
+        self.dirs.write_index(ahead)
 
         self.assertIsNotNone(index._index_date())
+        # 'reference' fija el «hoy» del índice: entre las 22:00 y las 24:00 'ahead' es mañana
+        self.assertFalse(index.should_sync(reference=ahead.date()))
+
+    # ------------------------------------------------------------ comprobación remota (sin root)
+
+    def test_remote_changed__false_when_the_mirror_publishes_the_same_index(self):
+        self.dirs.write_repo(b'index', remote_sha1=sha1(b'index'))
+
+        self.assertFalse(index.remote_changed())
+
+    def test_remote_changed__true_when_the_mirror_publishes_a_new_index(self):
+        self.dirs.write_repo(b'old index', remote_sha1=sha1(b'new index'))
+
+        self.assertTrue(index.remote_changed())
+
+    def test_remote_changed__compares_the_index_itself_and_not_the_saved_sha1sum(self):
+        # eopkg reescribe el '.sha1sum' local ANTES de descargar el índice: tras una descarga
+        # cortada ya lleva el hash nuevo aunque el índice siga siendo el viejo
+        self.dirs.write_repo(b'old index', remote_sha1=sha1(b'new index'))
+
+        with open(os.path.join(self.dirs.index_dir, 'Solus', 'eopkg-index.xml.xz.sha1sum'), 'w') as f:
+            f.write(sha1(b'new index'))
+
+        self.assertTrue(index.remote_changed())
+
+    def test_remote_changed__none_when_the_mirror_cannot_be_reached(self):
+        self.dirs.write_repo(b'index', remote_sha1=None)
+
+        self.assertIsNone(index.remote_changed())
+
+    def test_remote_changed__none_when_the_mirror_answers_garbage(self):
+        self.dirs.write_repo(b'index', remote_sha1='<html>502 Bad Gateway</html>')
+
+        self.assertIsNone(index.remote_changed())
+
+    def test_remote_changed__none_without_repositories(self):
+        self.assertIsNone(index.remote_changed())
+
+    def test_remote_changed__true_when_the_index_was_never_downloaded(self):
+        self.dirs.write_repo(b'index', remote_sha1=sha1(b'index'))
+        os.remove(os.path.join(self.dirs.index_dir, 'Solus', 'eopkg-index.xml.xz'))
+
+        self.assertTrue(index.remote_changed())
+
+    def test_remote_changed__must_reuse_the_answer_for_a_while(self):
+        self.dirs.write_repo(b'index', remote_sha1=sha1(b'index'))
+
+        with patch.object(index, '_remote_sha1', wraps=index._remote_sha1) as remote_sha1:
+            index.remote_changed()
+            index.remote_changed()
+
+        self.assertEqual(1, remote_sha1.call_count)
+
+    def test_register_sync__must_forget_the_remote_answer(self):
+        self.dirs.write_repo(b'old index', remote_sha1=sha1(b'new index'))
+        self.assertTrue(index.remote_changed())
+
+        # 'eopkg ur' descarga el índice nuevo y bauh registra la sincronización
+        with open(os.path.join(self.dirs.index_dir, 'Solus', 'eopkg-index.xml.xz'), 'wb') as f:
+            f.write(b'new index')
+
+        index.register_sync()
+
+        self.assertFalse(index.remote_changed())
+
+    def test_should_sync__when_solus_publishes_after_todays_sync(self):
+        # el caso del viernes: el índice se refrescó por la mañana y Solus publica por la tarde
+        self.dirs.write_sync_file(datetime.now())
+        self.dirs.write_repo(b'morning index', remote_sha1=sha1(b'afternoon index'))
+
+        self.assertTrue(index.should_sync())
+
+    def test_should_not_sync__an_old_index_that_matches_the_mirror(self):
+        # nada nuevo en Solus: no se pide la contraseña aunque la última sincronización sea vieja
+        self.dirs.write_repo(b'index', remote_sha1=sha1(b'index'))
+        old = datetime.now() - timedelta(days=5)
+        os.utime(os.path.join(self.dirs.index_dir, 'Solus', 'eopkg-index.xml.xz'),
+                 (old.timestamp(), old.timestamp()))
+
         self.assertFalse(index.should_sync())
+
+    def test_should_sync__falls_back_to_the_day_without_network(self):
+        self.dirs.write_repo(b'index', remote_sha1=None)
+        yesterday = datetime.now() - timedelta(days=1)
+        os.utime(os.path.join(self.dirs.index_dir, 'Solus', 'eopkg-index.xml.xz'),
+                 (yesterday.timestamp(), yesterday.timestamp()))
+
+        self.assertTrue(index.should_sync())
 
 
 class SyncRepositoriesDecisionTest(unittest.TestCase):
@@ -322,6 +438,34 @@ class SyncRepositoriesRunTest(unittest.TestCase):
 
         task.taskman.update_output.assert_called_once_with(task.task_id,
                                                            'Updating repository: Solus')
+
+    @patch('bauh.gems.eopkg.worker.SimpleProcess')
+    def test_run__must_not_show_terminal_control_characters(self, simple_process: Mock):
+        # la consola pintaba como cajas vacías los retrocesos y colores que no son texto
+        simple_process.return_value.instance.stdout = [b'\x1b[32mActualizando repositorio: Solus\x1b[0m\n',
+                                                       b'\x08' * 300]
+        simple_process.return_value.instance.returncode = 0
+        task = self._new_task({'sync_repos_startup': True})
+
+        with patch.object(index, 'should_sync', return_value=True), \
+                patch.object(index, 'register_sync'):
+            task.run()
+
+        task.taskman.update_output.assert_called_once_with(task.task_id,
+                                                           'Actualizando repositorio: Solus')
+
+    @patch('bauh.gems.eopkg.worker.SimpleProcess')
+    def test_run__must_keep_the_system_language(self, simple_process: Mock):
+        # nadie analiza la salida de 'eopkg ur': se enseña como en un terminal
+        simple_process.return_value.instance.stdout = []
+        simple_process.return_value.instance.returncode = 0
+        task = self._new_task({'sync_repos_startup': True})
+
+        with patch.object(index, 'should_sync', return_value=True), \
+                patch.object(index, 'register_sync'):
+            task.run()
+
+        self.assertIsNone(simple_process.call_args[1]['lang'])
 
 
 class PrepareTest(unittest.TestCase):

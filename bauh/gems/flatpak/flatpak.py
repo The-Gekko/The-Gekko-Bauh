@@ -20,6 +20,28 @@ RE_REQUIRED_RUNTIME = re.compile(r'Required\s+runtime\s+.+\(([\w./]+)\)\s*.+\s+r
 OPERATION_UPDATE_SYMBOLS = {'i', 'u'}
 
 
+def languages_env() -> Dict[str, str]:
+    """``LANGUAGE`` con los idiomas del usuario, para las órdenes de flatpak que van con la locale C.
+
+    En la instalación de usuario flatpak deduce los idiomas del entorno (``g_get_language_names``)
+    y con la locale C no encuentra ninguno: da por buenas las traducciones de TODOS los idiomas.
+    Cada ``.Locale`` instalada sólo con ``/es`` salía entonces como pendiente de actualizar, el
+    ``flatpak update`` de la actualización (con la locale real) no hacía nada y volvía a salir en
+    cada recarga.  glib lee ``LANGUAGE`` para calcular los idiomas, pero gettext la ignora con la
+    locale C, así que la salida sigue en inglés y se puede analizar.
+    """
+    for var in ('LANGUAGE', 'LC_ALL', 'LC_MESSAGES', 'LANG'):
+        value = os.environ.get(var)
+
+        if value:
+            if value == 'POSIX' or value.split('.')[0] == 'C':  # el usuario trabaja de verdad en C
+                return {}
+
+            return {'LANGUAGE': value}
+
+    return {}
+
+
 def _run(args: Sequence[str], ignore_return_code: bool = False, print_error: bool = True,
          lang: Optional[str] = DEFAULT_LANG) -> Optional[str]:
     """Ejecuta flatpak pasando los argumentos como lista (sin shell) y devuelve su salida.
@@ -34,8 +56,13 @@ def _run(args: Sequence[str], ignore_return_code: bool = False, print_error: boo
     if not final_args:
         return None
 
+    env = system.gen_env(lang=lang)
+
+    if lang is not None:
+        env.update(languages_env())
+
     params = {'stdout': subprocess.PIPE,
-              'env': system.gen_env(lang=lang),
+              'env': env,
               'cwd': '.',
               'shell': False}
 
@@ -203,18 +230,21 @@ def update(app_ref: str, installation: str, version: Tuple[str, ...], related: b
         cmd.append('--no-deps')
 
     return SimpleProcess(cmd=cmd, extra_paths={EXPORTS_PATH}, shell=True,
-                         lang=DEFAULT_LANG if version < VERSION_1_12 else None)
+                         lang=DEFAULT_LANG if version < VERSION_1_12 else None,
+                         extra_env=languages_env())
 
 
 def full_update(version: VERSION_1_12) -> SimpleProcess:
     return SimpleProcess(cmd=('flatpak', 'update', '-y'), extra_paths={EXPORTS_PATH}, shell=True,
-                         lang=DEFAULT_LANG if version < VERSION_1_12 else None)
+                         lang=DEFAULT_LANG if version < VERSION_1_12 else None,
+                         extra_env=languages_env())
 
 
 def uninstall(app_ref: str, installation: str, version: Tuple[str, ...]) -> SimpleProcess:
     return SimpleProcess(cmd=('flatpak', 'uninstall', app_ref, '-y', f'--{installation}'),
                          extra_paths={EXPORTS_PATH},
                          lang=DEFAULT_LANG if version < VERSION_1_12 else None,
+                         extra_env=languages_env(),
                          shell=True)
 
 
@@ -243,6 +273,24 @@ def list_updates_as_str(version: Tuple[str, ...]) -> Dict[str, Set[str]]:
                     all_updates[key].update(val)
 
     return all_updates
+
+
+def list_installed_refs() -> Set[Tuple[str, str, str]]:
+    """``(id, rama, instalación)`` de todo lo instalado.
+
+    Incluye lo que ``flatpak list`` esconde sin ``--all``: las extensiones ``.Locale`` y ``.Debug``
+    que acompañan a las aplicaciones y los runtimes.
+    """
+    refs = set()
+    output = _run(('flatpak', 'list', '--all', '--columns=application,branch,installation')) or ''
+
+    for line in output.split('\n'):
+        data = line.strip().split('\t')
+
+        if len(data) >= 3 and data[0]:
+            refs.add((data[0], data[1], 'user' if 'user' in data[2] else 'system'))
+
+    return refs
 
 
 def list_required_runtime_updates(installation: str) -> Optional[List[Tuple[str, str]]]:
@@ -315,6 +363,7 @@ def downgrade(app_ref: str, commit: str, installation: str, root_password: Optio
                          root_password=root_password if installation == 'system' else None,
                          extra_paths={EXPORTS_PATH},
                          lang=DEFAULT_LANG if version < VERSION_1_12 else None,
+                         extra_env=languages_env(),
                          success_phrases={'Changes complete.', 'Updates complete.'} if version < VERSION_1_12 else None,
                          wrong_error_phrases={'Warning'} if version < VERSION_1_12 else None)
 
@@ -446,6 +495,7 @@ def install(app_id: str, origin: str, installation: str, version: Tuple[str, ...
     return SimpleProcess(cmd=('flatpak', 'install', origin, app_id, '-y', f'--{installation}'),
                          extra_paths={EXPORTS_PATH},
                          lang=DEFAULT_LANG if version < VERSION_1_12 else None,
+                         extra_env=languages_env(),
                          wrong_error_phrases={'Warning'} if version < VERSION_1_12 else None,
                          shell=True)
 
@@ -486,7 +536,8 @@ def run(app_id: str):
 
 def map_update_download_size(app_ids: Iterable[str], installation: str, version: Tuple[str, ...]) -> Dict[str, float]:
     success, output = ProcessHandler().handle_simple(SimpleProcess(('flatpak', 'update', f'--{installation}',
-                                                                    '--no-deps')))
+                                                                    '--no-deps'),
+                                                                   extra_env=languages_env()))
     if version >= VERSION_1_2:
         res = {}
         p = re.compile(r'^\d+.\t')

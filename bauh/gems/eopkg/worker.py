@@ -14,7 +14,7 @@ from typing import Callable, Optional
 from bauh.api.abstract.handler import TaskManager
 from bauh.commons.boot import CreateConfigFile
 from bauh.commons.html import bold
-from bauh.commons.system import SimpleProcess, strip_sudo_prompt
+from bauh.commons.system import SimpleProcess, clean_output_line, strip_sudo_prompt
 from bauh.gems.eopkg import commands, get_icon_path, index
 from bauh.view.util.translation import I18n
 
@@ -80,8 +80,11 @@ class SyncRepositories(Thread):
         # moriría sin llamar a 'finish_task' y el panel de arranque se quedaría esperando una
         # tarea que ya no existe, sin botón con el que continuar
         try:
+            # 'lang=None' deja la salida en el idioma del sistema, como en un terminal
+            # («Actualizando repositorio: Solus»): nadie la analiza, sólo se enseña
             process = SimpleProcess(commands.update_repos_command(),
                                     root_password=self.root_password,
+                                    lang=None,
                                     extra_env=self.extra_env)
 
             for output in process.instance.stdout:
@@ -94,7 +97,7 @@ class SyncRepositories(Thread):
                 # igual que hace 'ProcessHandler.handle_simple'
                 line = strip_sudo_prompt(line)
 
-                line = line.strip()
+                line = clean_output_line(line).strip()
 
                 if line:
                     self.taskman.update_output(self.task_id, line)

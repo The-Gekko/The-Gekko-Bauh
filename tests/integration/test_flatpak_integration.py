@@ -8,6 +8,7 @@ alguien volviera a construir la orden interpolando en una cadena de shell, falla
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from bauh.gems.flatpak import flatpak
 from tests.integration.harness import FakeBinaries
@@ -91,6 +92,45 @@ class FlatpakOutputIntegrationTest(unittest.TestCase):
     def test_a_failing_binary_does_not_raise(self):
         with FakeBinaries({'flatpak': {'*': {'stdout': '', 'stderr': 'error', 'code': 1}}}):
             self.assertIsNone(flatpak.get_version())
+
+
+class FlatpakLanguagesIntegrationTest(unittest.TestCase):
+    """Con la locale C flatpak no ve ningún idioma y pide las traducciones de todos.
+
+    Fallo real: tres «Locale» en la lista de actualizaciones que no se iban nunca.  Cada
+    '.Locale' instalada sólo con '/es' salía como pendiente al consultar con la locale C, el
+    'flatpak update' de la actualización (con la locale real) no hacía nada, y vuelta a empezar.
+    """
+
+    def test_the_update_query_must_carry_the_user_languages(self):
+        with patch.dict(os.environ, {'LANG': 'es_MX.utf8'}, clear=False), \
+                FakeBinaries({'flatpak': {'*': {'stdout': 'Nothing to update.\n'}}}) as fakes:
+            os.environ.pop('LANGUAGE', None)
+            os.environ.pop('LC_ALL', None)
+            os.environ.pop('LC_MESSAGES', None)
+            flatpak.list_updates_as_str(('1', '18', '3'))
+            envs = fakes.envs('flatpak')
+
+        self.assertEqual(2, len(envs))  # instalación de sistema y de usuario
+
+        for env in envs:
+            # la salida sigue en inglés para poder analizarla (gettext ignora LANGUAGE con C)...
+            self.assertEqual('C', env['LC_ALL'])
+            # ...pero flatpak calcula los idiomas a partir de LANGUAGE (glib)
+            self.assertEqual('es_MX.utf8', env['LANGUAGE'])
+
+    def test_hidden_installed_refs_are_listed(self):
+        output = ('io.missioncenter.MissionCenter\tstable\tuser\n'
+                  'io.missioncenter.MissionCenter.Locale\tstable\tuser\n'
+                  'org.gnome.Platform.Locale\t49\tsystem\n')
+
+        with FakeBinaries({'flatpak': {'list': {'stdout': output}}}) as fakes:
+            refs = flatpak.list_installed_refs()
+            calls = fakes.calls('flatpak')
+
+        self.assertIn(('io.missioncenter.MissionCenter.Locale', 'stable', 'user'), refs)
+        self.assertIn(('org.gnome.Platform.Locale', '49', 'system'), refs)
+        self.assertEqual([['list', '--all', '--columns=application,branch,installation']], calls)
 
 
 if __name__ == '__main__':

@@ -26,7 +26,8 @@ BASE = {base!r}
 NAME = {name!r}
 
 with open(os.path.join(BASE, 'calls.jsonl'), 'a') as f:
-    f.write(json.dumps({{'binary': NAME, 'args': sys.argv[1:]}}) + '\\n')
+    env = {{var: os.environ.get(var) for var in ('LANG', 'LC_ALL', 'LANGUAGE')}}
+    f.write(json.dumps({{'binary': NAME, 'args': sys.argv[1:], 'env': env}}) + '\\n')
 
 with open(os.path.join(BASE, 'responses.json')) as f:
     responses = json.load(f)
@@ -116,6 +117,22 @@ class FakeBinaries:
 
                 if binary is None or call['binary'] == binary:
                     result.append(call['args'])
+
+        return result
+
+    def envs(self, binary: Optional[str] = None) -> List[Dict[str, Optional[str]]]:
+        """``LANG``, ``LC_ALL`` y ``LANGUAGE`` de cada invocación, en el mismo orden que :meth:`calls`."""
+        result = []
+
+        with open(os.path.join(self.path, 'calls.jsonl')) as f:
+            for line in f:
+                if not line.strip():
+                    continue
+
+                call = json.loads(line)
+
+                if binary is None or call['binary'] == binary:
+                    result.append(call['env'])
 
         return result
 

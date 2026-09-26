@@ -9,6 +9,7 @@ from bauh.commons import system
 from bauh.commons.system import (
     ProcessHandler,
     SimpleProcess,
+    clean_output_line,
     gen_env,
     new_root_subprocess,
     strip_sudo_prompt,
@@ -264,6 +265,42 @@ class StripSudoPromptTest(unittest.TestCase):
 
     def test__must_keep_the_line_break_of_a_line_with_only_the_prompt(self):
         self.assertEqual('\n', strip_sudo_prompt('[sudo] password for the-gekko: \n'))
+
+
+class CleanOutputLineTest(unittest.TestCase):
+    """La consola de la interfaz no es un terminal: lo que no es texto sale como cajas vacías."""
+
+    def test__must_drop_a_run_of_backspaces(self):
+        # lo que escribe 'usysconf' (y por tanto eopkg) al final de cada transacción
+        self.assertEqual('', clean_output_line('\b' * 300))
+
+    def test__backspaces_must_erase_the_previous_characters(self):
+        self.assertEqual('Run Task: done', clean_output_line('Run Task: ...\b\b\bdone'))
+
+    def test__must_keep_the_last_segment_after_a_carriage_return(self):
+        self.assertEqual('Downloading 100%\n', clean_output_line('Downloading 10%\rDownloading 100%\n'))
+        self.assertEqual('ok', clean_output_line('ok\r'))
+
+    def test__must_strip_ansi_sequences(self):
+        self.assertEqual('Actualizando repositorio: Solus',
+                         clean_output_line('\x1b[32mActualizando repositorio: Solus\x1b[0m'))
+        self.assertEqual('texto', clean_output_line('\x1b]0;titulo\x07texto'))
+
+    def test__must_keep_tabs_and_plain_text(self):
+        line = 'Name:\tnano – Editor «pequeño» 编辑器\n'
+        self.assertEqual(line, clean_output_line(line))
+
+    def test__handle_simple_must_not_notify_control_characters(self):
+        watcher = mock.Mock()
+        proc = SimpleProcess(['printf', 'Upgraded nano\\n\\b\\b\\b\\b'])
+
+        success, output = ProcessHandler(watcher).handle_simple(proc)
+
+        self.assertTrue(success)
+        printed = [call[0][0] for call in watcher.print.call_args_list]
+        self.assertEqual(['Upgraded nano'], printed[1:])
+        # la salida devuelta sigue siendo la original: la analizan las gems
+        self.assertEqual('Upgraded nano\n\b\b\b\b', output)
 
 
 class HandleSimpleSudoPromptTest(unittest.TestCase):

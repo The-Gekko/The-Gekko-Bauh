@@ -1,8 +1,59 @@
 from unittest import TestCase
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
+from bauh.gems.flatpak import flatpak
 from bauh.gems.flatpak.controller import FlatpakManager
 from bauh.gems.flatpak.model import FlatpakApplication
+
+
+class FlatpakManagerHiddenRefsTest(TestCase):
+    """Las extensiones que 'flatpak list' esconde ('.Locale', '.Debug') se actualizan, no se instalan.
+
+    Fallo real: 'flatpak install' contestaba «Saltando: ya está instalado», no hacía nada y la
+    misma «Locale» volvía a salir como actualización después de cada recarga.
+    """
+
+    def setUp(self):
+        self.manager = FlatpakManager(Mock())
+        self.manager._read_ignored_updates = Mock(return_value=set())
+
+    def _read(self, updates: set, installed_refs: set) -> dict:
+        with patch.object(flatpak, 'get_version', return_value=('1', '18', '3')), \
+                patch.object(flatpak, 'list_updates_as_str', return_value={'full': updates, 'partial': set()}), \
+                patch.object(flatpak, 'list_required_runtime_updates', return_value=[]), \
+                patch.object(flatpak, 'list_installed', return_value=[]), \
+                patch.object(flatpak, 'list_installed_refs', return_value=installed_refs) as refs:
+            result = self.manager.read_installed(None, internet_available=True)
+
+        self.refs_calls = refs.call_count
+        return {pkg.id: pkg for pkg in result.installed}
+
+    def test_an_installed_locale_must_be_upgraded_and_not_installed(self):
+        found = self._read({'io.missioncenter.MissionCenter.Locale/stable/user/flathub'},
+                           {('io.missioncenter.MissionCenter.Locale', 'stable', 'user')})
+
+        locale = found['io.missioncenter.MissionCenter.Locale']
+        self.assertTrue(locale.update)
+        self.assertFalse(locale.update_component)
+        self.assertEqual('io.missioncenter.MissionCenter.Locale/x86_64/stable', locale.ref)
+
+    def test_a_component_that_is_not_installed_is_still_installed(self):
+        found = self._read({'org.freedesktop.Platform.GL.default/25.08/user/flathub'},
+                           {('io.missioncenter.MissionCenter.Locale', 'stable', 'user')})
+
+        self.assertTrue(found['org.freedesktop.Platform.GL.default'].update_component)
+
+    def test_the_installation_must_match(self):
+        # instalada en el sistema, pendiente en el usuario: en el usuario sí es nueva
+        found = self._read({'org.gnome.Platform.Locale/49/user/flathub'},
+                           {('org.gnome.Platform.Locale', '49', 'system')})
+
+        self.assertTrue(found['org.gnome.Platform.Locale'].update_component)
+
+    def test_installed_refs_are_read_once(self):
+        self._read({'a.b.C.Locale/stable/user/flathub', 'd.e.F.Locale/stable/user/flathub'}, set())
+
+        self.assertEqual(1, self.refs_calls)
 
 
 class FlatpakManagerSortUpdateOrderTest(TestCase):

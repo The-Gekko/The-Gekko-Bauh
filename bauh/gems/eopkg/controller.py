@@ -13,6 +13,7 @@ from bauh.api.abstract.controller import (
     SoftwareAction,
     SoftwareManager,
     TransactionResult,
+    UpgradeRequirement,
     UpgradeRequirements,
 )
 from bauh.api.abstract.disk import DiskCacheLoader
@@ -55,6 +56,10 @@ MAX_INFO_BATCH = 60
 # sincronización real tarda segundos, y ni el peor de los mirrores lentos se acerca a ese
 # número, así que sólo se alcanza cuando la descarga se ha quedado colgada de verdad
 SYNC_TIMEOUT = 300
+
+# marca en 'UpgradeRequirements.context': 'get_upgrade_requirements' ya lanzó el 'eopkg ur' de
+# esta actualización y 'upgrade' no debe repetirlo
+CONTEXT_REPOS_SYNCED = 'eopkg_repos_synced'
 
 
 class EopkgManager(SoftwareManager, SettingsController):
@@ -134,6 +139,24 @@ class EopkgManager(SoftwareManager, SettingsController):
 
     def _new_root_process(self, cmd: List[str], root_password: Optional[str]) -> SimpleProcess:
         return SimpleProcess(cmd, root_password=root_password, extra_env=dict(EOPKG_ENV))
+
+    def _sync_repositories(self, root_password: Optional[str], watcher: ProcessWatcher) -> bool:
+        """``sudo eopkg ur`` con su salida en la consola; registra la sincronización si va bien.
+
+        Nadie analiza esta salida, así que no se fuerza la locale C: sale en el idioma del
+        sistema, igual que en un terminal («Actualizando repositorio: Solus»).
+        """
+        watcher.change_substatus(self.i18n['eopkg.action.update_repos.status'])
+        success, _ = ProcessHandler(watcher).handle_simple(
+            SimpleProcess(commands.update_repos_command(), root_password=root_password, lang=None))
+
+        if success:
+            index.register_sync(self.logger)
+        else:
+            self.logger.warning("No se pudieron sincronizar los repositorios de eopkg")
+
+        self._invalidate_installed_cache()
+        return success
 
     def _invalidate_installed_cache(self):
         self._installed_index = None
@@ -389,6 +412,78 @@ class EopkgManager(SoftwareManager, SettingsController):
                   handler: ProcessWatcher) -> bool:
         return False
 
+    def get_upgrade_requirements(self, pkgs: List[SoftwarePackage], root_password: Optional[str],
+                                 watcher: ProcessWatcher) -> UpgradeRequirements:
+        """Sincroniza los repositorios ANTES de enseñar el resumen de la actualización.
+
+        La lista que ve el usuario sale del índice local: si Solus ha publicado paquetes desde la
+        última sincronización, el resumen enseñaría versiones viejas y 'eopkg up' dejaría fuera
+        los paquetes nuevos (Solus sólo admite actualizaciones completas).  Tras el 'eopkg ur' se
+        relee la lista y se añaden al resumen los paquetes que acaban de aparecer; los que el
+        usuario ya tenía a la vista y no marcó siguen fuera.
+        """
+        selected = [pkg for pkg in pkgs if isinstance(pkg, EopkgPackage)]
+        requirements = UpgradeRequirements(None, None, [UpgradeRequirement(pkg) for pkg in selected],
+                                           None)
+
+        if not selected or not self._get_config().get('sync_repos_before_upgrade', True):
+            return requirements
+
+        # lo que el usuario tiene a la vista: sale del índice anterior a la sincronización
+        known = set(self._read_upgradable())
+
+        requirements.context[CONTEXT_REPOS_SYNCED] = True
+
+        if not self._sync_repositories(root_password, watcher):
+            return requirements
+
+        upgradable = self._read_upgradable(refresh=True)
+
+        if self._upgradable_names is None:  # no se pudo releer: se sigue con la selección
+            return requirements
+
+        selected_names = {pkg.name for pkg in selected}
+        new_names = [name for name in upgradable if name not in known and name not in selected_names]
+        upgradable_set = set(upgradable)
+        to_upgrade = [pkg for pkg in selected if pkg.name in upgradable_set]
+
+        if not to_upgrade and not new_names:
+            # sin nada que actualizar 'upgrade' devolvería un fallo y cortaría también la
+            # actualización de las demás gems: 'eopkg up' con la selección no hace ningún daño
+            return requirements
+
+        latest_versions: Dict[str, str] = {}
+        query = [pkg.name for pkg in to_upgrade] + new_names
+
+        if query and len(query) <= MAX_INFO_BATCH:
+            for name, sections in self._read_info_index(query).items():
+                latest = self._version_of(sections.get('repository'))
+
+                if latest:
+                    latest_versions[name] = latest
+
+        for pkg in to_upgrade:
+            pkg.latest_version = latest_versions.get(pkg.name, pkg.latest_version)
+
+        if new_names:
+            installed_index = self._read_installed_index()
+
+            for name in new_names:
+                data = installed_index.get(name, {})
+                version = parsers.format_version(data.get('version'), data.get('release'))
+                to_upgrade.append(EopkgPackage(name=name,
+                                               description=data.get('summary'),
+                                               version=version,
+                                               latest_version=latest_versions.get(name, version),
+                                               installed=True,
+                                               update=True))
+
+            watcher.print(self.i18n['eopkg.upgrade.new_after_sync'].format(len(new_names),
+                                                                          ', '.join(new_names)))
+
+        requirements.to_upgrade = [UpgradeRequirement(pkg) for pkg in to_upgrade]
+        return requirements
+
     def upgrade(self, requirements: UpgradeRequirements, root_password: Optional[str],
                 watcher: ProcessWatcher) -> bool:
         handler = ProcessHandler(watcher)
@@ -399,16 +494,9 @@ class EopkgManager(SoftwareManager, SettingsController):
         if not names:
             return False
 
-        if self._get_config().get('sync_repos_before_upgrade', True):
-            watcher.change_substatus(self.i18n['eopkg.action.update_repos.status'])
-            synced, _ = handler.handle_simple(
-                self._new_root_process(commands.update_repos_command(), root_password))
-
-            if synced:
-                index.register_sync(self.logger)
-            else:
-                self.logger.warning("No se pudieron actualizar los repositorios de eopkg antes "
-                                    "de la actualización")
+        if not requirements.context.get(CONTEXT_REPOS_SYNCED) and \
+                self._get_config().get('sync_repos_before_upgrade', True):
+            self._sync_repositories(root_password, watcher)
 
         watcher.change_substatus(self.i18n['eopkg.upgrading_many'].format(bold(str(len(names)))))
 
@@ -516,7 +604,6 @@ class EopkgManager(SoftwareManager, SettingsController):
 
         sync = SyncRepositories(taskman=task_manager, root_password=root_password, i18n=self.i18n,
                                 logger=self.logger, create_config=create_config,
-                                extra_env=dict(EOPKG_ENV),
                                 on_synchronized=self._invalidate_installed_cache)
         sync.start()
 
@@ -686,15 +773,7 @@ class EopkgManager(SoftwareManager, SettingsController):
 
     def update_repositories(self, root_password: Optional[str], watcher: ProcessWatcher) -> bool:
         """Acción "Actualizar repositorios": ``sudo eopkg ur``."""
-        handler = ProcessHandler(watcher)
-        success, _ = handler.handle_simple(
-            self._new_root_process(commands.update_repos_command(), root_password))
-
-        if success:
-            index.register_sync(self.logger)
-
-        self._invalidate_installed_cache()
-        return success
+        return self._sync_repositories(root_password, watcher)
 
     def clean_download_cache(self, root_password: Optional[str], watcher: ProcessWatcher) -> bool:
         """Acción "Limpiar caché de descargas": ``sudo eopkg dc``."""

@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+
+### Fixes
+- **eopkg: la sincronización semanal de Solus ya se ve el mismo día.** El
+  arranque sincronizaba como mucho una vez por día natural: si el índice se
+  había refrescado por la mañana, los paquetes que Solus publicaba por la tarde
+  no aparecían hasta el día siguiente. Ahora bauh compara, sin contraseña, el
+  hash que publica el mirror (`eopkg-index.xml.xz.sha1sum`) con el índice local
+  y sólo pide la contraseña cuando de verdad hay un índice nuevo. Sin red vuelve
+  al criterio de una vez al día.
+- **eopkg: `eopkg ur` antes del resumen de la actualización.** La
+  sincronización de antes de actualizar se hacía después de confirmar, así que
+  el resumen enseñaba el índice viejo y `eopkg up` dejaba fuera lo recién
+  publicado. Ahora se sincroniza antes, la salida («Actualizando repositorio:
+  Solus…») aparece en la consola en el idioma del sistema y los paquetes nuevos
+  se añaden al resumen.
+- **Flatpak: actualizaciones de «Locale» que no se iban nunca.** bauh
+  consultaba las actualizaciones con la locale C, y así flatpak no ve ningún
+  idioma y pide las traducciones de todos: cada `.Locale` instalada sólo con el
+  idioma del usuario salía como pendiente, el `flatpak update` real no hacía
+  nada y volvía a salir en cada recarga (también en la bandeja). Las órdenes
+  con la locale C llevan ahora los idiomas del usuario en `LANGUAGE` (la salida
+  sigue en inglés). Además, una actualización real de una extensión que
+  `flatpak list` esconde (`.Locale`, `.Debug`) se hacía con `flatpak install`,
+  que la daba por instalada sin tocarla; ahora se actualiza.
+- **Consola sin cajas vacías.** `usysconf`, que eopkg ejecuta al final de cada
+  transacción, escribe cientos de retrocesos (`\b`) que la consola pintaba como
+  `▯▯▯`. La salida de los comandos se limpia de retrocesos, retornos de carro y
+  secuencias ANSI antes de mostrarse.
+
 ## [0.10.8+gekko.2] 2026-09-23
 
 Etiqueta git `v0.10.8-gekko.2`.
