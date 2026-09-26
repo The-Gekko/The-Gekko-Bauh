@@ -4,7 +4,9 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [Unreleased]
+## [0.10.8+gekko.3] 2026-09-26
+
+Etiqueta git `v0.10.8-gekko.3`.
 
 ### Fixes
 - **eopkg: la sincronización semanal de Solus ya se ve el mismo día.** El
