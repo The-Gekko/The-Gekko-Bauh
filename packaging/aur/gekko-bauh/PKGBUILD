@@ -50,7 +50,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 pkgname=gekko-bauh
-pkgver=0.10.8+gekko.3
+pkgver=0.10.8+gekko.4
 pkgrel=1
 pkgdesc="Graphical package manager for Arch/AUR, Chaotic AUR, Flatpak and Solus (eopkg)"
 arch=('any')

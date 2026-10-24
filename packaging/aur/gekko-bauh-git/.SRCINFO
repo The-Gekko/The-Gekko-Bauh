@@ -1,6 +1,6 @@
 pkgbase = gekko-bauh-git
 	pkgdesc = Graphical package manager for Arch/AUR, Chaotic AUR, Flatpak and Solus (eopkg) - development version
-	pkgver = 0.10.8+gekko.3.r0.g0000000
+	pkgver = 0.10.8+gekko.4.r0.g0000000
 	pkgrel = 1
 	url = https://github.com/The-Gekko/The-Gekko-Bauh
 	arch = any
@@ -21,7 +21,7 @@ pkgbase = gekko-bauh-git
 	optdepends = git: required by the GitHub gem and to build AUR packages
 	optdepends = base-devel: required to build AUR packages and by the GitHub gem
 	optdepends = timeshift: system snapshots before installing or upgrading packages
-	provides = gekko-bauh=0.10.8+gekko.3.r0.g0000000
+	provides = gekko-bauh=0.10.8+gekko.4.r0.g0000000
 	conflicts = gekko-bauh
 	options = !debug
 	source = The-Gekko-Bauh::git+https://github.com/The-Gekko/The-Gekko-Bauh.git#branch=master

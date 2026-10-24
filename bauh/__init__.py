@@ -1,4 +1,4 @@
-__version__ = '0.10.8+gekko.3'
+__version__ = '0.10.8+gekko.4'
 
 # Identificador de la aplicación: nombre del ejecutable y de los lanzadores, icono del
 # tema y raíz de los directorios de configuración, caché y datos del usuario. Es propio

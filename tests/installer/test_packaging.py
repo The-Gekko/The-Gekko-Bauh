@@ -41,7 +41,7 @@ class VersionMetadataTest(unittest.TestCase):
     """La versión y las URLs del fork (F103)."""
 
     def test_version_uses_the_fork_local_scheme(self):
-        self.assertEqual('0.10.8+gekko.3', bauh.__version__)
+        self.assertEqual('0.10.8+gekko.4', bauh.__version__)
 
     def test_version_matches_the_agreed_pattern(self):
         # <base upstream>+gekko.<n>: distingue el fork de la 0.10.8 del upstream.

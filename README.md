@@ -29,7 +29,7 @@
 > Se instala como `gekko-bauh`, guarda su configuración en `~/.config/gekko-bauh` y
 > convive sin interferir con una instalación del bauh oficial.
 >
-> **Versión**: `0.10.8+gekko.3` (etiqueta `v0.10.8-gekko.3`), construida sobre la
+> **Versión**: `0.10.8+gekko.4` (etiqueta `v0.10.8-gekko.4`), construida sobre la
 > rama `staging` del proyecto original. Los releases están en
 > [Releases](https://github.com/The-Gekko/The-Gekko-Bauh/releases); desde
 > `v0.10.8-gekko.1` se instalan como distribución `gekko-bauh` (`v0.10.7`, anterior
@@ -182,7 +182,7 @@ punto es comprobable en el código o en la propia interfaz.
   una instalación del bauh oficial, y la primera ejecución copia los ajustes
   heredados de `~/.config/bauh` sin tocar el original. El paquete Python interno
   sigue llamándose `bauh` para poder integrar las correcciones del proyecto
-  original. Versión PEP 440 `0.10.8+gekko.3`, `pyproject.toml` con la sección
+  original. Versión PEP 440 `0.10.8+gekko.4`, `pyproject.toml` con la sección
   `[project]` completa.
 - **Receta para el AUR** (`packaging/aur/`: `gekko-bauh` y `gekko-bauh-git`),
   todavía sin publicar en el AUR —material de empaquetado para el mantenedor,

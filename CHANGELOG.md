@@ -4,7 +4,9 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [Unreleased]
+## [0.10.8+gekko.4] 2026-10-24
+
+Etiqueta git `v0.10.8-gekko.4`.
 
 ### Features
 - **Matugen de verdad.** El tema Matugen solo leía `~/.cache/matugen/colors-gtk.css`:
