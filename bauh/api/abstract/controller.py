@@ -11,8 +11,7 @@ import yaml
 from bauh.api.abstract.context import ApplicationContext
 from bauh.api.abstract.disk import DiskCacheLoader
 from bauh.api.abstract.handler import ProcessWatcher, TaskManager
-from bauh.api.abstract.model import SoftwarePackage, PackageUpdate, PackageHistory, PackageSuggestion, \
-    CustomSoftwareAction
+from bauh.api.abstract.model import SoftwarePackage, PackageUpdate, PackageHistory, CustomSoftwareAction
 from bauh.api.abstract.view import ViewComponent
 
 P = TypeVar('P', bound=SoftwarePackage)
@@ -366,14 +365,6 @@ class SoftwareManager(ABC):
         """
         :param internet_available
         :return: a list of warnings to be shown to the user
-        """
-        pass
-
-    def list_suggestions(self, limit: int, filter_installed: bool) -> Optional[List[PackageSuggestion]]:
-        """
-        :param limit: max suggestions to be returned. If limit < 0, it should not be considered
-        :param filter_installed: if the installed suggestions should not be retrieved
-        :return: a list of package suggestions
         """
         pass
 

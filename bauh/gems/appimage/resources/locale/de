@@ -1,7 +1,5 @@
 appimage.config.database.expiration=Ablauf der Datenbank
 appimage.config.database.expiration.tip=Er definiert den Zeitraum (in Minuten), in dem die Datenbank während des Initialisierungsprozesses als aktuell angesehen wird. Verwenden Sie 0, wenn Sie sie immer aktualisieren wollen.
-appimage.config.suggestions.expiration=Ablauf der Vorschläge
-appimage.config.suggestions.expiration.tip=Er definiert den Zeitraum (in Stunden), in dem die, auf dem Datenträger gespeicherten, Vorschläge als aktuell angesehen werden. Verwenden Sie 0, wenn Sie sie immer aktualisieren wollen.
 appimage.custom_action.install_file=AppImage-Datei installieren
 appimage.custom_action.install_file.desc=Installiert eine AppImage-Datei auf dem System
 appimage.custom_action.install_file.details=Details zur AppImage-Installation

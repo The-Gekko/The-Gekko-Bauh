@@ -1009,21 +1009,6 @@ class NotifyInstalledLoaded(QThread):
         self.signal_loaded.emit()
 
 
-class FindSuggestions(AsyncAction):
-
-    def __init__(self, i18n: I18n, man: SoftwareManager):
-        super(FindSuggestions, self).__init__(i18n=i18n)
-        self.man = man
-        self.filter_installed = False
-
-    def _get_error_result(self) -> object:
-        return {'pkgs_found': [], 'error': None}
-
-    def _run(self):
-        sugs = self.man.list_suggestions(limit=-1, filter_installed=self.filter_installed)
-        self.notify_finished({'pkgs_found': [s.package for s in sugs] if sugs is not None else [], 'error': None})
-
-
 class ListWarnings(QThread):
 
     signal_warnings = pyqtSignal(list)
@@ -1226,7 +1211,6 @@ class StartAsyncAction(QThread):
             self.msleep(self.delay)
 
         self.signal_start.emit()
-
 
 
 class URLFileDownloader(QThread):

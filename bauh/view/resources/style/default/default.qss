@@ -187,16 +187,6 @@ MultipleSelectQt::title {
     padding: 0px 5px 0px 5px;
 }
 
-ManageWindow QSearchBar#name_filter QLabel#lb_left_corner, ManageWindow QSearchBar#name_filter QLineEdit#inp_search, ManageWindow  QSearchBar#name_filter QPushButton#search_button  {
-    min-height: 27px;
-    max-height: 27px;
-    height: 27px;
-}
-
-ManageWindow QSearchBar#name_filter QPushButton#search_button {
-    qproperty-iconSize: 9px 9px;
-}
-
 ManageWindow QWidget#table_filters QPushButton[root = "true"] {
     min-width: 100px;
     max-width: 150px;
@@ -265,12 +255,7 @@ ManageWindow QComboBox#combo_types > QLineEdit, ManageWindow QComboBox#combo_cat
     height: 2px;
 }
 
-ManageWindow QSearchBar#name_filter {
-    min-width: 170;
-    max-width: 170;
-}
-
-ManageWindow QPushButton#bt_installed, ManageWindow QPushButton#bt_refresh, ManageWindow QPushButton#suggestions, ManageWindow QPushButton#bt_upgrade {
+ManageWindow QPushButton#bt_installed, ManageWindow QPushButton#bt_refresh, ManageWindow QPushButton#bt_upgrade {
     font-weight: 500;
 }
 

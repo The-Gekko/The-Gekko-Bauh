@@ -14,7 +14,6 @@ from bauh.context import generate_i18n, DEFAULT_I18N_KEY, new_qt_application
 from bauh.view.core import gems
 from bauh.view.core.controller import GenericSoftwareManager
 from bauh.view.core.downloader import AdaptableFileDownloader
-from bauh.view.core.suggestions import read_suggestions_mapping
 from bauh.view.qt.prepare import PreparePanel
 from bauh.view.qt.settings import SettingsWindow
 from bauh.view.qt.window import ManageWindow
@@ -29,12 +28,11 @@ def new_manage_panel(app_args: Namespace, app_config: dict, logger: logging.Logg
     cache_factory = DefaultMemoryCacheFactory(expiration_time=int(app_config['memory_cache']['data_expiration']))
     icon_cache = cache_factory.new(int(app_config['memory_cache']['icon_expiration']))
 
-    http_client = HttpClient(logger, check_ssl=bool(app_config['download']['check_ssl']))
+    http_client = HttpClient(logger)
 
     downloader = AdaptableFileDownloader(logger=logger, multithread_enabled=app_config['download']['multithreaded'],
                                          multithread_client=app_config['download']['multithreaded_client'],
-                                         i18n=i18n, http_client=http_client,
-                                         check_ssl=app_config['download']['check_ssl'])
+                                         i18n=i18n, http_client=http_client)
 
     context = ApplicationContext(i18n=i18n,
                                  http_client=http_client,
@@ -48,7 +46,6 @@ def new_manage_panel(app_args: Namespace, app_config: dict, logger: logging.Logg
                                  app_name=__app_name__,
                                  app_version=__version__,
                                  internet_checker=InternetChecker(offline=app_args.offline),
-                                 suggestions_mapping=read_suggestions_mapping(),
                                  root_user=user.is_root())
 
     managers = gems.load_managers(context=context, locale=i18n.current_key, config=app_config,
@@ -56,13 +53,12 @@ def new_manage_panel(app_args: Namespace, app_config: dict, logger: logging.Logg
 
     if app_args.reset:
         # Los gems deben estar instanciados: cada uno borra sus propios ficheros en clear_data()
-        # (p. ej. el entorno de la gem Web fuera de CACHE/CONFIG/TEMP). Por eso el reset no puede
-        # adelantarse a load_managers(), pero sí evita crear la QApplication y las ventanas.
+        # (fuera de CACHE/CONFIG/TEMP). Por eso el reset no puede adelantarse a load_managers(),
+        # pero sí evita crear la QApplication y las ventanas.
         util.clean_app_files(managers)
         sys.exit(0)
 
-    force_suggestions = bool(app_args.suggestions)
-    manager = GenericSoftwareManager(managers, context=context, config=app_config, force_suggestions=force_suggestions)
+    manager = GenericSoftwareManager(managers, context=context, config=app_config)
 
     app = new_qt_application(app_config=app_config, logger=logger, quit_on_last_closed=True)
 
@@ -82,12 +78,10 @@ def new_manage_panel(app_args: Namespace, app_config: dict, logger: logging.Logg
                                      context=context,
                                      http_client=http_client,
                                      icon=util.get_default_icon()[1],
-                                     force_suggestions=force_suggestions,
                                      logger=logger)
 
         return app, PreparePanel(context=context,
                                  manager=manager,
                                  i18n=i18n,
                                  manage_window=manage_window,
-                                 app_config=app_config,
-                                 force_suggestions=force_suggestions)
+                                 app_config=app_config)

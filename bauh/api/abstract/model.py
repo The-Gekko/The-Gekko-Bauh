@@ -296,25 +296,3 @@ class PackageHistory:
     @classmethod
     def empyt(cls, pkg: SoftwarePackage):
         return cls(pkg=pkg, history=[], pkg_status_idx=-1)
-
-
-class SuggestionPriority(Enum):
-    LOW = 0
-    MEDIUM = 1
-    HIGH = 2
-    TOP = 3
-
-    def __gt__(self, other):
-        if isinstance(other, SuggestionPriority):
-            return self.value > other.value
-
-    def __lt__(self, other):
-        if isinstance(other, SuggestionPriority):
-            return self.value < other.value
-
-
-class PackageSuggestion:
-
-    def __init__(self, package: SoftwarePackage, priority: SuggestionPriority):
-        self.package = package
-        self.priority = priority

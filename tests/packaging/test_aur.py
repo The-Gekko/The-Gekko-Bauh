@@ -297,10 +297,13 @@ class DependenciasTest(unittest.TestCase):
         opcionales = {entrada.split(':', 1)[0]: entrada.split(':', 1)[1].strip()
                       for entrada in self.pkgbuild['optdepends']}
 
-        for nombre in ('flatpak', 'git', 'base-devel', 'timeshift', 'python-lxml',
-                       'python-beautifulsoup4'):
+        for nombre in ('flatpak', 'git', 'base-devel', 'timeshift'):
             self.assertIn(nombre, opcionales, f'falta «{nombre}» en optdepends')
             self.assertTrue(opcionales[nombre], f'«{nombre}» está en optdepends sin explicación')
+
+        # la gem Web (nativefier) se retiró: sus dependencias no deben seguir ofreciéndose
+        for retirada in ('python-lxml', 'python-beautifulsoup4'):
+            self.assertNotIn(retirada, opcionales)
 
     def test_ninguna_dependencia_opcional_esta_tambien_como_obligatoria(self):
         obligatorias = set(self.pkgbuild['depends'])

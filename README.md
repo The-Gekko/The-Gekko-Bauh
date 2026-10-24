@@ -43,10 +43,9 @@
 buscar, instalar, actualizar y desinstalar software en Linux. Su alcance son tres
 plataformas: **Arch Linux y derivados** (pacman, AUR y cualquier repositorio
 adicional de pacman, por ejemplo Chaotic AUR), **Flatpak** y **Solus (eopkg)**.
-Las tres vienen activadas de fábrica. Se incluyen además tres gestores que **no
-pertenecen a ninguna distribución**: AppImage, aplicaciones web y compilación
-desde un repositorio de GitHub. Vienen desactivados y se activan en
-`Ajustes → Tipos de aplicaciones`.
+Las tres vienen activadas de fábrica. Se incluyen además dos gestores que **no
+pertenecen a ninguna distribución**: AppImage y compilación desde un repositorio
+de GitHub. Vienen desactivados y se activan en `Ajustes → Tipos de aplicaciones`.
 
 Los gestores de otras distribuciones (Debian/Ubuntu y Snap) se han **eliminado**:
 este proyecto es para Arch y Solus, y arrastrar código que aquí nunca se ejecuta
@@ -78,19 +77,32 @@ punto es comprobable en el código o en la propia interfaz.
 
 ### Interfaz y temas
 
-- **Tema Aurora** (oscuro, tema por defecto) y dos temas dinámicos:
-  **GTK 3/4**, que toma los colores de `/etc/gtk-3.0/gtk.css`,
-  `/etc/gtk-4.0/gtk.css`, `~/.config/gtk-3.0/gtk.css` y
-  `~/.config/gtk-4.0/gtk.css` (`GTK_COLOR_FILES` en `bauh/stylesheet.py`), y
-  **Matugen**, que lee `~/.cache/matugen/colors-gtk.css`. Ambos se recargan
-  solos cuando esos archivos cambian: el vigilante de archivos solo se activa con esos dos temas
-  y agrupa los cambios rápidos (debounce) para no repintar la ventana varias
-  veces seguidas. Ver `Ajustes → Interfaz → Tema`.
-- **Botón Matugen** en la barra superior de la ventana principal para aplicar
-  el tema dinámico con un clic; su estado persiste entre sesiones.
-- **Pestaña «Personalización»** en Ajustes (traducida) para color de fondo,
-  texto, acento, opacidad e imagen de fondo (clave `custom_theme` de
-  `~/.config/gekko-bauh/config.yml`).
+- **Tema Aurora** (oscuro, tema por defecto) con aspecto de tienda: filas
+  altas y alternas, icono de la app a 28 px, nombre destacado y versión, origen
+  y descripción en un tono secundario, **Instalar** y **Desinstalar** como
+  botones en forma de píldora, filtros como chips, buscador grande y un aviso
+  («Todo está al día», «No se encontró nada…») cuando la lista queda vacía.
+  Un paquete AUR sin mantenedor sale como «desconocido» en gris, no en rojo.
+- Dos temas dinámicos que heredan ese diseño: **GTK 3/4**, que toma los colores
+  de `/etc/gtk-3.0/gtk.css`, `/etc/gtk-4.0/gtk.css`, `~/.config/gtk-3.0/gtk.css`
+  y `~/.config/gtk-4.0/gtk.css` (`GTK_COLOR_FILES` en `bauh/stylesheet.py`), y
+  **Matugen**, que usa los colores del fondo de pantalla (ver
+  [Matugen](#matugen)). Si la paleta da el mismo color a la ventana, la barra y
+  las tarjetas, bauh separa esas superficies para que botones, campos y bordes
+  sigan viéndose. Ambos se recargan solos cuando esos archivos cambian: el
+  vigilante de archivos solo se activa con esos dos temas y agrupa los cambios
+  rápidos (debounce) para no repintar la ventana varias veces seguidas. Ver
+  `Ajustes → Interfaz → Tema`.
+- **Interruptor Matugen** en la barra superior: encendido aplica los colores
+  del fondo de pantalla; apagado vuelve al tema que había antes (a Aurora si
+  bauh se abrió ya con Matugen). Si no encuentra ningún color que leer, lo
+  explica en vez de quedarse igual que Aurora.
+- **Un solo buscador**: al escribir filtra lo que ya se ve (instaladas o
+  resultados) y con `Intro` busca en los repositorios. El tipo de cada paquete
+  (Arch, Flatpak…) va como insignia en la esquina de su icono, y las capturas de
+  pantalla se abren desde su ficha (botón ⓘ).
+- **Escala única** en `Ajustes → Interfaz`: «Automática», 100 %, 125 %… (el
+  soporte HDPI va siempre activo).
 - **Identidad propia**: la ventana se llama «bauh Gekko Edition», el diálogo
   «Acerca de» enlaza a este repositorio y al proyecto original, y el aviso de nueva
   versión consulta las releases de este repositorio (`bauh/view/core/update.py`).
@@ -139,7 +151,7 @@ punto es comprobable en el código o en la propia interfaz.
   `~/.local/share/gekko-bauh/github/repos` (clave `repos_dir` de
   `~/.config/gekko-bauh/github.yml`); el directorio heredado `~/BauhRepos` de
   versiones anteriores se sigue reconociendo.
-- **Gems universales opt-in**: AppImage, Web y GitHub vienen desactivadas. Se
+- **Gems universales opt-in**: AppImage y GitHub vienen desactivadas. Se
   activan en `Ajustes → Tipos de aplicaciones` (o con la clave `gems` de
   `config.yml`). No dependen de ninguna distribución, así que funcionan igual en
   Arch y en Solus. Arch, Flatpak y eopkg, que son el alcance del proyecto,
@@ -187,6 +199,29 @@ punto es comprobable en el código o en la propia interfaz.
   `QT_QPA_PLATFORM=wayland` **si no estaba ya definida** (evitaba un cierre
   inesperado al arrancar en algunos equipos).
 
+### Lo que se retiró
+
+Para que la tienda haga menos cosas, pero bien:
+
+- **La gem Web (aplicaciones web).** Empaquetaba webs con
+  [nativefier](https://github.com/nativefier/nativefier), archivado desde
+  septiembre de 2023: cada app llevaba un Electron sin parches de seguridad.
+  Las apps web que ya tengas siguen funcionando, pero bauh no puede
+  actualizarlas ni desinstalarlas; al arrancar te avisa de cuáles quedan y
+  `gekko-bauh-cli clean-web-apps` las borra (con `--yes`, sin preguntar).
+- **Las sugerencias** (la bombilla de abajo). Venían de listas del bauh original
+  que no se tocaban desde 2022 y además se descargaban en cada arranque.
+- **La opción «Comprobar certificado de seguridad (SSL)».** Permitía descargar
+  paquetes sin verificar el certificado TLS; ahora se verifica siempre.
+- **Los temas Darcula, Knight y Sublime**, heredados y sin mantener: quien los
+  tuviera elegidos pasa a Aurora.
+- **La pestaña «Personalización»** (colores, opacidad e imagen de fondo):
+  duplicaba lo que hacen los temas y Matugen. Su configuración se descarta.
+- **El campo «Nombre…»** de la barra de filtros: el buscador de arriba ya
+  filtra mientras escribes.
+- En `Ajustes → Avanzadas`, la caducidad de la caché en memoria y la
+  «verificación única de sistema»: siguen en `config.yml` con sus valores.
+
 ## Heredado del proyecto original
 
 Estas funciones ya existían en `vinifmor/bauh`; aquí solo se mantienen y no
@@ -205,8 +240,9 @@ son mérito de este proyecto:
 - El gestor de **Flatpak** (búsqueda en Flathub, instalación por usuario o para
   todo el sistema, actualización de runtimes), que este proyecto mantiene dentro de su
   alcance.
-- Los gestores universales, desactivados de fábrica: AppImage, aplicaciones web
-  (nativefier) y compilación desde un repositorio de GitHub.
+- Los gestores universales, desactivados de fábrica: AppImage y compilación
+  desde un repositorio de GitHub. La gem de aplicaciones web se retiró (ver
+  [Lo que se retiró](#lo-que-se-retiró)).
 
 ## Requisitos
 
@@ -229,8 +265,7 @@ son mérito de este proyecto:
   AUR. Sin él, todo funciona igual, compilando desde AUR.
 - **Dependencias opcionales**: instala con tu gestor de paquetes solo lo que
   vayas a usar: `flatpak`, `git` y `base-devel` (gem de GitHub y compilación
-  de paquetes del AUR), `timeshift` (copias de seguridad), y `python-lxml`
-  con `python-beautifulsoup4` (gem web).
+  de paquetes del AUR) y `timeshift` (copias de seguridad).
 
 ## Instalación
 
@@ -448,7 +483,7 @@ los datos de usuario. En resumen:
   `gekko-bauh`, tus ajustes y tus temas de usuario se **copian** de
   `~/.config/bauh` y `~/.local/share/bauh` a las rutas propias. El directorio
   original queda intacto, así que puedes seguir usando el bauh oficial en
-  paralelo. Las gems AppImage, Web y GitHub quedan desactivadas hasta que las
+  paralelo. Las gems AppImage y GitHub quedan desactivadas hasta que las
   marques en `Ajustes → Tipos de aplicaciones`. Si en el oficial usabas Snap o
   Debian, aquí no existen: este proyecto solo cubre Arch y Solus.
 - **Convivir con el oficial**: no hace falta desinstalarlo. Cada uno tiene su
@@ -514,19 +549,55 @@ un issue indicando lo que aparece.
 ## Temas
 
 Temas incluidos (`bauh/view/resources/style/`): `aurora` (por defecto),
-`darcula`, `default`, `gtk`, `knight`, `light`, `matugen` y `sublime`. Los
-temas `gtk` y `matugen` heredan de Aurora (`root_theme=aurora`) y sustituyen
-sus colores por los del sistema. Puedes añadir temas propios en
+`light` (Claro), `gtk` y `matugen`, más `default`, que es la base abstracta de
+la que hereda Aurora y no sale en el menú. Los temas `gtk` y `matugen` heredan
+de Aurora (`root_theme=aurora`) y sustituyen sus colores por los del sistema.
+Si un tema elegido ya no existe (por ejemplo uno de los retirados), bauh usa
+Aurora en lugar de quedarse sin estilo. Puedes añadir temas propios en
 `~/.local/share/gekko-bauh/themes/`; el formato (`.qss` + `.vars` + `.meta`) es el
 del upstream.
+
+### Matugen
+
+El tema Matugen busca los colores del fondo de pantalla en este orden y usa el
+primero que exista, sin mezclar paletas:
+
+1. `~/.config/gekko-bauh/matugen-colors.css`: lo escribe matugen con la
+   plantilla de bauh (ver abajo).
+2. `~/.cache/matugen/colors-gtk.css`: la salida genérica de muchas
+   configuraciones de matugen.
+3. Los colores GTK del sistema (los mismos que el tema GTK). Muchos escritorios
+   (Hyprland, Niri…) ya los generan a partir del fondo, así que el tema
+   funciona aunque matugen no esté instalado.
+
+**Conectar con matugen.** Con matugen instalado, el menú de temas (el icono de
+la paleta, abajo a la derecha) ofrece **Conectar con matugen…**. Copia la
+plantilla de bauh a `~/.config/matugen/templates/gekko-bauh.css` y añade al
+final de `~/.config/matugen/config.toml` (después de guardar una copia
+`config.toml.bak-gekko-bauh-<fecha>`) esta sección:
+
+```toml
+[templates.gekko-bauh]
+input_path = '~/.config/matugen/templates/gekko-bauh.css'
+output_path = '~/.config/gekko-bauh/matugen-colors.css'
+```
+
+Desde entonces, cada vez que matugen genera los colores de un fondo
+(`matugen image <fondo>`, o tu gestor de fondos), la tienda se repinta sola con
+el tema Matugen. matugen 4 puede preguntar qué color de la imagen usar; con
+`--source-color-index 0` elige sin preguntar, que es lo que conviene en scripts. Si `config.toml` no es TOML válido no se toca (con Python 3.11
+o posterior, que trae `tomllib` para comprobarlo), y si la plantilla ya estaba
+declarada no se duplica. La plantilla vive en
+`bauh/view/resources/style/matugen/gekko-bauh-colors.css` y usa los roles de
+Material You (`primary`, `surface`, `surface_container_high`, `outline_variant`…).
 
 ## Configuración
 
 | Ruta | Contenido |
 |---|---|
-| `~/.config/gekko-bauh/config.yml` | Configuración general: `gems` activas, `ui.theme`, `custom_theme`, actualizaciones, descargas, copias de seguridad. |
+| `~/.config/gekko-bauh/config.yml` | Configuración general: `gems` activas, `ui.theme`, actualizaciones, descargas, copias de seguridad. |
 | `~/.config/gekko-bauh/<gem>.yml` | Configuración de cada gem (`arch.yml`, `eopkg.yml`, `github.yml`, ...). En `eopkg.yml`, `sync_repos_startup` decide si al arrancar se ejecuta `sudo eopkg ur` (como mucho una vez al día). |
-| `~/.cache/gekko-bauh/` | Caché de paquetes, iconos y sugerencias. Incluye `eopkg/repo_sync`, la marca de la última sincronización de repositorios que hizo bauh. |
+| `~/.cache/gekko-bauh/` | Caché de paquetes e iconos. Incluye `eopkg/repo_sync`, la marca de la última sincronización de repositorios que hizo bauh. |
 | `~/.local/share/gekko-bauh/` | Datos compartidos, temas de usuario (`themes/`) y clones de la gem GitHub (`github/repos/`). |
 | `~/.cache/gekko-bauh/tmp` | Archivos temporales de la sesión, con permisos `0700`. No se usa `$XDG_RUNTIME_DIR` porque es un tmpfs pequeño (10 % de la RAM). |
 | `~/.cache/gekko-bauh/logs` | Logs de la sesión (`gekko-bauh --logs` los muestra además en el terminal). |

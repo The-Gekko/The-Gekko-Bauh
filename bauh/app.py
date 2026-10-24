@@ -236,13 +236,10 @@ def main(tray: bool = False):
     except Exception:
         logging.error("Exception occurred", exc_info=True)
 
-    if bool(app_config['ui']['hdpi']):
-        logger.info("HDPI settings activated")
-        QCoreApplication.setAttribute(Qt.AA_UseHighDpiPixmaps)
-        QCoreApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
-
-    if bool(args.suggestions):
-        logger.info("Forcing loading software suggestions after the initialization process")
+    # El soporte HDPI va siempre activo: la opción para apagarlo se retiró al unificar la
+    # escala, porque sin él las pantallas de alta densidad veían la interfaz diminuta.
+    QCoreApplication.setAttribute(Qt.AA_UseHighDpiPixmaps)
+    QCoreApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
 
     if tray or bool(args.tray):
         from bauh.view.qt.systray import acquire_single_instance_lock

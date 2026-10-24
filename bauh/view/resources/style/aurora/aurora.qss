@@ -77,9 +77,9 @@ QLineEdit:focus {
 
 QPushButton {
     border: 1px solid @pushbutton.border.color;
-    border-radius: 6px;
+    border-radius: 8px;
     background-color: @pushbutton.background.color;
-    padding: 5px 12px;
+    padding: 6px 14px;
 }
 
 QPushButton:hover {
@@ -166,8 +166,19 @@ QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::su
 
 QComboBox, ManageWindow QComboBox, QSpinBox {
     border-color: @combobox.border.color;
-    border-radius: 6px;
-    padding: 3px 8px;
+    background-color: @color.surface.dark;
+    border-radius: 8px;
+    padding: 4px 10px;
+}
+
+QComboBox QLineEdit {
+    border: none;
+    background-color: transparent;
+    padding: 0;
+}
+
+QComboBox:hover, QSpinBox:hover {
+    border-color: @color.surface.lighter;
 }
 
 QComboxBox:!editable, QComboBox::drop-down  {
@@ -219,8 +230,9 @@ QTableWidget {
     background-color: @inner_widget.background.color;
     selection-background-color: @table.selection.background.color;
     gridline-color: @color.surface.medium;
-    alternate-background-color: @color.surface.dark;
-    border-radius: 4px;
+    alternate-background-color: @table.alternate.background.color;
+    border-radius: 10px;
+    padding: 4px;
 }
 
 QTableWidget * {
@@ -245,7 +257,7 @@ QTableWidget QHeaderView::section {
 
 QTableWidget QToolButton:hover {
     background-color: @table.button.hover.background.color;
-    border-radius: 3px;
+    border-radius: 6px;
 }
 
 /* ── Menus ───────────────────────────────────────────────────────────── */
@@ -397,14 +409,6 @@ QSearchBar QLineEdit#inp_search:focus {
      border-top-color: @focus.border.color;
 }
 
-QSearchBar#name_filter QPushButton#search_button {
-    qproperty-icon: url("@style_dir/img/filter.svg");
-}
-
-QSearchBar#name_filter QPushButton#search_button[focused = "true"] {
-    qproperty-icon: url("@style_dir/img/filter_focused.svg");
-}
-
 /* ── Primary OK Button ───────────────────────────────────────────────── */
 
 QPushButton#ok {
@@ -441,11 +445,6 @@ PreparePanel QLabel#task_status[status = "running"], QLabel#task_progress[status
 }
 
 /* ── Manage Window ───────────────────────────────────────────────────── */
-
-ManageWindow QSearchBar#name_filter {
-    color: @font.color;
-}
-
 ManageWindow QLabel#icon_status {
     qproperty-pixmap: url("@style_dir/img/refresh.svg");
     qproperty-scaledContents: True;
@@ -470,6 +469,89 @@ ManageWindow QLabel#updates_count {
 ManageWindow QLabel#apps_displayed {
     color: @font.color.muted;
     font-size: 11px;
+}
+
+/* ── Filter Chips ────────────────────────────────────────────────────── */
+
+/* Las casillas de la barra de filtros se ven como chips: sin la casilla, con el
+   estado marcado como relleno. Fuera de esta barra siguen siendo casillas. */
+/* misma letra que la tabla: con la del sistema la barra se veía más grande que el contenido */
+ManageWindow QWidget#table_filters QCheckBox,
+ManageWindow QWidget#table_filters QComboBox,
+ManageWindow QWidget#table_filters QComboBox QLineEdit,
+ManageWindow QWidget#table_filters QPushButton {
+    font-size: 13px;
+}
+
+ManageWindow QWidget#table_filters QCheckBox {
+    spacing: 0px;
+    padding: 4px 12px;
+    border: 1px solid @chip.border.color;
+    border-radius: 14px;
+    background-color: @chip.background.color;
+    font-weight: 500;
+}
+
+ManageWindow QWidget#table_filters QCheckBox:hover {
+    border-color: @chip.checked.border.color;
+}
+
+ManageWindow QWidget#table_filters QCheckBox:checked {
+    background-color: @chip.checked.background.color;
+    border-color: @chip.checked.border.color;
+    color: @chip.checked.font.color;
+    font-weight: 600;
+}
+
+ManageWindow QWidget#table_filters QCheckBox::indicator {
+    width: 0px;
+    height: 0px;
+    image: none;
+}
+
+ManageWindow QWidget#table_filters QPushButton#bt_matugen:checked {
+    background-color: @chip.checked.background.color;
+    border-color: @chip.checked.border.color;
+    color: @chip.checked.font.color;
+}
+
+/* ── Main Search Bar ─────────────────────────────────────────────────── */
+
+ManageWindow QToolBar#toolbar_status QSearchBar QLineEdit#inp_search {
+    font-size: 13px;
+    width: 460px;
+    min-height: 36px;
+    max-height: 36px;
+}
+
+ManageWindow QToolBar#toolbar_status QSearchBar QLabel#lb_left_corner {
+    min-width: 18px;
+    max-width: 18px;
+    min-height: 36px;
+    max-height: 36px;
+    border-top-left-radius: 18px;
+    border-bottom-left-radius: 18px;
+}
+
+ManageWindow QToolBar#toolbar_status QSearchBar QPushButton#search_button {
+    qproperty-iconSize: 14px 14px;
+    min-height: 36px;
+    max-height: 36px;
+    padding-right: 14px;
+    border-top-right-radius: 18px;
+    border-bottom-right-radius: 18px;
+}
+
+/* ── Bottom Bar ──────────────────────────────────────────────────────── */
+
+ManageWindow QWidget#container_bottom IconButton {
+    qproperty-iconSize: 18px 18px;
+    padding: 6px;
+    border-radius: 8px;
+}
+
+ManageWindow QWidget#container_bottom IconButton:hover {
+    background-color: @toolbutton.hover.background.color;
 }
 
 /* ── Upgrade Button ──────────────────────────────────────────────────── */
@@ -556,10 +638,6 @@ ManageWindow PackagesTable IconButton#app_run[_enabled = "false"] {
     qproperty-icon: url("@style_dir/img/app_play_disabled.svg");
 }
 
-ManageWindow IconButton#suggestions {
-    qproperty-icon: url("@style_dir/img/suggestions.svg");
-}
-
 ManageWindow IconButton#themes {
     qproperty-icon: url("@style_dir/img/themes.svg");
 }
@@ -570,14 +648,6 @@ ManageWindow PackagesTable IconButton#app_actions {
 
 ManageWindow IconButton#settings {
     qproperty-icon: url("@style_dir/img/settings.svg");
-}
-
-PackagesTable IconButton#app_screenshots {
-    qproperty-icon: url("@style_dir/img/camera.svg");
-}
-
-ManageWindow PackagesTable IconButton#app_screenshots[_enabled = "false"] {
-    qproperty-icon: url("@style_dir/img/camera_disabled.svg");
 }
 
 ManageWindow IconButton#custom_actions {
@@ -612,6 +682,7 @@ QMenu#app_actions QPushButton#revert_ignore_updates {
 
 PackagesTable QLabel[publisher_known = "false"]{
     color: @table.app_publisher.unknown.font.color;
+    font-style: italic;
 }
 
 PackagesTable QLabel:disabled[publisher_known = "false"]{
@@ -624,34 +695,42 @@ PackagesTable QLabel#icon_publisher_verified {
 
 /* ── Install / Uninstall Buttons ─────────────────────────────────────── */
 
+PackagesTable QToolButton#bt_install, PackagesTable QToolButton#bt_uninstall {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    border-radius: 12px;
+    padding: 0 14px;
+    min-width: 88px;
+    max-width: 150px;
+    min-height: 24px;
+    max-height: 24px;
+}
+
 PackagesTable QToolButton#bt_install {
-    background-color: transparent;
+    background-color: @table.bt_install.background.color;
     color: @table.bt_install.font.color;
-    font-size: 10.5px;
-    font-weight: bold;
-    border-radius: 4px;
-    padding: 3px 6px;
+    border: none;
 }
 
-PackagesTable QToolButton#bt_install:hover, PackagesTable QToolButton#bt_uninstall:hover {
-    background-color: @table.button.hover.background.color;
-}
-
-PackagesTable QToolButton#bt_install:disabled {
-    color: @font.color.muted;
+PackagesTable QToolButton#bt_install:hover {
+    background-color: @table.bt_install.hover.background.color;
 }
 
 PackagesTable QToolButton#bt_uninstall {
     background-color: transparent;
     color: @table.bt_uninstall.font.color;
-    font-size: 10.5px;
-    font-weight: bold;
-    border-radius: 4px;
-    padding: 3px 6px;
+    border: 1px solid @table.bt_uninstall.border.color;
 }
 
-PackagesTable QToolButton#bt_uninstall:disabled {
+PackagesTable QToolButton#bt_uninstall:hover {
+    background-color: @table.button.hover.background.color;
+}
+
+PackagesTable QToolButton#bt_install:disabled, PackagesTable QToolButton#bt_uninstall:disabled {
+    background-color: transparent;
     color: @font.color.muted;
+    border: 1px solid @color.surface.light;
 }
 
 /* ── Help / Warning / Tip Icons ──────────────────────────────────────── */
@@ -678,23 +757,47 @@ QLabel#confirm_dialog_icon[type = "warning"] {
 
 /* ── Table Row Elements ────────────────────────────────────────────────── */
 
-QLabel#app_name {
+/* El nombre ya no se pinta de verde cuando el origen es verificado: parecía un enlace.
+   La verificación la marca la insignia junto al origen (icon_publisher_verified). */
+PackagesTable QLabel#app_name {
     font-size: 13px;
-    font-weight: 500;
-}
-
-QLabel#app_name[installed="true"] {
-    font-weight: bold;
+    font-weight: 600;
     color: @font.color.bright;
 }
 
-QLabel#app_name[installed="false"] {
+PackagesTable QLabel#app_name[installed="false"] {
+    font-weight: 500;
+}
+
+PackagesTable QLabel#app_version {
+    font-size: 12px;
+    color: @font.color.muted;
+}
+
+PackagesTable QLabel#app_description {
+    font-size: 12px;
     color: @font.color;
 }
 
-QLabel#app_name[verified="true"] {
-    /* If we could easily prepend an icon here we would, but QSS on QLabel can't add an inline icon easily without wiping text. So we use color */
-    color: @color.accent;
+PackagesTable QLabel#app_publisher {
+    font-size: 12px;
+    color: @font.color.muted;
+}
+
+/* Icono de la app a 28 px (default.qss lo reduce a 16); el del tipo se queda pequeño. */
+PackagesTable QLabel#app_icon {
+    min-width: 28px;
+    max-width: 28px;
+    min-height: 28px;
+    max-height: 28px;
+    margin: 0 10px;
+}
+
+/* Lista vacía: «todo al día» o «sin resultados» en vez de un hueco negro. */
+PackagesTable QLabel#table_empty {
+    color: @font.color.muted;
+    font-size: 15px;
+    background-color: transparent;
 }
 
 QLabel#task_status {

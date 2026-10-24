@@ -16,7 +16,6 @@ SYMLINKS_DIR = BINARIES_DIR
 # Host de los ficheros de datos (índices, sugerencias). Centralizado para poder cambiarlo de sitio en el futuro.
 URL_BAUH_FILES = 'https://raw.githubusercontent.com/vinifmor/bauh-files/master'
 URL_COMPRESSED_DATABASES = f'{URL_BAUH_FILES}/appimage/dbs.tar.gz'
-URL_SUGGESTIONS_FILE = f'{URL_BAUH_FILES}/appimage/suggestions.txt'
 # Repositorio del fork: lo usa la auto-instalación cuando la app se ejecuta como AppImage
 APP_REPOSITORY_URL = 'https://github.com/The-Gekko/The-Gekko-Bauh'
 APPIMAGE_CACHE_DIR = f'{CACHE_DIR}/appimage'

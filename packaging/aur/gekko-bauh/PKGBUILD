@@ -81,8 +81,6 @@ optdepends=(
   'git: required by the GitHub gem and to build AUR packages'
   'base-devel: required to build AUR packages and by the GitHub gem'
   'timeshift: system snapshots before installing or upgrading packages'
-  'python-lxml: required by the optional web gem'
-  'python-beautifulsoup4: required by the optional web gem'
 )
 # Ver la nota de arriba: sobre «bauh» no se declara nada, y es deliberado.
 options=('!debug')

@@ -12,20 +12,17 @@ from bauh.commons.view_utils import get_human_size_str
 
 class HttpClient:
 
-    def __init__(self, logger: logging.Logger, max_attempts: int = 2, timeout: int = 30, sleep: float = 0.5,
-                 check_ssl: bool = True):
-        """
-        :param check_ssl: si se debe verificar el certificado TLS en las comprobaciones de existencia y tamaño
-                          (equivale a la opción 'download.check_ssl' de la configuración)
-        """
+    # El certificado TLS se verifica siempre. La opción para desactivarlo
+    # ('download.check_ssl') se retiró: una tienda que instala software no debe
+    # poder descargar nada sin comprobar de dónde viene.
+    def __init__(self, logger: logging.Logger, max_attempts: int = 2, timeout: int = 30, sleep: float = 0.5):
         self.max_attempts = max_attempts
         self.session = requests.Session()
         self.timeout = timeout
         self.sleep = sleep
         self.logger = logger
-        self.check_ssl = bool(check_ssl)
 
-    def get(self, url: str, params: dict = None, headers: dict = None, allow_redirects: bool = True, ignore_ssl: bool = False, single_call: bool = False,
+    def get(self, url: str, params: dict = None, headers: dict = None, allow_redirects: bool = True, single_call: bool = False,
             session: bool = True, stream: bool = False) -> Optional[requests.Response]:
         cur_attempts = 1
 
@@ -40,9 +37,6 @@ class HttpClient:
 
                 if headers:
                     args['headers'] = headers
-
-                if ignore_ssl:
-                    args['verify'] = False
 
                 if session:
                     res = self.session.get(url, **args)
@@ -86,7 +80,7 @@ class HttpClient:
         if not url:
             return
 
-        params = {'url': url, 'allow_redirects': True, 'stream': True, 'verify': self.check_ssl}
+        params = {'url': url, 'allow_redirects': True, 'stream': True}
 
         try:
             if session:
@@ -113,7 +107,7 @@ class HttpClient:
             return get_human_size_str(size)
 
     def exists(self, url: str, session: bool = True, timeout: int = 5) -> bool:
-        params = {'url': url, 'allow_redirects': True, 'verify': self.check_ssl, 'timeout': timeout}
+        params = {'url': url, 'allow_redirects': True, 'timeout': timeout}
 
         try:
             if session:

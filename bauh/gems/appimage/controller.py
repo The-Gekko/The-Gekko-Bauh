@@ -18,8 +18,7 @@ from bauh.api.abstract.controller import SoftwareManager, SearchResult, UpgradeR
     TransactionResult, SoftwareAction, SettingsView, SettingsController
 from bauh.api.abstract.disk import DiskCacheLoader
 from bauh.api.abstract.handler import ProcessWatcher, TaskManager
-from bauh.api.abstract.model import SoftwarePackage, PackageHistory, PackageUpdate, PackageSuggestion, \
-    SuggestionPriority, CustomSoftwareAction
+from bauh.api.abstract.model import SoftwarePackage, PackageHistory, PackageUpdate, CustomSoftwareAction
 from bauh.api.abstract.view import MessageType, FormComponent, InputOption, SingleSelectComponent, \
     SelectViewType, TextInputComponent, PanelComponent, FileChooserComponent, ViewObserver
 from bauh.api.paths import DESKTOP_ENTRIES_DIR
@@ -34,7 +33,7 @@ from bauh.gems.appimage import query, INSTALLATION_DIR, APPIMAGE_SHARED_DIR, ROO
 from bauh.gems.appimage.config import AppImageConfigManager
 from bauh.gems.appimage.model import AppImage
 from bauh.gems.appimage.util import replace_desktop_entry_exec_command
-from bauh.gems.appimage.worker import DatabaseUpdater, SymlinksVerifier, AppImageSuggestionsDownloader
+from bauh.gems.appimage.worker import DatabaseUpdater, SymlinksVerifier
 
 RE_DESKTOP_ICON = re.compile(r'Icon\s*=\s*.+\n')
 RE_ICON_ENDS_WITH = re.compile(r'.+\.(png|svg)$')
@@ -82,7 +81,6 @@ class AppImageManager(SoftwareManager, SettingsController):
         self._action_self_install: Optional[CustomSoftwareAction] = None
         self._app_repository: Optional[str] = None
         self._search_unfilled_attrs: Optional[Tuple[str, ...]] = None
-        self._suggestions_downloader: Optional[AppImageSuggestionsDownloader] = None
 
     def install_file(self, root_password: Optional[str], watcher: ProcessWatcher) -> bool:
         max_width = 350
@@ -758,12 +756,6 @@ class AppImageManager(SoftwareManager, SettingsController):
                             create_config=create_config, http_client=self.context.http_client,
                             logger=self.context.logger).start()
 
-            if not self.suggestions_downloader.is_custom_local_file_mapped():
-                self.suggestions_downloader.taskman = task_manager
-                self.suggestions_downloader.create_config = create_config
-                self.suggestions_downloader.register_task()
-                self.suggestions_downloader.start()
-
     def list_updates(self, internet_available: bool) -> List[PackageUpdate]:
         res = self.read_installed(disk_loader=None, internet_available=internet_available)
 
@@ -780,56 +772,6 @@ class AppImageManager(SoftwareManager, SettingsController):
 
         if not dbfiles or len({f for f in (DATABASE_APPS_FILE, DATABASE_RELEASES_FILE) if f in dbfiles}) != 2:
             return [self.i18n['appimage.warning.missing_db_files'].format(appimage=bold('AppImage'))]
-
-    def list_suggestions(self, limit: int, filter_installed: bool) -> Optional[List[PackageSuggestion]]:
-        if limit == 0:
-            return
-
-        connection = self._get_db_connection(DATABASE_APPS_FILE)
-
-        if connection:
-            self.suggestions_downloader.taskman = TaskManager()
-            suggestions = tuple(self.suggestions_downloader.read())
-
-            if not suggestions:
-                self.logger.warning("Could not read AppImage suggestions")
-                return
-            else:
-                self.logger.info("Mapping AppImage suggestions")
-                try:
-                    if filter_installed:
-                        installed = {i.name.lower() for i in self.read_installed(disk_loader=None,
-                                                                                 connection=connection).installed}
-                    else:
-                        installed = None
-
-                    sugs_map = {}
-
-                    for s in suggestions:
-                        lsplit = s.split('=')
-
-                        name = lsplit[1].strip()
-
-                        if limit < 0 or len(sugs_map) < limit:
-                            if not installed or not name.lower() in installed:
-                                sugs_map[name] = SuggestionPriority(int(lsplit[0]))
-                        else:
-                            break
-
-                    cursor = connection.cursor()
-                    cursor.execute(query.FIND_APPS_BY_NAME_FULL.format(','.join([f"'{s}'" for s in sugs_map.keys()])))
-
-                    res = []
-                    for t in cursor.fetchall():
-                        app = AppImage(*t, i18n=self.i18n)
-                        res.append(PackageSuggestion(app, sugs_map[app.name.lower()]))
-
-                    self.logger.info(f"Mapped {len(res)} AppImage suggestions")
-                    return res
-                except Exception:
-                    import logging; logging.error("Exception occurred", exc_info=True)
-                finally:
-                    connection.close()
 
     def is_default_enabled(self) -> bool:
         # Gem heredada del upstream: en el fork es opcional (se activa desde Ajustes > Tipos)
@@ -879,13 +821,7 @@ class AppImageManager(SoftwareManager, SettingsController):
                                    config_['database']['expiration'], int) else '',
                                tooltip=self.i18n['appimage.config.database.expiration.tip'],
                                only_int=True,
-                               id_='appim_db_exp'),
-            TextInputComponent(label=self.i18n['appimage.config.suggestions.expiration'],
-                               value=int(config_['suggestions']['expiration']) if isinstance(
-                                   config_['suggestions']['expiration'], int) else '',
-                               tooltip=self.i18n['appimage.config.suggestions.expiration.tip'],
-                               only_int=True,
-                               id_='appim_sugs_exp')
+                               id_='appim_db_exp')
         ]
 
         yield SettingsView(self, PanelComponent([FormComponent(components=comps)]))
@@ -895,7 +831,6 @@ class AppImageManager(SoftwareManager, SettingsController):
 
         form = component.get_component_by_idx(0, FormComponent)
         config_['database']['expiration'] = form.get_component('appim_db_exp', TextInputComponent).get_int_value()
-        config_['suggestions']['expiration'] = form.get_component('appim_sugs_exp', TextInputComponent).get_int_value()
 
         try:
             self.configman.save_config(config_)
@@ -1102,18 +1037,3 @@ class AppImageManager(SoftwareManager, SettingsController):
             self._app_repository = APP_REPOSITORY_URL
 
         return self._app_repository
-
-    @property
-    def suggestions_downloader(self) -> AppImageSuggestionsDownloader:
-        if not self._suggestions_downloader:
-            file_url = self.context.get_suggestion_url(self.__module__)
-            self._suggestions_downloader = AppImageSuggestionsDownloader(taskman=TaskManager(),
-                                                                         i18n=self.context.i18n,
-                                                                         http_client=self.context.http_client,
-                                                                         logger=self.context.logger,
-                                                                         file_url=file_url)
-
-            if self._suggestions_downloader.is_custom_local_file_mapped():
-                self.logger.info(f"Local AppImage suggestions file mapped: {file_url}")
-
-        return self._suggestions_downloader

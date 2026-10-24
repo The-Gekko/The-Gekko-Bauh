@@ -9,15 +9,9 @@ BACKUP_REMOVE_METHODS = {BACKUP_DEFAULT_REMOVE_METHOD, 'all'}
 # tema por defecto del fork
 DEFAULT_THEME = 'aurora'
 
-# única fuente de verdad del esquema de 'custom_theme' (defaults y restablecimiento)
-DEFAULT_CUSTOM_THEME = {
-    'enabled': False,
-    'background_color': '#161B22',
-    'text_color': '#FFFFFF',
-    'accent_color': '#FF4500',
-    'opacity': 100,
-    'background_image': None
-}
+# temas heredados del bauh original que el fork retiró: no seguían su diseño y nadie los
+# mantenía. Quien tuviera uno elegido pasa al tema por defecto en vez de quedarse sin estilo.
+RETIRED_THEMES = ('darcula', 'knight', 'sublime')
 
 
 class CoreConfigManager(YAMLConfigManager):
@@ -30,10 +24,18 @@ class CoreConfigManager(YAMLConfigManager):
 
         if config:
             ui_config = config.get('ui')
-            legacy_theme = ui_config.pop('custom_theme', None) if isinstance(ui_config, dict) else None
 
-            if legacy_theme and 'custom_theme' not in config:
-                config['custom_theme'] = legacy_theme
+            # La pestaña «Personalización» se retiró (los temas y Matugen ya cubren lo que
+            # hacía): sus valores se descartan para que no sigan arrastrándose en el fichero.
+            config.pop('custom_theme', None)
+            # las sugerencias de paquetes también se retiraron (listas sin mantener desde 2022)
+            config.pop('suggestions', None)
+
+            if isinstance(ui_config, dict):
+                ui_config.pop('custom_theme', None)
+
+            if isinstance(ui_config, dict) and ui_config.get('theme') in RETIRED_THEMES:
+                ui_config['theme'] = DEFAULT_THEME
 
         return config
 
@@ -53,10 +55,6 @@ class CoreConfigManager(YAMLConfigManager):
                 'notifications': True,
                 'single_dependency_checking': False
             },
-            'suggestions': {
-                'enabled': True,
-                'by_type': 15
-            },
             'ui': {
                 'table': {
                     'max_displayed': 50
@@ -66,18 +64,15 @@ class CoreConfigManager(YAMLConfigManager):
                     'updates_icon': None
                 },
                 'qt_style': 'fusion',
-                'hdpi': True,
                 "auto_scale": False,
                 "scale_factor": 1.0,
                 'theme': DEFAULT_THEME,
                 'system_theme': False
             },
-            'custom_theme': dict(DEFAULT_CUSTOM_THEME),
             'download': {
                 'multithreaded': False,
                 'multithreaded_client': None,
-                'icons': True,
-                'check_ssl': True
+                'icons': True
             },
             'store_root_password': True,
             'disk': {

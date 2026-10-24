@@ -12,17 +12,16 @@ from bauh.api.abstract.controller import SearchResult, SoftwareManager, Applicat
     UpgradeRequirement, TransactionResult, SoftwareAction, SettingsView, SettingsController
 from bauh.api.abstract.disk import DiskCacheLoader
 from bauh.api.abstract.handler import ProcessWatcher, TaskManager
-from bauh.api.abstract.model import PackageHistory, PackageUpdate, SoftwarePackage, PackageSuggestion, \
-    PackageStatus, CustomSoftwareAction, SuggestionPriority
+from bauh.api.abstract.model import PackageHistory, PackageUpdate, SoftwarePackage, PackageStatus, \
+    CustomSoftwareAction
 from bauh.api.abstract.view import MessageType, FormComponent, SingleSelectComponent, InputOption, SelectViewType, \
     PanelComponent, ViewComponentAlignment
-from bauh.commons import suggestions
 from bauh.commons.boot import CreateConfigFile
 from bauh.commons.html import strip_html, bold
 from bauh.commons.system import ProcessHandler
 from bauh.gems.flatpak import flatpak, CONFIG_FILE, UPDATES_IGNORED_FILE, FLATPAK_CONFIG_DIR, \
     EXPORTS_PATH, \
-    get_icon_path, VERSION_1_5, VERSION_1_2, VERSION_1_12, URL_SUGGESTIONS_FILE
+    get_icon_path, VERSION_1_5, VERSION_1_2, VERSION_1_12
 from bauh.gems.flatpak.config import FlatpakConfigManager
 from bauh.gems.flatpak.constants import FLATHUB_API_URL
 from bauh.gems.flatpak.model import FlatpakApplication
@@ -42,11 +41,9 @@ class FlatpakManager(SoftwareManager, SettingsController):
         context.disk_loader_factory.map(FlatpakApplication, self.api_cache)
         self.enabled = True
         self.http_client = context.http_client
-        self.suggestions_cache = context.cache_factory.new(None)
         self.logger = context.logger
         self.configman = FlatpakConfigManager()
         self._action_full_update: Optional[CustomSoftwareAction] = None
-        self._suggestions_file_url: Optional[str] = None
 
     def get_managed_types(self) -> Set["type"]:
         return {FlatpakApplication}
@@ -350,9 +347,6 @@ class FlatpakManager(SoftwareManager, SettingsController):
                                                                                  flatpak_version))
 
         if uninstalled:
-            if self.suggestions_cache:
-                self.suggestions_cache.delete(pkg.id)
-
             self.revert_ignored_update(pkg)
             return TransactionResult(success=True, installed=None, removed=[pkg])
 
@@ -598,101 +592,6 @@ class FlatpakManager(SoftwareManager, SettingsController):
     def list_warnings(self, internet_available: bool) -> Optional[List[str]]:
         pass
 
-    def _read_local_suggestions_file(self) -> Optional[str]:
-        try:
-            with open(self.suggestions_file_url) as f:
-                suggestions_str = f.read()
-
-            return suggestions_str
-        except FileNotFoundError:
-            self.logger.error(f"Local Flatpak suggestions file not found: {self.suggestions_file_url}")
-        except OSError:
-            self.logger.error(f"Could not read local Flatpak suggestions file: {self.suggestions_file_url}")
-            import logging; logging.error("Exception occurred", exc_info=True)
-
-    def _download_remote_suggestions_file(self) -> Optional[str]:
-        self.logger.info(f"Downloading the Flatpak suggestions from {self.suggestions_file_url}")
-        file = self.http_client.get(self.suggestions_file_url)
-
-        if file:
-            return file.text
-
-    def _fill_suggestion(self, appid: str, priority: SuggestionPriority, flatpak_version: Tuple[str, ...], remote: str,
-                         output: List[PackageSuggestion]):
-        app_json = flatpak.search(flatpak_version, appid, remote, app_id=True)
-
-        if app_json:
-            model = PackageSuggestion(self._map_to_model(app_json[0], False, None)[0], priority)
-            self.suggestions_cache.add(appid, model)
-            output.append(model)
-        else:
-            self.logger.warning(f"Could not find Flatpak suggestions '{appid}'")
-
-    def list_suggestions(self, limit: int, filter_installed: bool) -> Optional[List[PackageSuggestion]]:
-        if limit == 0:
-            return
-
-        if self.is_local_suggestions_file_mapped():
-            suggestions_str = self._read_local_suggestions_file()
-        else:
-            suggestions_str = self._download_remote_suggestions_file()
-
-        if suggestions_str is None:
-            return
-
-        if not suggestions_str:
-            self.logger.warning(f"No Flatpak suggestion found in {self.suggestions_file_url}")
-            return
-
-        ids_prios = suggestions.parse(suggestions_str, self.logger, 'Flatpak')
-
-        if not ids_prios:
-            self.logger.warning(f"No Flatpak suggestion could be parsed from {self.suggestions_file_url}")
-            return
-
-        suggestion_by_priority = suggestions.sort_by_priority(ids_prios)
-
-        if filter_installed:
-            installed = {i.id for i in self.read_installed(disk_loader=None).installed}
-
-            if installed:
-                suggestion_by_priority = tuple(id_ for id_ in suggestion_by_priority if id_ not in installed)
-
-        if suggestion_by_priority and 0 < limit < len(suggestion_by_priority):
-            suggestion_by_priority = suggestion_by_priority[0:limit]
-
-        self.logger.info(f'Available Flatpak suggestions: {len(suggestion_by_priority)}')
-
-        if not suggestion_by_priority:
-            return
-
-        flatpak_version = flatpak.get_version()
-        remote = self._get_search_remote()
-
-        self.logger.info("Mapping Flatpak suggestions")
-        res, fill_suggestions = [], []
-        cached_count = 0
-
-        for appid in suggestion_by_priority:
-            cached_instance = self.suggestions_cache.get(appid)
-
-            if cached_instance:
-                res.append(cached_instance)
-                cached_count += 1
-            else:
-                fill = Thread(target=self._fill_suggestion, args=(appid, ids_prios[appid], flatpak_version,
-                                                                  remote, res), daemon=True)
-                fill.start()
-                fill_suggestions.append(fill)
-
-        for fill in fill_suggestions:
-            fill.join()
-
-        if cached_count > 0:
-            self.logger.info(f"Returning {cached_count} cached Flatpak suggestions")
-
-        return res
-
     def is_default_enabled(self) -> bool:
         # Flatpak forma parte del alcance oficial del fork (junto a Arch/AUR/Chaotic AUR y
         # Solus/eopkg), por lo que se mantiene habilitada por defecto.
@@ -865,21 +764,3 @@ class FlatpakManager(SoftwareManager, SettingsController):
                                                             requires_root=False)
 
         return self._action_full_update
-
-    @property
-    def suggestions_file_url(self) -> str:
-        if self._suggestions_file_url is None:
-            file_url = self.context.get_suggestion_url(self.__module__)
-
-            if not file_url:
-                file_url = URL_SUGGESTIONS_FILE
-
-            self._suggestions_file_url = file_url
-
-            if file_url.startswith('/'):
-                self.logger.info(f"Local Flatpak suggestions file mapped: {file_url}")
-
-        return self._suggestions_file_url
-
-    def is_local_suggestions_file_mapped(self) -> bool:
-        return self.suggestions_file_url.startswith('/')

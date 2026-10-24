@@ -1,7 +1,5 @@
 appimage.config.database.expiration=数据库过期时间
 appimage.config.database.expiration.tip=定义初始化过程中数据库被视为最新的期限(以分钟为单位)。如果您希望始终更新，请使用 0。
-appimage.config.suggestions.expiration=建议过期时间
-appimage.config.suggestions.expiration.tip=定义存储在磁盘中的建议被视为最新的期限(以小时为单位)。如果您希望始终更新它们，请使用 0。
 appimage.custom_action.install_file=安装 AppImage 文件
 appimage.custom_action.install_file.desc=在系统上安装 AppImage 文件
 appimage.custom_action.install_file.details=AppImage 安装详情

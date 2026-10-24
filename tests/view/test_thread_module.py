@@ -22,7 +22,7 @@ MODULE_LOGGER = 'bauh.view.qt.thread'
 
 # Nombres que exportaban thread.py y threads/__init__.py antes de la consolidación
 EXPORTED_NAMES = ('AsyncAction', 'UpgradeSelected', 'UninstallPackage', 'DowngradePackage', 'InstallPackage',
-                  'IgnorePackageUpdates', 'CustomAction', 'RefreshApps', 'FindSuggestions', 'SearchPackages',
+                  'IgnorePackageUpdates', 'CustomAction', 'RefreshApps', 'SearchPackages',
                   'ShowPackageInfo', 'ShowPackageHistory', 'ShowScreenshots', 'AnimateProgress',
                   'NotifyPackagesReady', 'NotifyInstalledLoaded', 'ListWarnings', 'LaunchPackage',
                   'ApplyFilters', 'SaveTheme', 'StartAsyncAction', 'URLFileDownloader', 'CustomSoftwareAction')
@@ -85,7 +85,8 @@ class ThreadModuleExportsTest(unittest.TestCase):
 
         self.assertIn('run', vars(self.thread.AsyncAction))
         self.assertIn('_run', vars(self.thread.AsyncAction))
-        self.assertGreaterEqual(len(async_subclasses), 14)
+        # 13 desde que se retiró FindSuggestions con las sugerencias de paquetes
+        self.assertGreaterEqual(len(async_subclasses), 13)
         self.assertGreaterEqual(len(other_threads), 7)
 
         for cls in async_subclasses:
@@ -145,16 +146,6 @@ class AsyncActionErrorHandlingTest(unittest.TestCase):
         self.assertIn('RuntimeError: gem exploded &lt;b&gt;', messages[0]['body'])
         self.assertIn('ShowPackageInfo', logs.output[0])
         self.assertIn('Traceback', logs.output[0])
-
-    def test_find_suggestions_finishes_with_empty_result(self):
-        man = MagicMock()
-        man.list_suggestions.side_effect = KeyError('missing')
-        worker = self.thread.FindSuggestions(i18n=self.i18n, man=man)
-
-        finished, messages, _ = self._run_failing(worker)
-
-        self.assertEqual([{'pkgs_found': [], 'error': None}], finished)
-        self.assertEqual(1, len(messages))
 
     def test_show_screenshots_finishes_with_package_reference(self):
         manager = MagicMock()

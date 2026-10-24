@@ -1,7 +1,5 @@
 appimage.config.database.expiration=Срок действия базы данных
 appimage.config.database.expiration.tip=IОпределяет период (в минутах), в течение которого база данных будет считаться актуальной в процессе инициализации. Используйте 0, если вы хотите обновлять ее всегда.
-appimage.config.suggestions.expiration=Срок действия предложений
-appimage.config.suggestions.expiration.tip=Определяет период (в часах), в течение которого предложения, хранящиеся на диске, будут считаться актуальными. Используйте 0, если вы хотите обновлять их всегда.
 appimage.custom_action.install_file=Установить файл AppImage
 appimage.custom_action.install_file.desc=Устанавливает файл AppImage в систему
 appimage.custom_action.install_file.details=Детали установки

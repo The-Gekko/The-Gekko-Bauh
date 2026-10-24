@@ -4,6 +4,79 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+
+### Features
+- **Matugen de verdad.** El tema Matugen solo leía `~/.cache/matugen/colors-gtk.css`:
+  sin ese archivo se veía idéntico a Aurora y parecía que el botón no hacía nada.
+  Ahora busca, por este orden y sin mezclar paletas, la salida de la plantilla de
+  bauh (`~/.config/gekko-bauh/matugen-colors.css`), la caché genérica de matugen y,
+  como respaldo, los colores GTK que muchos escritorios ya generan a partir del
+  fondo. El vigilante sigue también esos archivos.
+- **Conectar con matugen.** Con matugen instalado, el menú de temas ofrece declarar la
+  plantilla de bauh en `~/.config/matugen/config.toml` (añadiendo una sección al
+  final, tras guardar una copia, y solo si el resultado es TOML válido). Desde
+  entonces matugen pinta la tienda en cada cambio de fondo.
+- **El botón Matugen es un interruptor.** Encendido aplica los colores del fondo;
+  apagado vuelve al tema anterior (a Aurora si bauh se abrió ya con Matugen). Si no
+  hay ningún color que leer, lo explica.
+
+### Improvements
+- **Lavado de cara de Aurora** (y de los temas GTK y Matugen, que heredan de él):
+  filas más altas y alternas, icono de la app a 28 px centrado y el del tipo a
+  16 px, jerarquía tipográfica (nombre destacado; versión, origen y descripción en
+  tono secundario), **Instalar** y **Desinstalar** como píldoras, filtros como
+  chips (el activo, relleno del color de acento para que se vea que está filtrando:
+  bauh activa solo «Actualizaciones» al arrancar), desplegables sin `--- Tipo ---` («Todos los tipos», «Todas las
+  categorías»), buscador más grande y barra inferior con iconos de 18 px. La
+  versión con actualización se muestra como `1.0  →  1.1`.
+- **Lista vacía con explicación**: «Todo está al día», «No se encontró nada para…» o
+  «Ningún paquete coincide con los filtros», en vez de una tabla negra vacía.
+- Un paquete AUR sin mantenedor se marca «desconocido» en gris y cursiva, no en rojo.
+- **Un solo buscador.** Al escribir filtra lo que ya se ve (con una pausa de 300 ms y
+  sin ocultar el buscador ni quitarle el foco) y con `Intro` busca en los
+  repositorios. Desaparece el campo «Nombre…» de la barra de filtros.
+- **El tipo, como insignia en el icono.** Arch, Flatpak, eopkg… ya no ocupan una
+  columna: van en la esquina del icono de la app (salvo cuando el paquete no tiene
+  icono propio, porque el de por defecto ya es el del tipo).
+- **Capturas dentro de la ficha.** El botón de la cámara sale de la tabla: la ficha
+  (ⓘ) tiene «Capturas de pantalla», y si un paquete tuviera capturas pero no ficha,
+  ⓘ abre directamente las capturas.
+- **Una sola «Escala»** en `Ajustes → Interfaz` (Automática, 100 %, 125 %, 150 %,
+  175 %, 200 %) en lugar de HDPI + autoescala + factor; el HDPI va siempre activo y un
+  factor a medida anterior se conserva como opción.
+
+### Removed
+- **Gem Web (aplicaciones web).** Dependía de nativefier, archivado desde septiembre
+  de 2023, y cada app llevaba un Electron sin parches de seguridad. Las apps ya
+  instaladas siguen funcionando: bauh avisa al arrancar de cuáles quedan y
+  `gekko-bauh-cli clean-web-apps [--yes]` borra todos sus restos (apps, entorno,
+  caché, ajustes, entradas de menú y autoarranques). Fuera también sus dependencias
+  opcionales (`lxml`, `beautifulsoup4`) del `pyproject.toml`, los PKGBUILD y el AppImage.
+- **Sugerencias de paquetes** (la bombilla, sus ajustes, `--suggestions` y
+  `list_suggestions` en la API de las gems). Las listas venían de `vinifmor/bauh-files`
+  sin cambios desde 2022 y Arch y AppImage las descargaban en cada arranque.
+- **Opción «Comprobar certificado de seguridad (SSL)».** También el código que
+  permitía descargar sin verificar (`ignore_ssl`, `check_ssl` y la bandera `-k` de axel).
+- **Temas Darcula, Knight y Sublime**: quien los tuviera elegidos pasa a Aurora.
+- **Pestaña «Personalización»** (colores, opacidad e imagen de fondo): duplicaba los
+  temas y Matugen. La clave `custom_theme` de `config.yml` se descarta al leerse.
+- En `Ajustes → Avanzadas`, la caducidad de la caché en memoria y la «verificación
+  única de sistema» (siguen en `config.yml`).
+
+### Fixes
+- **Tema Claro ilegible al cambiar desde un tema oscuro.** Qt deja a cada widget que
+  un QSS colorea la paleta de ese momento, y la del tema se aplicaba después de la
+  hoja: la tabla y varios botones se quedaban oscuros, con el texto negro sobre negro.
+  Ahora se limpian esas paletas y la del tema se aplica antes que la hoja.
+- **Un tema que ya no existe** dejaba la aplicación sin hoja de estilo; ahora se usa Aurora.
+- **Filtro por nombre al revés** tras instalar o desinstalar: se comprobaba si lo
+  escrito empezaba por el nombre del paquete, no si el nombre contenía lo escrito.
+- **Temas GTK y Matugen planos.** Con paletas que dan el mismo color a la ventana,
+  la barra lateral y las tarjetas (libadwaita y la mayoría de generadores), los
+  bordes de botones, campos y tabla desaparecían. bauh separa ahora esas superficies
+  con un contraste mínimo y usa `border_color` cuando la plantilla lo aporta.
+
 ## [0.10.8+gekko.3] 2026-09-26
 
 Etiqueta git `v0.10.8-gekko.3`.

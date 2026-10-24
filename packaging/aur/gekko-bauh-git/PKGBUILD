@@ -54,8 +54,6 @@ optdepends=(
   'git: required by the GitHub gem and to build AUR packages'
   'base-devel: required to build AUR packages and by the GitHub gem'
   'timeshift: system snapshots before installing or upgrading packages'
-  'python-lxml: required by the optional web gem'
-  'python-beautifulsoup4: required by the optional web gem'
 )
 # Las dos variantes instalan los mismos ficheros, así que sí se excluyen entre
 # ellas. Con «bauh» se sigue sin declarar nada: son proyectos que conviven.

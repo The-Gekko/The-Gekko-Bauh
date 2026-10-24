@@ -23,12 +23,10 @@ RE_HAS_EXTENSION = re.compile(r'.+\.\w+$')
 
 class SelfFileDownloader(FileDownloader):
 
-    def __init__(self, logger: Logger, i18n: I18n, http_client: HttpClient,
-                 check_ssl: bool):
+    def __init__(self, logger: Logger, i18n: I18n, http_client: HttpClient):
         self._logger = logger
         self._i18n = i18n
         self._client = http_client
-        self._ssl = check_ssl
 
     def is_multithreaded(self) -> bool:
         return False
@@ -52,7 +50,7 @@ class SelfFileDownloader(FileDownloader):
                  root_password: Optional[str] = None, substatus_prefix: str = None, display_file_size: bool = True,
                  max_threads: int = None, known_size: int = None) -> bool:
         try:
-            res = self._client.get(url=file_url, ignore_ssl=not self._ssl, stream=True)
+            res = self._client.get(url=file_url, stream=True)
         except Exception:
             return False
 
@@ -100,18 +98,16 @@ class SelfFileDownloader(FileDownloader):
 class AdaptableFileDownloader(FileDownloader):
 
     def __init__(self, logger: Logger, multithread_enabled: bool, i18n: I18n, http_client: HttpClient,
-                 multithread_client: str, check_ssl: bool):
+                 multithread_client: str):
         self.logger = logger
         self.multithread_enabled = multithread_enabled
         self.i18n = i18n
         self.http_client = http_client
         self.supported_multithread_clients = ("aria2", "axel")
         self.multithread_client = multithread_client
-        self.check_ssl = check_ssl
         self._self_downloader = SelfFileDownloader(logger=logger,
                                                    i18n=i18n,
-                                                   http_client=http_client,
-                                                   check_ssl=check_ssl)
+                                                   http_client=http_client)
 
     @staticmethod
     def is_aria2c_available() -> bool:
@@ -152,9 +148,6 @@ class AdaptableFileDownloader(FileDownloader):
 
     def _get_axel_process(self, url: str, output_path: str, cwd: str, root_password: Optional[str], threads: int) -> SimpleProcess:
         cmd = ['axel', url, '-n', str(threads), '-4', '-c', '-T', '5']
-
-        if not self.check_ssl:
-            cmd.append('-k')
 
         if output_path:
             cmd.append(f'--output={output_path}')

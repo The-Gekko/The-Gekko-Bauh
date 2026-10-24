@@ -25,8 +25,10 @@ RE_RGB_FUNCTION = re.compile(r'^rgba?\(([^()]*)\)$', re.IGNORECASE)
 
 # claves de los temas que derivan sus colores del sistema en tiempo real
 DYNAMIC_THEME_KEYS = ('matugen', 'gtk')
-# ficheros de color generados por Matugen
-MATUGEN_COLOR_FILES = ('~/.cache/matugen/colors-gtk.css',)
+# fichero que escribe matugen con la plantilla de bauh (la registra bauh/view/core/matugen.py)
+MATUGEN_BAUH_COLORS_FILE = '~/.config/gekko-bauh/matugen-colors.css'
+# ficheros de color generados por Matugen, del más específico al más genérico
+MATUGEN_COLOR_FILES = (MATUGEN_BAUH_COLORS_FILE, '~/.cache/matugen/colors-gtk.css')
 # ficheros de color de GTK 3/4 (el sistema primero, el usuario después)
 GTK_COLOR_FILES = ('/etc/gtk-3.0/gtk.css', '/etc/gtk-4.0/gtk.css',
                    '~/.config/gtk-3.0/gtk.css', '~/.config/gtk-4.0/gtk.css')
@@ -187,23 +189,53 @@ def dynamic_theme_kind(theme_key: str, available_themes: Optional[Dict[str, str]
     return None
 
 
-def dynamic_color_sources(kind: Optional[str]) -> Tuple[str, ...]:
-    """Ficheros de color a leer según el tipo de tema dinámico (sistema primero, usuario después)."""
-    if kind == 'matugen':
-        sources = MATUGEN_COLOR_FILES
-    elif kind == 'gtk':
-        sources = GTK_COLOR_FILES
-    else:
-        sources = (*GTK_COLOR_FILES, *MATUGEN_COLOR_FILES)
+def dynamic_color_groups(kind: Optional[str]) -> Tuple[Tuple[str, ...], ...]:
+    """Grupos de ficheros de color por orden de preferencia: se usa el primero que aporte colores.
 
-    return tuple(os.path.expanduser(path) for path in sources)
+    Dentro de un grupo los ficheros se mezclan (el sistema primero, el usuario después).
+    Matugen prueba su propia salida y, si no hay ninguna, los colores GTK: muchos
+    escritorios (Hyprland, Niri…) ya los generan a partir del fondo de pantalla, y sin
+    este respaldo el tema Matugen se veía idéntico a Aurora cuando faltaba la caché.
+    """
+    def expand(paths: Iterable[str]) -> Tuple[str, ...]:
+        return tuple(os.path.expanduser(path) for path in paths)
+
+    if kind == 'matugen':
+        return tuple(expand((path,)) for path in MATUGEN_COLOR_FILES) + (expand(GTK_COLOR_FILES),)
+
+    if kind == 'gtk':
+        return (expand(GTK_COLOR_FILES),)
+
+    return (expand((*GTK_COLOR_FILES, *MATUGEN_COLOR_FILES)),)
+
+
+def dynamic_color_sources(kind: Optional[str]) -> Tuple[str, ...]:
+    """Todos los ficheros de color que pueden cambiar el tema: los que vigila ThemeWatcher."""
+    return tuple(path for group in dynamic_color_groups(kind) for path in group)
 
 
 def parse_gtk_matugen_colors(kind: Optional[str] = None, logger: Optional[Logger] = None,
                              sources: Optional[Iterable[str]] = None) -> Dict[str, str]:
     """Lee las declaraciones '@define-color' de Matugen/GTK y las normaliza a colores usables por Qt."""
-    files = tuple(sources) if sources is not None else dynamic_color_sources(kind)
+    groups = (tuple(sources),) if sources is not None else dynamic_color_groups(kind)
+    colors: Dict[str, str] = {}
+    used: Tuple[str, ...] = ()
 
+    for group in groups:
+        colors = _read_color_group(group, logger=logger)
+
+        if colors:
+            used = tuple(path for path in group if os.path.isfile(os.path.expanduser(path)))
+            break
+
+    if logger:
+        logger.info(f"dynamic theme ({kind or 'auto'}): {len(colors)} color(s) read "
+                    f"from {', '.join(used) if used else 'no file'}")
+
+    return colors
+
+
+def _read_color_group(files: Iterable[str], logger: Optional[Logger] = None) -> Dict[str, str]:
     raw: Dict[str, str] = {}
 
     for file_path in files:
@@ -212,13 +244,7 @@ def parse_gtk_matugen_colors(kind: Optional[str] = None, logger: Optional[Logger
         if os.path.isfile(expanded):
             raw.update(_read_define_colors(expanded, logger=logger))
 
-    colors = _resolve_color_references(raw, logger=logger)
-
-    if logger:
-        logger.info(f"dynamic theme ({kind or 'auto'}): {len(colors)} color(s) read "
-                    f"from {len(files)} candidate file(s)")
-
-    return colors
+    return _resolve_color_references(raw, logger=logger)
 
 
 def _read_define_colors(file_path: str, logger: Optional[Logger] = None,
@@ -505,6 +531,14 @@ def build_dynamic_var_overrides(colors: Dict[str, str],
     success = pick('success_color', fallback_var='color.accent', default='#7EE787')
     accent_fg = colors.get('accent_fg_color') or contrast_color(accent)
 
+    # Muchas paletas (libadwaita y la mayoría de generadores a partir del fondo) dan el
+    # mismo color a la ventana, la barra lateral y las tarjetas. Como los bordes de
+    # botones, campos y tabla salen de esas superficies, todo quedaba plano y los
+    # controles se fundían con el fondo: se garantiza un escalón mínimo hacia el texto.
+    sidebar_bg = _separate_from(sidebar_bg, bg, fg, 0.07)
+    card_bg = _separate_from(card_bg, bg, fg, 0.13)
+    border = colors.get('border_color') or card_bg
+
     # variables derivadas: sin ellas se quedarían con los valores de Aurora sobre una paleta ajena
     muted = blend_colors(fg, bg, 0.65)
     disabled = blend_colors(fg, bg, 0.45)
@@ -558,8 +592,47 @@ def build_dynamic_var_overrides(colors: Dict[str, str],
         'menu.item.selected.background.color': accent,
         'menu.item.selected.font.color': accent_fg,
         'table.selection.background.color': card_bg,
+        'table.alternate.background.color': blend_colors(fg, view_bg, 0.03),
+        'table.bt_install.font.color': accent_fg,
+        'table.bt_install.hover.background.color': ok_hover,
+        'chip.checked.background.color': accent,
+        'chip.checked.border.color': accent,
+        'chip.checked.font.color': accent_fg,
+        'pushbutton.border.color': border,
+        'lineedit.border.color': border,
+        'combobox.border.color': border,
+        'table.border.color': border,
         'history.version.focus.color': fg
     }
+
+
+# por debajo de este contraste dos superficies se ven como el mismo color
+MIN_SURFACE_CONTRAST = 1.06
+
+
+def contrast_ratio(color: Optional[str], other: Optional[str]) -> Optional[float]:
+    """Contraste aproximado entre dos colores (1 = idénticos), con la fórmula de WCAG.
+
+    Usa color_luminance, que no corrige la gamma: sirve para distinguir colores casi
+    iguales, no para certificar legibilidad.
+    """
+    first, second = color_luminance(color), color_luminance(other)
+
+    if first is None or second is None:
+        return None
+
+    lighter, darker = max(first, second), min(first, second)
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def _separate_from(color: str, base: str, toward: str, ratio: float) -> str:
+    """Devuelve 'color' o, si apenas se distingue de 'base', 'base' mezclada con 'toward'."""
+    contrast = contrast_ratio(color, base)
+
+    if contrast is not None and contrast < MIN_SURFACE_CONTRAST:
+        return blend_colors(toward, base, ratio) or color
+
+    return color
 
 
 def read_theme_vars(theme_key: str, available_themes: Optional[Dict[str, str]] = None,
@@ -620,9 +693,6 @@ def process_theme(file_path: str, theme_str: str, metadata: ThemeMetadata,
 
         _warn_unresolved_vars(theme_str, file_path, logger)
 
-        if app_config:
-            theme_str += gen_custom_theme_css(app_config, logger=logger)
-
         return theme_str if not root_theme else '{}\n{}'.format(root_theme[0], theme_str), metadata
 
 
@@ -636,76 +706,6 @@ def _warn_unresolved_vars(theme_str: str, file_path: str, logger: Optional[Logge
     if unresolved:
         logger.warning(f"theme file '{file_path}' has {len(unresolved)} unresolved variable(s): "
                        f"{', '.join(unresolved[0:10])}")
-
-
-def valid_color(value: Optional[str], field: str = 'color', logger: Optional[Logger] = None) -> Optional[str]:
-    """Devuelve el color solo si Qt puede interpretarlo; en caso contrario avisa y lo descarta."""
-    if not value:
-        return None
-
-    candidate = str(value).strip()
-
-    if RE_CSS_COLOR.match(candidate):
-        return candidate
-
-    if logger:
-        logger.warning(f"custom theme: ignoring the invalid '{field}' value '{value}'")
-
-    return None
-
-
-def _quote_css_url(path: str) -> str:
-    """Escapa una ruta para poder incrustarla entre comillas dentro de un url() de QSS."""
-    return path.replace('\\', '\\\\').replace('"', '\\"')
-
-
-def gen_custom_theme_css(app_config: dict, logger: Optional[Logger] = None) -> str:
-    """Genera el QSS del tema personalizado del usuario validando colores y rutas."""
-    custom_theme = app_config.get('custom_theme') or {}
-
-    if not custom_theme.get('enabled', False):
-        return ''
-
-    bg_color = valid_color(custom_theme.get('background_color'), 'background_color', logger)
-    text_color = valid_color(custom_theme.get('text_color'), 'text_color', logger)
-    accent_color = valid_color(custom_theme.get('accent_color'), 'accent_color', logger)
-    bg_image = custom_theme.get('background_image')
-
-    custom_css = "\n/* Custom Theme Overrides */\n"
-
-    if bg_color or text_color:
-        custom_css += "QWidget { "
-        if bg_color:
-            custom_css += f"background-color: {bg_color}; "
-        if text_color:
-            custom_css += f"color: {text_color}; "
-        custom_css += "}\n"
-
-        custom_css += "QMenuBar, QMenu { "
-        if bg_color:
-            custom_css += f"background-color: {bg_color}; "
-        if text_color:
-            custom_css += f"color: {text_color}; "
-        custom_css += "}\n"
-
-        custom_css += (f"QToolTip {{ background-color: {bg_color or '#000'}; color: {text_color or '#fff'}; "
-                       f"border: 1px solid {accent_color or '#555'}; }}\n")
-
-    if bg_image and os.path.exists(bg_image):
-        custom_css += (f'QWidget#manage_window {{ background-image: url("{_quote_css_url(bg_image)}"); '
-                       f'background-position: center; background-repeat: no-repeat; }}\n')
-
-    if accent_color:
-        custom_css += f"QPushButton:hover {{ border-color: {accent_color}; }}\n"
-        custom_css += f"QProgressBar::chunk {{ background-color: {accent_color}; }}\n"
-        custom_css += f"QTabBar::tab:selected {{ border-bottom: 2px solid {accent_color}; color: {accent_color}; }}\n"
-        custom_css += (f"QCheckBox::indicator:checked {{ background-color: {accent_color}; "
-                       f"border-color: {accent_color}; }}\n")
-        custom_css += (f"QRadioButton::indicator:checked {{ background-color: {accent_color}; "
-                       f"border-color: {accent_color}; }}\n")
-        custom_css += f"QSlider::handle:horizontal {{ background-color: {accent_color}; }}\n"
-
-    return custom_css
 
 
 def _by_str_len(string: str) -> int:

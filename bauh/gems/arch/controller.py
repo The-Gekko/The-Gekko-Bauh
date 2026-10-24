@@ -20,7 +20,7 @@ from bauh.api.abstract.controller import SearchResult, SoftwareManager, Applicat
 from bauh.api.abstract.disk import DiskCacheLoader
 from bauh.api.abstract.handler import ProcessWatcher, TaskManager
 from bauh.api.abstract.model import PackageUpdate, PackageHistory, SoftwarePackage, PackageStatus, \
-    CustomSoftwareAction, PackageSuggestion
+    CustomSoftwareAction
 from bauh.api.abstract.view import MessageType, FormComponent, InputOption, SingleSelectComponent, SelectViewType, \
     ViewComponent, PanelComponent, MultipleSelectComponent, TextInputComponent, TextInputType, \
     FileChooserComponent, TextComponent
@@ -30,7 +30,6 @@ from bauh.commons import system
 from bauh.commons.boot import CreateConfigFile
 from bauh.commons.category import CategoriesDownloader
 from bauh.commons.html import bold
-from bauh.commons.suggestions import sort_by_priority
 from bauh.commons.system import SystemProcess, ProcessHandler, new_subprocess, run_cmd, SimpleProcess
 from bauh.commons.util import datetime_as_milis
 from bauh.commons.view_utils import new_select
@@ -51,7 +50,6 @@ from bauh.gems.arch.model import ArchPackage
 from bauh.gems.arch.output import TransactionStatusHandler
 from bauh.gems.arch.pacman import RE_DEP_OPERATORS
 from bauh.gems.arch.proc_util import write_as_user
-from bauh.gems.arch.suggestions import RepositorySuggestionsDownloader
 from bauh.gems.arch.updates import UpdatesSummarizer
 from bauh.gems.arch.worker import AURIndexUpdater, ArchDiskCacheUpdater, ArchCompilationOptimizer, RefreshMirrors, \
     SyncDatabases
@@ -222,7 +220,6 @@ class ArchManager(SoftwareManager, SettingsController):
         # se derivara de __app_name__, al renombrar la aplicación se crearía un segundo
         # usuario y se abandonarían los directorios de compilación del anterior.
         self.pkgbuilder_user: Optional[str] = AUR_BUILDER_USER if context.root_user else None
-        self._suggestions_downloader: Optional[RepositorySuggestionsDownloader] = None
 
     def refresh_mirrors(self, root_password: Optional[str], watcher: ProcessWatcher) -> bool:
         handler = ProcessHandler(watcher)
@@ -3059,11 +3056,6 @@ class ArchManager(SoftwareManager, SettingsController):
             self.index_aur = AURIndexUpdater(context=self.context, taskman=task_manager, create_config=create_config)  # must always execute to properly determine the installed packages (even that AUR is disabled)
             self.index_aur.start()
 
-            if not self.suggestions_downloader.is_custom_local_file_mapped():
-                self.suggestions_downloader.create_config = create_config
-                self.suggestions_downloader.register_task(task_manager)
-                self.suggestions_downloader.start()
-
             refresh_mirrors = RefreshMirrors(taskman=task_manager, i18n=self.i18n, root_password=root_password,
                                              logger=self.logger, create_config=create_config)
             refresh_mirrors.start()
@@ -3214,13 +3206,7 @@ class ArchManager(SoftwareManager, SettingsController):
                                tooltip=self.i18n['arch.config.categories_exp.tip'],
                                only_int=True,
                                capitalize_label=False,
-                               value=arch_config['categories_exp'] if isinstance(arch_config['categories_exp'], int) else ''),
-            TextInputComponent(id_='arch_sugs_exp',
-                               label=self.i18n['arch.config.suggestions_exp'],
-                               tooltip=self.i18n['arch.config.suggestions_exp.tip'],
-                               only_int=True,
-                               capitalize_label=False,
-                               value=arch_config['suggestions_exp'] if isinstance(arch_config['suggestions_exp'], int) else '')
+                               value=arch_config['categories_exp'] if isinstance(arch_config['categories_exp'], int) else '')
         ]
 
         return SettingsView(self, PanelComponent([FormComponent(fields, spaces=False)], id_="repo"), icon_path=get_repo_icon_path())
@@ -3334,7 +3320,6 @@ class ArchManager(SoftwareManager, SettingsController):
         arch_config['suggest_optdep_select'] = sug_optdep_download
 
         arch_config['categories_exp'] = form.get_component('arch_cats_exp', TextInputComponent).get_int_value()
-        arch_config['suggestions_exp'] = form.get_component('arch_sugs_exp', TextInputComponent).get_int_value()
 
     def _fill_aur_settings(self, arch_config: dict, form: FormComponent):
         arch_config['optimize'] = form.get_component('opts', SingleSelectComponent).get_selected()
@@ -3924,153 +3909,3 @@ class ArchManager(SoftwareManager, SettingsController):
                 return added
 
         return True
-
-    def _fill_available_packages(self, output: Dict[str, Set[str]]):
-        output.update(pacman.map_available_packages())
-
-    def _fill_suggestions(self, output: Dict[str, int]):
-        self.suggestions_downloader.register_task(None)
-        suggestions = self.suggestions_downloader.read(self.configman.read_config())
-
-        if suggestions:
-            output.update(suggestions)
-
-    def _fill_cached_if_unset(self, pkg: ArchPackage, loader: DiskCacheLoader):
-        data = loader.read(pkg)
-
-        if data:
-            for attr, cached_val in data.items():
-                if cached_val:
-                    current_val = getattr(pkg, attr)
-
-                    if current_val is None:
-                        setattr(pkg, attr, cached_val)
-
-    def list_suggestions(self, limit: int, filter_installed: bool) -> Optional[List[PackageSuggestion]]:
-        if limit == 0:
-            return
-
-        arch_config = self.configman.get_config()
-
-        if not arch_config['repositories']:
-            return
-
-        name_priority = dict()
-
-        fill_suggestions = Thread(target=self._fill_suggestions, args=(name_priority,), daemon=True)
-        fill_suggestions.start()
-
-        available_packages = dict()
-        fill_available = Thread(target=self._fill_available_packages, args=(available_packages,), daemon=True)
-        fill_available.start()
-
-        ignored_pkgs = set()
-        fill_ignored = Thread(target=pacman.fill_ignored_packages, args=(ignored_pkgs,), daemon=True)
-        fill_ignored.start()
-
-        fill_suggestions.join()
-
-        if not name_priority:
-            self.logger.info("No Arch package suggestions found")
-            return
-
-        self.logger.info(f"Found {len(name_priority)} named Arch package suggestions")
-
-        if fill_available:
-            fill_available.join()
-
-        if not available_packages:
-            self.logger.error("No available Arch package found. It will not be possible to return suggestions")
-            return
-
-        fill_ignored.join()
-
-        available_suggestions = dict()
-
-        for n in name_priority:
-            if n not in ignored_pkgs:
-                data = available_packages.get(n)
-
-                if data and (not filter_installed or not data['i']):
-                    available_suggestions[n] = data
-
-        if not available_suggestions:
-            self.logger.info("No Arch package suggestion to return")
-            return
-
-        if filter_installed:
-            ignored_updates = set()
-            thread_fill_ignored_updates = Thread(target=self._fill_ignored_updates, args=(ignored_updates,), daemon=True)
-            thread_fill_ignored_updates.start()
-        else:
-            ignored_updates, thread_fill_ignored_updates = None, None
-
-        suggestion_by_priority = sort_by_priority({n: name_priority[n] for n in available_suggestions})
-
-        if available_suggestions and 0 < limit < len(available_suggestions):
-            suggestion_by_priority = suggestion_by_priority[0:limit]
-
-        self.logger.info(f'Available Arch package suggestions: {len(suggestion_by_priority)}')
-
-        if thread_fill_ignored_updates:
-            thread_fill_ignored_updates.join()
-
-        full_data = pacman.map_packages(names=suggestion_by_priority, remote=filter_installed, not_signed=False,
-                                        skip_ignored=True)
-
-        if full_data and full_data.get('signed'):
-            full_data = full_data['signed']
-
-        disk_loader, caching_threads = None, None
-        if not filter_installed:
-            disk_loader = self.context.disk_loader_factory.new()
-            caching_threads = list()
-
-        suggestions = []
-        for name in suggestion_by_priority:
-            pkg_data = available_suggestions[name]
-            pkg_full_data = full_data.get(name)
-            description = None
-
-            if pkg_full_data:
-                description = pkg_full_data.get('description')
-
-            pkg_updates_ignored = pkg_data['i'] and ignored_updates and name in ignored_updates
-            pkg = ArchPackage(name=name,
-                              version=pkg_data['v'],
-                              latest_version=pkg_data['v'],
-                              repository=pkg_data['r'],
-                              installed=pkg_data['i'],
-                              description=description,
-                              categories=self.categories.get(name),
-                              i18n=self.i18n,
-                              maintainer=pkg_data['r'],
-                              update_ignored=pkg_updates_ignored)
-
-            if disk_loader:
-                t = Thread(target=self._fill_cached_if_unset, args=(pkg, disk_loader), daemon=True)
-                t.start()
-                caching_threads.append(t)
-
-            suggestions.append(PackageSuggestion(package=pkg, priority=name_priority[name]))
-
-        if caching_threads:
-            for t in caching_threads:
-                t.join()
-
-        return suggestions
-
-    @property
-    def suggestions_downloader(self) -> RepositorySuggestionsDownloader:
-        if not self._suggestions_downloader:
-            file_url = self.context.get_suggestion_url(self.__module__)
-
-            self._suggestions_downloader = RepositorySuggestionsDownloader(logger=self.logger,
-                                                                           http_client=self.http_client,
-                                                                           i18n=self.i18n,
-                                                                           file_url=file_url)
-
-            if self._suggestions_downloader.is_custom_local_file_mapped():
-                self.logger.info(f"Local Arch suggestions file mapped: {file_url}")
-
-        return self._suggestions_downloader

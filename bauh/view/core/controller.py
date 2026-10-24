@@ -9,14 +9,14 @@ from bauh.api.abstract.controller import SoftwareManager, SearchResult, Applicat
     UpgradeRequirement, TransactionResult, SoftwareAction, SettingsView, SettingsController
 from bauh.api.abstract.disk import DiskCacheLoader
 from bauh.api.abstract.handler import ProcessWatcher, TaskManager
-from bauh.api.abstract.model import SoftwarePackage, PackageUpdate, PackageHistory, PackageSuggestion, \
-    CustomSoftwareAction
+from bauh.api.abstract.model import SoftwarePackage, PackageUpdate, PackageHistory, CustomSoftwareAction
 from bauh.api.abstract.view import TabGroupComponent, MessageType
 from bauh.api.exception import NoInternetException
 from bauh.commons.boot import CreateConfigFile
 from bauh.commons.html import bold
 from bauh.commons.regex import RE_URL
 from bauh.commons.util import sanitize_command_input
+from bauh.view.core import web_legacy
 from bauh.view.core.config import CoreConfigManager
 from bauh.view.core.settings import GenericSettingsManager
 from bauh.view.core.update import check_for_update
@@ -37,8 +37,7 @@ class GenericUpgradeRequirements(UpgradeRequirements):
 
 class GenericSoftwareManager(SoftwareManager, SettingsController):
 
-    def __init__(self, managers: List[SoftwareManager], context: ApplicationContext, config: dict,
-                 force_suggestions: bool = False):
+    def __init__(self, managers: List[SoftwareManager], context: ApplicationContext, config: dict):
 
         super(GenericSoftwareManager, self).__init__(context=context)
         self.managers = managers
@@ -56,7 +55,6 @@ class GenericSoftwareManager(SoftwareManager, SettingsController):
         self.configman = CoreConfigManager()
         self._action_reset: Optional[CustomSoftwareAction] = None
         self._dynamic_extra_actions: Optional[Dict[CustomSoftwareAction, Callable[[dict], bool]]] = None
-        self.force_suggestions = force_suggestions
 
     @property
     def dynamic_extra_actions(self) -> Dict[CustomSoftwareAction, Callable[[dict], bool]]:
@@ -473,6 +471,11 @@ class GenericSoftwareManager(SoftwareManager, SettingsController):
 
         int_available = self.context.is_internet_available()
 
+        web_apps = web_legacy.warning(self.i18n)
+
+        if web_apps:
+            warnings.append(web_apps)
+
         if int_available:
             updates_msg = check_for_update(self.logger, self.http_client, self.i18n)
 
@@ -488,39 +491,6 @@ class GenericSoftwareManager(SoftwareManager, SettingsController):
                         warnings.extend(man_warnings)
 
         return warnings
-
-    def _fill_suggestions(self, suggestions: list, man: SoftwareManager, limit: int, filter_installed: bool):
-        if self._can_work(man):
-            mti = time.time()
-            man_sugs = man.list_suggestions(limit=limit, filter_installed=filter_installed)
-            mtf = time.time()
-            self.logger.info(f'{man.__class__.__name__} took {mtf - mti:.5f} seconds')
-
-            if man_sugs:
-                if 0 < limit < len(man_sugs):
-                    man_sugs = man_sugs[0:limit]
-
-                suggestions.extend(man_sugs)
-
-    def list_suggestions(self, limit: int, filter_installed: bool) -> List[PackageSuggestion]:
-        if self.force_suggestions or bool(self.config['suggestions']['enabled']):
-            if self.managers and self.context.is_internet_available():
-                suggestions, threads = [], []
-                for man in self.managers:
-                    t = Thread(target=self._fill_suggestions,
-                               args=(suggestions, man, int(self.config['suggestions']['by_type']), filter_installed),
-                               daemon=True)
-                    t.start()
-                    threads.append(t)
-
-                for t in threads:
-                    t.join()
-
-                if suggestions:
-                    suggestions.sort(key=lambda s: s.priority.value, reverse=True)
-
-                return suggestions
-        return []
 
     def execute_custom_action(self, action: CustomSoftwareAction, pkg: SoftwarePackage, root_password: Optional[str], watcher: ProcessWatcher):
         if action.requires_internet and not self.context.is_internet_available():

@@ -109,7 +109,9 @@ def is_package_hidden(pkg: PackageView, filters: PackageFilters) -> bool:
         hidden = not pkg.model.categories or not next((c for c in pkg.model.categories if c.lower() == filters.category), None)
 
     if not hidden and filters.name:
-        hidden = not filters.name.startswith(pkg.model.name.lower())
+        # el nombre tiene que contener lo escrito, como en el índice (antes estaba al revés:
+        # se comprobaba si lo escrito empezaba por el nombre del paquete)
+        hidden = filters.name.strip().lower() not in pkg.model.name.lower()
 
     return hidden
 

@@ -21,11 +21,14 @@ IGNORED_ATTRS = {'name', '__app__'}
 
 class InfoDialog(QDialog):
 
-    def __init__(self, pkg_info: dict, icon_cache: MemoryCache, i18n: I18n, can_open_url: bool):
+    def __init__(self, pkg_info: dict, icon_cache: MemoryCache, i18n: I18n, can_open_url: bool,
+                 show_screenshots: bool = False):
         super(InfoDialog, self).__init__()
         self.setWindowTitle(str(pkg_info['__app__']))
         self.i18n = i18n
         self._can_open_url = can_open_url
+        # lo consulta la ventana al cerrarse la ficha: abrir las capturas es una acción suya
+        self.screenshots_requested = False
         layout = QVBoxLayout()
         self.setLayout(layout)
 
@@ -107,6 +110,14 @@ class InfoDialog(QDialog):
         lower_container.layout().addWidget(self.bt_back)
         lower_container.layout().addWidget(new_spacer())
 
+        if show_screenshots:
+            self.bt_screenshots = QPushButton(self.i18n['manage_window.info.screenshots'])
+            self.bt_screenshots.setObjectName('screenshots')
+            self.bt_screenshots.setToolTip(self.i18n['action.screenshots.tooltip'])
+            self.bt_screenshots.setCursor(QCursor(Qt.PointingHandCursor))
+            self.bt_screenshots.clicked.connect(self._request_screenshots)
+            lower_container.layout().addWidget(self.bt_screenshots)
+
         self.bt_close = QPushButton(self.i18n['close'].capitalize())
         self.bt_close.setObjectName('close')
         self.bt_close.setCursor(QCursor(Qt.PointingHandCursor))
@@ -119,6 +130,10 @@ class InfoDialog(QDialog):
         screen_height = get_current_screen_geometry().height()
         self.setMaximumHeight(int(screen_height * 0.8))
         self.adjustSize()
+
+    def _request_screenshots(self):
+        self.screenshots_requested = True
+        self.accept()
 
     @staticmethod
     def open_url(url: str):

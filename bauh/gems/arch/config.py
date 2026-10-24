@@ -45,5 +45,4 @@ class ArchConfigManager(YAMLConfigManager):
                 # Desactivado por defecto para preservar el comportamiento actual:
                 # la busqueda sigue mostrando por separado el paquete del repositorio
                 # y el de AUR, y la instalacion desde AUR sigue compilando.
-                "prefer_repository_binary": False,
-                'suggestions_exp': 24}
+                "prefer_repository_binary": False}

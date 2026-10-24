@@ -34,8 +34,8 @@ class WindowActionsMixin:
     Contrato con la clase anfitriona (ManageWindow), que debe definir:
       - atributos de estado: 'i18n', 'logger', 'manager', 'context', 'config', 'icon_cache', 'http_client',
         'pkgs', 'pkgs_available', 'pkgs_installed', 'custom_actions', 'search_performed',
-        'suggestions_requested', 'load_suggestions', 'types_changed', 'first_refresh', 'searched_term',
-        '_maximized', 'current_action_id', 'can_open_urls'
+        'first_refresh', 'searched_term',
+        '_maximized', 'current_action_id', 'can_open_urls', '_name_filter' y su '_timer_name_filter'
       - widgets: 'search_bar', 'table_apps', 'textarea_details', 'check_details', 'progress_bar'
       - colaboradores: 'comp_manager' (QtComponentsManager) y los hilos 'thread_*' creados en el __init__
       - senales: 'signal_user_res', 'signal_root_password'
@@ -71,7 +71,6 @@ class WindowActionsMixin:
         self._begin_action(self.i18n['manage_window.status.refreshing'])
         self.comp_manager.set_components_visible(False)
         self._handle_console_option(False)
-        self.suggestions_requested = False
         self.search_performed = False
         self.thread_refresh.pkg_types = pkg_types
         self.thread_refresh.start()
@@ -80,37 +79,21 @@ class WindowActionsMixin:
         self._finish_action()
         self._set_lower_buttons_visible(True)
         self.comp_manager.set_component_visible(SEARCH_BAR, True)
-        if self.search_performed or self.suggestions_requested:
+        if self.search_performed:
             self.comp_manager.set_group_visible(GROUP_VIEW_SEARCH, True)
         else:
             self.comp_manager.set_group_visible(GROUP_VIEW_INSTALLED, True)
         if self.update_pkgs(res['installed'], as_installed=as_installed, types=res['types']):
             self._hide_filters_no_packages()
-            self._update_bts_installed_and_suggestions()
+            self._update_bt_installed()
             self._reorganize()
         if self.first_refresh:
             self.first_refresh = False
             qt_utils.centralize(self)
-        self.load_suggestions = False
-        self.types_changed = False
 
     def load_without_packages(self):
-        self.load_suggestions = False
         self._handle_console_option(False)
         self._finish_refresh_packages({'installed': None, 'types': None}, as_installed=False)
-
-    def begin_load_suggestions(self, filter_installed: bool):
-        self.table_apps.stop_file_downloader()
-        self.search_bar.clear()
-        self._begin_action(self.i18n['manage_window.status.suggestions'])
-        self._handle_console_option(False)
-        self.comp_manager.set_components_visible(False)
-        self.suggestions_requested = True
-        self.thread_suggestions.filter_installed = filter_installed
-        self.thread_suggestions.start()
-
-    def _finish_load_suggestions(self, res: dict):
-        self._finish_search(res)
 
     def begin_uninstall(self, pkg: PackageView):
         pwd, proceed = self._ask_root_password(SoftwareAction.UNINSTALL, pkg)
@@ -282,8 +265,14 @@ class WindowActionsMixin:
         self._finish_action(action_id=ACTION_INFO)
         if pkg_info:
             if len(pkg_info) > 1:
-                dialog_info = InfoDialog(pkg_info=pkg_info, icon_cache=self.icon_cache, i18n=self.i18n, can_open_url=self.can_open_urls)
+                pkgv = pkg_info['__app__']
+                dialog_info = InfoDialog(pkg_info=pkg_info, icon_cache=self.icon_cache, i18n=self.i18n,
+                                         can_open_url=self.can_open_urls,
+                                         show_screenshots=bool(pkgv.model.has_screenshots()))
                 dialog_info.exec_()
+
+                if dialog_info.screenshots_requested:
+                    self.begin_show_screenshots(pkgv)
             else:
                 dialog.show_message(title=self.i18n['warning'].capitalize(), body=self.i18n['manage_window.info.no_info'].format(bold(pkg_info['__app__'].model.name)), type_=MessageType.WARNING)
 
@@ -322,6 +311,9 @@ class WindowActionsMixin:
     def search(self):
         word = self.search_bar.text().strip()
         if word:
+            # Intro busca en los repositorios: el filtro pendiente de lo que se veía ya no aplica
+            self._timer_name_filter.stop()
+            self._name_filter = ''
             self.table_apps.stop_file_downloader()
             self._handle_console(False)
             self.filter_updates = False
@@ -340,7 +332,7 @@ class WindowActionsMixin:
             self.comp_manager.set_group_visible(GROUP_VIEW_SEARCH, True)
             self.update_pkgs(res['pkgs_found'], as_installed=False, ignore_updates=True)
             self._set_lower_buttons_visible(True)
-            self._update_bts_installed_and_suggestions()
+            self._update_bt_installed()
             self._hide_filters_no_packages()
             self._reorganize()
         else:
@@ -522,7 +514,7 @@ class WindowActionsMixin:
                 for pkg in self.pkgs:
                     if pkg == res['pkg']:
                         pkg.update_model(res['pkg'].model)
-                        self.table_apps.update_package(pkg, screen_width=screen_width, change_update_col=not any([self.search_performed, self.suggestions_requested]))
+                        self.table_apps.update_package(pkg, screen_width=screen_width, change_update_col=not self.search_performed)
                         self.update_bt_upgrade()
                         break
             for pkg_list in (self.pkgs_available, self.pkgs_installed):

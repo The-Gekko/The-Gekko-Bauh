@@ -134,11 +134,10 @@ class PyprojectTest(unittest.TestCase):
 
     def test_optional_dependencies(self):
         optional = self.project['optional-dependencies']
-        self.assertIn('web', optional)
         self.assertIn('test', optional)
-        web = ' '.join(optional['web'])
-        self.assertIn('lxml', web)
-        self.assertIn('beautifulsoup4', web)
+        # la gem Web (nativefier) se retiró: sus dependencias ya no se ofrecen
+        self.assertNotIn('web', optional)
+        self.assertNotIn('lxml', ' '.join(optional['test']))
 
     def test_urls_point_to_the_fork_and_credit_upstream(self):
         urls = self.project['urls']

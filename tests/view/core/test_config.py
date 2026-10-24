@@ -2,15 +2,15 @@ from unittest import TestCase
 from unittest.mock import patch
 
 from bauh.commons.config import YAMLConfigManager
-from bauh.view.core.config import DEFAULT_CUSTOM_THEME, DEFAULT_THEME, CoreConfigManager
+from bauh.view.core.config import DEFAULT_THEME, RETIRED_THEMES, CoreConfigManager
 
 
 class CoreConfigManagerTest(TestCase):
 
-    def test_get_default_config__must_store_custom_theme_at_the_root_level(self):
+    def test_get_default_config__there_is_no_custom_theme_anymore(self):
         config = CoreConfigManager().get_default_config()
 
-        self.assertIn('custom_theme', config)
+        self.assertNotIn('custom_theme', config)
         self.assertNotIn('custom_theme', config['ui'])
 
     def test_get_default_config__the_default_theme_must_be_aurora(self):
@@ -20,44 +20,63 @@ class CoreConfigManagerTest(TestCase):
         self.assertEqual(DEFAULT_THEME, config['ui']['theme'])
         self.assertFalse(config['ui']['system_theme'])
 
-    def test_get_default_config__custom_theme_must_declare_enabled(self):
-        config = CoreConfigManager().get_default_config()
-
-        self.assertIn('enabled', config['custom_theme'])
-        self.assertFalse(config['custom_theme']['enabled'])
-
-    def test_get_default_config__custom_theme_must_come_from_the_single_source_of_truth(self):
-        config = CoreConfigManager().get_default_config()
-
-        self.assertEqual(DEFAULT_CUSTOM_THEME, config['custom_theme'])
-        self.assertIsNot(DEFAULT_CUSTOM_THEME, config['custom_theme'])
-
-    def test_get_default_config__custom_theme_must_not_share_state_between_calls(self):
-        first = CoreConfigManager().get_default_config()
-        first['custom_theme']['opacity'] = 10
-
-        second = CoreConfigManager().get_default_config()
-
-        self.assertEqual(100, second['custom_theme']['opacity'])
-        self.assertEqual(100, DEFAULT_CUSTOM_THEME['opacity'])
-
     @patch.object(YAMLConfigManager, 'read_config', return_value={
-        'ui': {'custom_theme': {'opacity': 75, 'enabled': True}}
+        'ui': {'theme': 'aurora', 'custom_theme': {'opacity': 75, 'enabled': True}},
+        'custom_theme': {'opacity': 90, 'background_image': '/tmp/a.png'}
     })
-    def test_read_config__must_migrate_legacy_custom_theme(self, read_config):
+    def test_read_config__an_old_custom_theme_is_discarded(self, read_config):
         config = CoreConfigManager().read_config()
 
+        self.assertNotIn('custom_theme', config)
         self.assertNotIn('custom_theme', config['ui'])
-        self.assertEqual({'opacity': 75, 'enabled': True}, config['custom_theme'])
+        self.assertEqual('aurora', config['ui']['theme'])
         read_config.assert_called_once()
+
+
+class RetiredThemesTest(TestCase):
+    """Darcula, Knight y Sublime se retiraron: quien los tuviera elegidos pasa a Aurora."""
+
+    def test_the_retired_themes_are_gone(self):
+        from bauh.stylesheet import read_default_themes
+        available = read_default_themes()
+
+        for key in RETIRED_THEMES:
+            self.assertNotIn(key, available)
+
+        for key in ('aurora', 'light', 'gtk', 'matugen'):
+            self.assertIn(key, available)
+
+    def test_read_config__a_retired_theme_becomes_the_default_one(self):
+        for key in RETIRED_THEMES:
+            with patch.object(YAMLConfigManager, 'read_config', return_value={'ui': {'theme': key}}):
+                config = CoreConfigManager().read_config()
+
+            self.assertEqual(DEFAULT_THEME, config['ui']['theme'], key)
+
+    def test_read_config__other_themes_are_kept(self):
+        for key in ('light', 'matugen', '/home/user/.local/share/gekko-bauh/themes/mine.qss'):
+            with patch.object(YAMLConfigManager, 'read_config', return_value={'ui': {'theme': key}}):
+                config = CoreConfigManager().read_config()
+
+            self.assertEqual(key, config['ui']['theme'])
+
+
+class SuggestionsRemovedTest(TestCase):
+    """Las sugerencias de paquetes se retiraron: sus listas no se tocaban desde 2022."""
+
+    def test_the_default_config_has_no_suggestions(self):
+        self.assertNotIn('suggestions', CoreConfigManager().get_default_config())
 
     @patch.object(YAMLConfigManager, 'read_config', return_value={
-        'ui': {'custom_theme': {'opacity': 75}},
-        'custom_theme': {'opacity': 90}
+        'ui': {'theme': 'aurora'}, 'suggestions': {'enabled': True, 'by_type': 15}
     })
-    def test_read_config__must_preserve_a_root_custom_theme(self, read_config):
-        config = CoreConfigManager().read_config()
+    def test_read_config__the_old_suggestions_section_is_discarded(self, read_config):
+        self.assertNotIn('suggestions', CoreConfigManager().read_config())
 
-        self.assertNotIn('custom_theme', config['ui'])
-        self.assertEqual({'opacity': 90}, config['custom_theme'])
-        read_config.assert_called_once()
+    def test_the_api_no_longer_asks_the_gems_for_suggestions(self):
+        from bauh.api.abstract import model
+        from bauh.api.abstract.controller import SoftwareManager
+
+        self.assertFalse(hasattr(SoftwareManager, 'list_suggestions'))
+        self.assertFalse(hasattr(model, 'PackageSuggestion'))
+        self.assertFalse(hasattr(model, 'SuggestionPriority'))

@@ -3,7 +3,7 @@ import sys
 from logging import Logger
 from typing import Dict, Optional, Sequence, Tuple
 
-from PyQt5.QtCore import QCoreApplication, QFileSystemWatcher, QObject, QTimer
+from PyQt5.QtCore import QCoreApplication, QFileSystemWatcher, QObject, Qt, QTimer
 from PyQt5.QtGui import QColor, QPalette
 from PyQt5.QtWidgets import QApplication
 
@@ -208,6 +208,26 @@ def update_i18n(app_config, locale_dir: str, i18n: I18n) -> I18n:
     return i18n
 
 
+def _clear_stylesheet_palettes(app: QCoreApplication):
+    """Quita a cada widget la paleta propia que le dejó la hoja de estilo anterior.
+
+    Qt asigna una paleta a cada widget que un QSS colorea y no siempre se la retira al
+    cambiar de hoja: al pasar de un tema oscuro a Claro, la tabla y varios botones se
+    quedaban oscuros, con el texto negro sobre negro. Ningún código de bauh fija paletas a
+    mano, así que se limpian todas y la hoja nueva vuelve a poner las que necesite.
+    """
+    if not isinstance(app, QApplication):
+        return
+
+    # con la hoja anterior aún activa, Qt devolvería la paleta en cuanto se limpia
+    app.setStyleSheet('')
+
+    for widget in app.allWidgets():
+        if widget.testAttribute(Qt.WA_SetPalette):
+            # una paleta vacía (sin nada resuelto) devuelve el widget a la heredada
+            widget.setPalette(QPalette())
+
+
 def apply_theme_palette(app: QCoreApplication, theme_vars: Dict[str, str]):
     """Deriva la paleta Qt del tema resuelto para los widgets que el QSS no cubre (diálogos nativos, tooltips...)."""
     background = theme_vars.get('outer_widget.background.color')
@@ -279,7 +299,14 @@ def set_theme(theme_key: str, app: QCoreApplication, logger: Logger, app_config:
         theme_file = default_themes.get(theme_key)
 
     if not theme_file:
-        logger.warning(f"theme '{theme_key}' not found")
+        # sin este respaldo un tema borrado (o retirado) dejaba la aplicación sin hoja de estilo
+        from bauh.view.core.config import DEFAULT_THEME
+
+        if theme_key != DEFAULT_THEME:
+            logger.warning(f"theme '{theme_key}' not found: falling back to '{DEFAULT_THEME}'")
+            set_theme(theme_key=DEFAULT_THEME, app=app, logger=logger, app_config=app_config)
+        else:
+            logger.warning(f"theme '{theme_key}' not found")
         return
 
     with open(theme_file) as f:
@@ -311,10 +338,15 @@ def set_theme(theme_key: str, app: QCoreApplication, logger: Logger, app_config:
         logger.warning("theme file '{}' could not be interpreted and processed".format(theme_file))
         return
 
-    app.setStyleSheet(processed[0])
-    logger.info("theme file '{}' loaded".format(theme_file))
+    _clear_stylesheet_palettes(app)
 
+    # La paleta va antes que la hoja: al aplicar el QSS, Qt copia la paleta vigente en cada
+    # widget que colorea. Aplicada después, los temas claros heredaban los fondos oscuros del
+    # tema anterior (la tabla negra con el texto negro al pasar de Aurora a Claro).
     if app_config and not app_config.get('ui', {}).get('system_theme'):
         apply_theme_palette(app, read_theme_vars(theme_key, available_themes, dynamic_colors))
+
+    app.setStyleSheet(processed[0])
+    logger.info("theme file '{}' loaded".format(theme_file))
 
     update_theme_watcher(theme_key=theme_key, app=app, logger=logger, available_themes=available_themes)

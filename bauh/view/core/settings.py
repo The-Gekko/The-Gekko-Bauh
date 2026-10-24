@@ -12,11 +12,10 @@ from bauh.api.abstract.context import ApplicationContext
 from bauh.api.abstract.controller import SoftwareManager, SettingsController, SettingsView
 from bauh.api.abstract.view import TabComponent, InputOption, TextComponent, MultipleSelectComponent, \
     PanelComponent, FormComponent, TabGroupComponent, SingleSelectComponent, SelectViewType, TextInputComponent, \
-    FileChooserComponent, RangeInputComponent, ViewComponentAlignment, ColorPickerComponent
+    FileChooserComponent, ViewComponentAlignment
 from bauh.commons.view_utils import new_select
 from bauh.view.core import timeshift
-from bauh.view.core.config import CoreConfigManager, BACKUP_REMOVE_METHODS, BACKUP_DEFAULT_REMOVE_METHOD, \
-    DEFAULT_CUSTOM_THEME
+from bauh.view.core.config import CoreConfigManager, BACKUP_REMOVE_METHODS, BACKUP_DEFAULT_REMOVE_METHOD
 from bauh.view.core.downloader import AdaptableFileDownloader
 from bauh.view.util import translation
 
@@ -89,7 +88,6 @@ class GenericSettingsManager(SettingsController):
 
         tabs.append(self._gen_general_settings(core_config))
         tabs.append(self._gen_interface_settings(core_config))
-        tabs.append(self._gen_custom_theme_settings(core_config))
         tabs.append(self._gen_tray_settings(core_config))
         tabs.append(self._gen_adv_settings(core_config))
 
@@ -105,18 +103,9 @@ class GenericSettingsManager(SettingsController):
 
     def _gen_adv_settings(self, core_config: dict) -> TabComponent:
 
-        input_data_exp = TextInputComponent(label=self.i18n['core.config.mem_cache.data_exp'],
-                                            tooltip=self.i18n['core.config.mem_cache.data_exp.tip'],
-                                            value=str(core_config['memory_cache']['data_expiration']),
-                                            only_int=True,
-                                            id_="data_exp")
-
-        input_icon_exp = TextInputComponent(label=self.i18n['core.config.mem_cache.icon_exp'],
-                                            tooltip=self.i18n['core.config.mem_cache.icon_exp.tip'],
-                                            value=str(core_config['memory_cache']['icon_expiration']),
-                                            only_int=True,
-                                            id_="icon_exp")
-
+        # La caducidad de la caché en memoria y la «verificación única de sistema» ya no se
+        # muestran: son valores internos que nadie necesita tocar desde la interfaz. Siguen
+        # en config.yml (memory_cache, system.single_dependency_checking) con sus valores.
         select_trim = new_select(label=self.i18n['core.config.trim.after_upgrade'],
                                  tip=self.i18n['core.config.trim.after_upgrade.tip'],
                                  value=core_config['disk']['trim']['after_upgrade'],
@@ -125,16 +114,6 @@ class GenericSettingsManager(SettingsController):
                                        (self.i18n['ask'].capitalize(), None, None)],
                                  id_='trim_after_upgrade')
 
-        select_dep_check = self._gen_bool_component(label=self.i18n['core.config.system.dep_checking'],
-                                                    tooltip=self.i18n['core.config.system.dep_checking.tip'],
-                                                    value=core_config['system']['single_dependency_checking'],
-                                                    id_='dep_check')
-
-        select_check_ssl = self._gen_bool_component(label=self.i18n['core.config.download.check_ssl'],
-                                                    tooltip=self.i18n['core.config.download.check_ssl.tip'],
-                                                    value=core_config['download']['check_ssl'],
-                                                    id_='download.check_ssl')
-
         select_dmthread = self._gen_bool_component(label=self.i18n['core.config.download.multithreaded'],
                                                    tooltip=self.i18n['core.config.download.multithreaded.tip'],
                                                    id_="down_mthread",
@@ -142,8 +121,7 @@ class GenericSettingsManager(SettingsController):
 
         select_mthread_client = self._gen_multithread_client_select(core_config)
 
-        inputs = [select_dmthread, select_mthread_client, select_check_ssl, select_trim, select_dep_check,
-                  input_data_exp, input_icon_exp]
+        inputs = [select_dmthread, select_mthread_client, select_trim]
         panel = PanelComponent([FormComponent(inputs, spaces=False)], id_='advanced')
         return TabComponent(self.i18n['core.config.tab.advanced'].capitalize(), panel, None, 'core.adv')
 
@@ -167,50 +145,6 @@ class GenericSettingsManager(SettingsController):
                           id_="mthread_client",
                           opts=mthread_client_opts,
                           value=current_mthread_client)
-
-    def _gen_custom_theme_settings(self, core_config: dict) -> TabComponent:
-        ct_config = core_config.get('custom_theme') or {}
-
-        enabled = self._gen_bool_component(label=self.i18n['core.config.custom_theme.enabled'],
-                                           tooltip=self.i18n['core.config.custom_theme.enabled.tip'],
-                                           value=bool(ct_config.get('enabled', DEFAULT_CUSTOM_THEME['enabled'])),
-                                           id_='ct_enabled')
-
-        reset_vals = self._gen_bool_component(label=self.i18n['core.config.custom_theme.reset'],
-                                              tooltip=self.i18n['core.config.custom_theme.reset.tip'],
-                                              value=False,
-                                              id_='ct_reset')
-
-        bg_color = ColorPickerComponent(id_='ct_bg',
-                                        label=self.i18n['core.config.custom_theme.bg_color'],
-                                        value=ct_config.get('background_color',
-                                                            DEFAULT_CUSTOM_THEME['background_color']),
-                                        tooltip=self.i18n['core.config.custom_theme.bg_color.tip'])
-        text_color = ColorPickerComponent(id_='ct_text',
-                                          label=self.i18n['core.config.custom_theme.text_color'],
-                                          value=ct_config.get('text_color', DEFAULT_CUSTOM_THEME['text_color']),
-                                          tooltip=self.i18n['core.config.custom_theme.text_color.tip'])
-        acc_color = ColorPickerComponent(id_='ct_acc',
-                                         label=self.i18n['core.config.custom_theme.accent_color'],
-                                         value=ct_config.get('accent_color', DEFAULT_CUSTOM_THEME['accent_color']),
-                                         tooltip=self.i18n['core.config.custom_theme.accent_color.tip'])
-
-        opacity = RangeInputComponent(id_='ct_opacity',
-                                      label=self.i18n['core.config.custom_theme.opacity'],
-                                      tooltip=self.i18n['core.config.custom_theme.opacity.tip'],
-                                      min_value=10, max_value=100, step_value=1,
-                                      value=int(ct_config.get('opacity', DEFAULT_CUSTOM_THEME['opacity']) or 100))
-
-        bg_img_path = str(ct_config.get('background_image')) if ct_config.get('background_image') else None
-        bg_img = FileChooserComponent(id_='ct_bg_img',
-                                      label=self.i18n['core.config.custom_theme.bg_image'],
-                                      tooltip=self.i18n['core.config.custom_theme.bg_image.tip'],
-                                      file_path=bg_img_path,
-                                      allowed_extensions={'png', 'jpg', 'jpeg'})
-
-        sub_comps = [FormComponent([enabled, bg_color, text_color, acc_color, opacity, bg_img, reset_vals], spaces=False)]
-        return TabComponent(self.i18n['core.config.tab.custom_theme'].capitalize(),
-                            PanelComponent(sub_comps, id_='custom_theme'), None, 'core.custom_theme')
 
     def _gen_tray_settings(self, core_config: dict) -> TabComponent:
         input_update_interval = TextInputComponent(label=self.i18n['core.config.updates.interval'].capitalize(),
@@ -238,29 +172,29 @@ class GenericSettingsManager(SettingsController):
         return TabComponent(self.i18n['core.config.tab.tray'].capitalize(),
                             PanelComponent(sub_comps, id_='tray'), None, 'core.tray')
 
-    def _gen_interface_settings(self, core_config: dict) -> TabComponent:
-        select_hdpi = self._gen_bool_component(label=self.i18n['core.config.ui.hdpi'],
-                                               tooltip=self.i18n['core.config.ui.hdpi.tip'],
-                                               value=bool(core_config['ui']['hdpi']),
-                                               id_='hdpi')
+    # escalas que ofrece «Escala», además de «Automática» (la de cada pantalla)
+    SCALE_FACTORS = (1.0, 1.25, 1.5, 1.75, 2.0)
 
-        scale_tip = self.i18n['core.config.ui.auto_scale.tip'].format('QT_AUTO_SCREEN_SCALE_FACTOR')
-        select_ascale = self._gen_bool_component(label=self.i18n['core.config.ui.auto_scale'],
-                                                 tooltip=scale_tip,
-                                                 value=bool(core_config['ui']['auto_scale']),
-                                                 id_='auto_scale')
-
+    def _gen_scale_select(self, core_config: dict) -> SingleSelectComponent:
+        """Una sola «Escala» en lugar de HDPI, autoescala y factor, que se pisaban entre sí."""
         try:
-            scale = float(core_config['ui']['scale_factor'])
+            factor = max(float(core_config['ui']['scale_factor']), 1.0)
+        except (TypeError, ValueError):
+            factor = 1.0
 
-            if scale < 1.0:
-                scale = 1.0
-        except ValueError:
-            scale = 1.0
+        opts = [(self.i18n['core.config.ui.scale.auto'], 'auto', None)]
+        factors = list(self.SCALE_FACTORS)
 
-        select_scale = RangeInputComponent(id_="scalef", label=self.i18n['core.config.ui.scale_factor'] + ' (%)',
-                                           tooltip=self.i18n['core.config.ui.scale_factor.tip'],
-                                           min_value=100, max_value=400, step_value=5, value=int(scale * 100))
+        if factor not in factors:  # un factor a medida de antes se conserva como opción
+            factors = sorted(factors + [factor])
+
+        opts.extend((f'{round(f * 100)} %', f'{f:g}', None) for f in factors)
+        current = 'auto' if core_config['ui'].get('auto_scale') else f'{factor:g}'
+        return new_select(label=self.i18n['core.config.ui.scale'], tip=self.i18n['core.config.ui.scale.tip'],
+                          id_='scale', opts=opts, value=current, type_=SelectViewType.COMBO, max_width=-1)
+
+    def _gen_interface_settings(self, core_config: dict) -> TabComponent:
+        select_scale = self._gen_scale_select(core_config)
 
         if not core_config['ui']['qt_style']:
             cur_style = QApplication.instance().property('qt_style')
@@ -305,7 +239,7 @@ class GenericSettingsManager(SettingsController):
                                                  id_="down_icons",
                                                  value=core_config['download']['icons'])
 
-        sub_comps = [FormComponent([select_hdpi, select_ascale, select_scale,
+        sub_comps = [FormComponent([select_scale,
                                     select_dicons, select_system_theme,
                                     select_style, input_maxd], spaces=False)]
 
@@ -353,17 +287,6 @@ class GenericSettingsManager(SettingsController):
                                                  value=bool(core_config['boot']['load_apps']),
                                                  id_='boot.load_apps')
 
-        sel_sugs = self._gen_bool_component(label=self.i18n['core.config.suggestions.activated'].capitalize(),
-                                            tooltip=self.i18n['core.config.suggestions.activated.tip'].capitalize(),
-                                            id_="sugs_enabled",
-                                            value=bool(core_config['suggestions']['enabled']))
-
-        inp_sugs = TextInputComponent(label=self.i18n['core.config.suggestions.by_type'],
-                                      tooltip=self.i18n['core.config.suggestions.by_type.tip'],
-                                      value=str(core_config['suggestions']['by_type']),
-                                      only_int=True,
-                                      id_="sugs_by_type")
-
         inp_reboot = new_select(label=self.i18n['core.config.updates.reboot'],
                                 tip=self.i18n['core.config.updates.reboot.tip'],
                                 id_='ask_for_reboot',
@@ -372,7 +295,7 @@ class GenericSettingsManager(SettingsController):
                                 opts=[(self.i18n['ask'].capitalize(), True, None),
                                       (self.i18n['no'].capitalize(), False, None)])
 
-        inputs = [sel_locale, sel_store_pwd, sel_sys_notify, sel_load_apps, inp_reboot, sel_sugs, inp_sugs]
+        inputs = [sel_locale, sel_store_pwd, sel_sys_notify, sel_load_apps, inp_reboot]
         panel = PanelComponent([FormComponent(inputs, spaces=False)], id_='general')
         return TabComponent(self.i18n['core.config.tab.general'].capitalize(), panel, None, 'core.gen')
 
@@ -393,7 +316,6 @@ class GenericSettingsManager(SettingsController):
                        advanced: PanelComponent,
                        backup: PanelComponent,
                        ui: PanelComponent,
-                       custom_theme: PanelComponent,
                        tray: PanelComponent,
                        gems_panel: PanelComponent) -> Tuple[bool, Optional[List[str]]]:
         core_config = self.configman.get_config()
@@ -409,14 +331,8 @@ class GenericSettingsManager(SettingsController):
         notifications = gen_form.get_component('sys_notify', SingleSelectComponent).get_selected()
         core_config['system']['notifications'] = notifications
 
-        suggestions = gen_form.get_component('sugs_enabled', SingleSelectComponent).get_selected()
-        core_config['suggestions']['enabled'] = suggestions
-
         store_root_pwd = gen_form.get_component('store_pwd', SingleSelectComponent).get_selected()
         core_config['store_root_password'] = store_root_pwd
-
-        sugs_by_type = gen_form.get_component('sugs_by_type', TextInputComponent).get_int_value()
-        core_config['suggestions']['by_type'] = sugs_by_type
 
         ask_reboot = gen_form.get_component('ask_for_reboot', SingleSelectComponent).get_selected()
         core_config['updates']['ask_for_reboot'] = ask_reboot
@@ -433,22 +349,9 @@ class GenericSettingsManager(SettingsController):
         mthread_client = adv_form.get_component('mthread_client', SingleSelectComponent).get_selected()
         core_config['download']['multithreaded_client'] = mthread_client
 
-        check_ssl = adv_form.get_component('download.check_ssl', SingleSelectComponent).get_selected()
-        core_config['download']['check_ssl'] = check_ssl
-
         if isinstance(self.file_downloader, AdaptableFileDownloader):
             self.file_downloader.multithread_client = mthread_client
             self.file_downloader.multithread_enabled = download_mthreaded
-            self.file_downloader.check_ssl = check_ssl
-
-        single_dep_check = adv_form.get_component('dep_check', SingleSelectComponent).get_selected()
-        core_config['system']['single_dependency_checking'] = single_dep_check
-
-        data_exp = adv_form.get_component('data_exp', TextInputComponent).get_int_value()
-        core_config['memory_cache']['data_expiration'] = data_exp
-
-        icon_exp = adv_form.get_component('icon_exp', TextInputComponent).get_int_value()
-        core_config['memory_cache']['icon_expiration'] = icon_exp
 
         trim_after_upgrade = adv_form.get_component('trim_after_upgrade', SingleSelectComponent).get_selected()
         core_config['disk']['trim']['after_upgrade'] = trim_after_upgrade
@@ -488,17 +391,14 @@ class GenericSettingsManager(SettingsController):
         ui_form = ui.get_component_by_idx(0, FormComponent)
 
         core_config['download']['icons'] = ui_form.get_component('down_icons', SingleSelectComponent).get_selected()
-        core_config['ui']['hdpi'] = ui_form.get_component('hdpi', SingleSelectComponent).get_selected()
-
+        scale = ui_form.get_component('scale', SingleSelectComponent).get_selected()
         previous_autoscale = core_config['ui']['auto_scale']
-
-        core_config['ui']['auto_scale'] = ui_form.get_component('auto_scale', SingleSelectComponent).get_selected()
+        core_config['ui']['auto_scale'] = scale == 'auto'
+        core_config['ui']['scale_factor'] = 1.0 if scale == 'auto' else float(scale)
 
         if previous_autoscale and not core_config['ui']['auto_scale']:
             self.logger.info("Deleting environment variable QT_AUTO_SCREEN_SCALE_FACTOR")
-            del os.environ['QT_AUTO_SCREEN_SCALE_FACTOR']
-
-        core_config['ui']['scale_factor'] = ui_form.get_component('scalef').value / 100
+            os.environ.pop('QT_AUTO_SCREEN_SCALE_FACTOR', None)
 
         table_max = ui_form.get_component('table_max', TextInputComponent).get_int_value()
         core_config['ui']['table']['max_displayed'] = table_max
@@ -515,26 +415,6 @@ class GenericSettingsManager(SettingsController):
             QApplication.instance().setProperty('qt_style', style)
 
         core_config['ui']['system_theme'] = ui_form.get_component('system_theme', SingleSelectComponent).get_selected()
-
-        # custom theme
-        if custom_theme:
-            ct_form = custom_theme.get_component_by_idx(0, FormComponent)
-            
-            if 'custom_theme' not in core_config:
-                core_config['custom_theme'] = {}
-                
-            reset_vals = ct_form.get_component('ct_reset', SingleSelectComponent).get_selected()
-            if reset_vals:
-                core_config['custom_theme'] = dict(DEFAULT_CUSTOM_THEME)
-            else:
-                core_config['custom_theme']['enabled'] = ct_form.get_component('ct_enabled', SingleSelectComponent).get_selected()
-                core_config['custom_theme']['background_color'] = ct_form.get_component('ct_bg', ColorPickerComponent).value
-                core_config['custom_theme']['text_color'] = ct_form.get_component('ct_text', ColorPickerComponent).value
-                core_config['custom_theme']['accent_color'] = ct_form.get_component('ct_acc', ColorPickerComponent).value
-                core_config['custom_theme']['opacity'] = ct_form.get_component('ct_opacity', RangeInputComponent).value
-                
-                bg_img_path = ct_form.get_component('ct_bg_img', FileChooserComponent).file_path
-                core_config['custom_theme']['background_image'] = bg_img_path if bg_img_path else None
 
         # gems
         checked_gems = gems_panel.components[1].get_component('gems', MultipleSelectComponent).get_selected_values()
@@ -586,7 +466,6 @@ class GenericSettingsManager(SettingsController):
                                                   tray=tabs.get_tab('core.tray').get_content(PanelComponent),
                                                   backup=bkp.get_content(PanelComponent) if bkp else None,
                                                   ui=tabs.get_tab('core.ui').get_content(PanelComponent),
-                                                  custom_theme=tabs.get_tab('core.custom_theme').get_content(PanelComponent) if tabs.get_tab('core.custom_theme') else None,
                                                   gems_panel=tabs.get_tab('core.types').get_content(PanelComponent))
             if errors:
                 warnings.extend(errors)

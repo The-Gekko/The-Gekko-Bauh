@@ -2,7 +2,7 @@ from typing import Set, Optional
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon
 from bauh.view.qt.window.constants import ACTION_APPLY_FILTERS, CHECK_INSTALLED, CHECK_VERIFIED, COMBO_TYPES, \
-    COMBO_CATEGORIES, INP_NAME, GROUP_FILTERS, GROUP_UPPER_BAR, GROUP_LOWER_BTS
+    COMBO_CATEGORIES, GROUP_FILTERS, GROUP_UPPER_BAR, GROUP_LOWER_BTS
 from bauh.view.qt import commons
 from bauh.view.qt.commons import PackageFilters
 
@@ -14,8 +14,9 @@ class WindowFiltersMixin:
         'pkg_idx', 'searched_term', 'search_performed', 'filter_updates', 'filter_installed',
         'filter_only_apps', 'filter_only_verified', 'category_filter', 'type_filter',
         'any_category_filter', 'any_type_filter', 'cache_type_filter_icons'
-      - widgets: 'check_installed', 'check_verified', 'combo_categories', 'combo_filter_type', 'input_name'
-      - colaboradores: 'comp_manager' (QtComponentsManager), 'thread_apply_filters' (ApplyFilters)
+      - widgets: 'check_installed', 'check_verified', 'combo_categories', 'combo_filter_type'
+      - colaboradores: 'comp_manager' (QtComponentsManager), 'thread_apply_filters' (ApplyFilters),
+        '_timer_name_filter' (QTimer); estado '_name_filter' y 'current_action_id'
       - metodos: '_begin_action', '_finish_action', '_change_checkbox', '_resize', 'update_bt_upgrade',
         'stop_notifying_package_states'
     """
@@ -24,12 +25,34 @@ class WindowFiltersMixin:
         self.stop_notifying_package_states()
         self._begin_action(action_label=self.i18n['manage_window.status.filtering'], action_id=ACTION_APPLY_FILTERS)
         self.comp_manager.disable_visible_from_groups(GROUP_UPPER_BAR, GROUP_LOWER_BTS)
-        self.comp_manager.set_component_read_only(INP_NAME, True)
         self.thread_apply_filters.pkgs = self.pkgs_available
         self.thread_apply_filters.index = self.pkg_idx
         self.thread_apply_filters.filters = self._gen_filters()
         self.thread_apply_filters.start()
         self.setFocus(Qt.NoFocusReason)
+
+    def _handle_search_text_edited(self, text: str):
+        """Cada tecla en el buscador reprograma el filtro de lo que se ve (Intro busca aparte)."""
+        self._name_filter = text.strip()
+        self._timer_name_filter.start()
+
+    def _apply_live_name_filter(self):
+        """Filtra lo que ya se ve mientras se escribe.
+
+        No usa begin_apply_filters: esa acción oculta el buscador y le quita el foco, así que
+        cada tecla dejaría al usuario sin cursor. Aquí solo se relanza el hilo de filtros.
+        """
+        if not self.pkgs_available:
+            return
+
+        if self.current_action_id is not None or self.thread_apply_filters.isRunning():
+            self._timer_name_filter.start()  # se reintenta cuando acabe lo que está en marcha
+            return
+
+        self.thread_apply_filters.pkgs = self.pkgs_available
+        self.thread_apply_filters.index = self.pkg_idx
+        self.thread_apply_filters.filters = self._gen_filters()
+        self.thread_apply_filters.start()
 
     def _finish_apply_filters(self):
         self._finish_action(ACTION_APPLY_FILTERS)
@@ -66,7 +89,7 @@ class WindowFiltersMixin:
         self.begin_apply_filters()
 
     def _gen_filters(self, ignore_updates: bool=False) -> PackageFilters:
-        return PackageFilters(category=self.category_filter, display_limit=0 if self.filter_updates else self.display_limit, name=self.input_name.text().strip(), only_apps=False if self.search_performed else self.filter_only_apps, only_verified=self.filter_only_verified, only_updates=False if ignore_updates else self.filter_updates, only_installed=self.filter_installed, search=self.searched_term, type=self.type_filter)
+        return PackageFilters(category=self.category_filter, display_limit=0 if self.filter_updates else self.display_limit, name=self._name_filter, only_apps=False if self.search_performed else self.filter_only_apps, only_verified=self.filter_only_verified, only_updates=False if ignore_updates else self.filter_updates, only_installed=self.filter_installed, search=self.searched_term, type=self.type_filter)
 
     def _update_installed_filter(self, keep_state: bool=True, hide: bool=False, installed_available: Optional[bool]=None):
         if installed_available is not None:

@@ -160,7 +160,7 @@ class PreparePanel(QWidget, TaskManager):
     signal_password_response = pyqtSignal(bool, str)
 
     def __init__(self, context: ApplicationContext, manager: SoftwareManager,
-                 i18n: I18n, manage_window: QWidget, app_config: dict, force_suggestions: bool = False):
+                 i18n: I18n, manage_window: QWidget, app_config: dict):
         super(PreparePanel, self).__init__(flags=Qt.CustomizeWindowHint | Qt.WindowTitleHint)
         self.i18n = i18n
         self.context = context
@@ -177,7 +177,6 @@ class PreparePanel(QWidget, TaskManager):
         self.ftasks = 0
         self.started_at = None
         self.self_close = False
-        self.force_suggestions = force_suggestions
 
         self.prepare_thread = Prepare(self.context, manager, self.i18n)
         self.prepare_thread.signal_register.connect(self.register_task)
@@ -503,9 +502,7 @@ class PreparePanel(QWidget, TaskManager):
         if self.isVisible():
             self.manage_window.show()
 
-            if self.force_suggestions:
-                self.manage_window.begin_load_suggestions(filter_installed=True)
-            elif self.app_config['boot']['load_apps']:
+            if self.app_config['boot']['load_apps']:
                 self.manage_window.begin_refresh_packages()
             else:
                 self.manage_window.load_without_packages()

@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon, QCursor
 from PyQt5.QtWidgets import QWidget, QCheckBox, QHeaderView, QApplication, QMenu
@@ -6,6 +6,7 @@ from bauh.api.abstract.view import MessageType
 from bauh.context import set_theme
 from bauh.view.qt.window.constants import CHECK_DETAILS, BT_CUSTOM_ACTIONS, GROUP_LOWER_BTS
 from bauh.stylesheet import read_all_themes_metadata, ThemeMetadata
+from bauh.view.core import matugen
 from bauh.view.core.config import CoreConfigManager
 from bauh.view.qt import dialog
 from bauh.view.qt.about import AboutDialog
@@ -25,7 +26,7 @@ class WindowUIMixin:
         'toolbar_status', 'table_apps', 'table_container', 'textarea_details', 'check_details', 'progress_bar'
       - colaboradores: 'comp_manager' (QtComponentsManager), 'thread_animate_progress', 'thread_save_theme'
       - senales: 'signal_user_res'
-      - metodos: 'begin_execute_custom_action'
+      - metodos: 'begin_execute_custom_action', '_sync_matugen_button'
     """
 
     def _update_process_progress(self, val: int):
@@ -179,21 +180,53 @@ class WindowUIMixin:
 
         def _change_theme():
             # el config en memoria debe reflejar el tema elegido: si no, el watcher de gtk.css
-            # vuelve a aplicar el tema anterior y se pierden los overrides de 'custom_theme'
+            # vuelve a aplicar el tema anterior
             self.config['ui']['theme'] = theme.key
             set_theme(theme_key=theme.key, app=QApplication.instance(), logger=self.context.logger,
                       app_config=self.config)
             self.thread_save_theme.theme_key = theme.key
             self.thread_save_theme.start()
+            self._sync_matugen_button()
         return QCustomMenuAction(label=theme.get_i18n_name(self.i18n), action=_change_theme, parent=menu, tooltip=theme.get_i18n_description(self.i18n))
 
     def show_themes(self):
         menu_row = QMenu()
         menu_row.setCursor(QCursor(Qt.PointingHandCursor))
         menu_row.addActions(self._map_theme_actions(menu_row))
+        matugen_action = self._map_matugen_action(menu_row)
+        if matugen_action:
+            menu_row.addSeparator()
+            menu_row.addAction(matugen_action)
         menu_row.adjustSize()
         menu_row.popup(QCursor.pos())
         menu_row.exec_()
+
+    def _map_matugen_action(self, menu: QMenu) -> Optional[QCustomMenuAction]:
+        """Entrada para conectar matugen con bauh; sin matugen instalado no se ofrece."""
+        if not matugen.is_installed():
+            return None
+        if matugen.is_registered():
+            action = QCustomMenuAction(parent=menu, label=self.i18n['manage_window.bt_themes.matugen.connected'],
+                                       tooltip=self.i18n['manage_window.bt_themes.matugen.connected.tip'])
+            action.button.setEnabled(False)
+            return action
+        return QCustomMenuAction(parent=menu, label=self.i18n['manage_window.bt_themes.matugen.connect'],
+                                 action=self._connect_matugen,
+                                 tooltip=self.i18n['manage_window.bt_themes.matugen.connect.tip'])
+
+    def _connect_matugen(self):
+        title = self.i18n['manage_window.matugen.connect.title']
+        if not ConfirmationDialog(title=title, body=self.i18n['manage_window.matugen.connect.body'], i18n=self.i18n).ask():
+            return
+        ok, detail = matugen.register()
+        if ok:
+            body = self.i18n['manage_window.matugen.connect.done']
+            if detail:
+                body += '<p>{}</p>'.format(self.i18n['manage_window.matugen.connect.backup'].format(detail))
+            dialog.show_message(title=title, body=body, type_=MessageType.INFO)
+        else:
+            dialog.show_message(title=title, body=self.i18n['manage_window.matugen.connect.error'].format(detail),
+                                type_=MessageType.ERROR)
 
     def _map_theme_actions(self, menu: QMenu) -> List[QCustomMenuAction]:
         core_config = CoreConfigManager().get_config()

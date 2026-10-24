@@ -145,14 +145,6 @@ QSearchBar QLineEdit#inp_search:disabled {
     background-color: @field.disabled.background.color;
 }
 
-QSearchBar#name_filter QPushButton#search_button {
-    qproperty-icon: url("@style_dir/img/filter.svg");
-}
-
-QSearchBar#name_filter QPushButton#search_button[focused = "true"] {
-    qproperty-icon: url("@style_dir/img/filter_focused.svg");
-}
-
 FormQt IconButton#clean_field {
     qproperty-icon: url("@style_dir/img/clean.svg");
 }
@@ -214,10 +206,6 @@ ManageWindow QPushButton#bt_upgrade {
     qproperty-icon: url("@style_dir/img/upgrade.svg");
 }
 
-ManageWindow IconButton#suggestions {
-    qproperty-icon: url("@style_dir/img/suggestions.svg");
-}
-
 ManageWindow IconButton#themes {
     qproperty-icon: url("@style_dir/img/themes.svg");
 }
@@ -242,6 +230,7 @@ PackagesTable QLabel#icon_publisher_verified {
 
 PackagesTable QLabel[publisher_known = "false"]{
     color: @table.app_publisher.unknown.font.color;
+    font-style: italic;
 }
 
 PackagesTable QLabel:disabled[publisher_known = "false"]{
@@ -260,14 +249,6 @@ PackagesTable IconButton#app_run[_enabled = "false"] {
 PackagesTable IconButton#app_actions {
     qproperty-icon: url("@style_dir/img/menu.svg");
     qproperty-iconSize: 14px 14px;
-}
-
-PackagesTable IconButton#app_screenshots {
-    qproperty-icon: url("@style_dir/img/camera.svg");
-}
-
-PackagesTable IconButton#app_screenshots[_enabled = "false"] {
-    qproperty-icon: url("@style_dir/img/camera_disabled.svg");
 }
 
 PackagesTable IconButton#app_info {

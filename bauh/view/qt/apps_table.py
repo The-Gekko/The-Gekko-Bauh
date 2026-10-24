@@ -5,8 +5,8 @@ from logging import Logger
 from threading import Lock
 from typing import List, Optional, Dict
 
-from PyQt5.QtCore import Qt, QSize
-from PyQt5.QtGui import QPixmap, QIcon, QCursor
+from PyQt5.QtCore import Qt, QSize, QRect, QPoint
+from PyQt5.QtGui import QPixmap, QIcon, QCursor, QPainter
 from PyQt5.QtWidgets import QTableWidget, QTableView, QMenu, QToolButton, QWidget, \
     QHeaderView, QLabel, QHBoxLayout, QToolBar, QSizePolicy
 
@@ -74,8 +74,13 @@ class UpgradeToggleButton(QToolButton):
 
 
 class PackagesTable(QTableWidget):
-    COL_NUMBER = 9
+    COL_NUMBER = 8
     DEFAULT_ICON_SIZE = QSize(28, 28)
+    # El tipo (Arch, Flatpak…) ya no tiene columna propia: va como insignia en la esquina del
+    # icono. Cuando el paquete no tiene icono, el de por defecto ya es el del tipo y no se repite.
+    TYPE_BADGE_SIZE = 14
+    # filas con aire para el icono de 28 px y los botones de acción en forma de píldora
+    ROW_HEIGHT = 46
 
     def __init__(self, parent: QWidget, icon_cache: MemoryCache, download_icons: bool, logger: Logger):
         super(PackagesTable, self).__init__()
@@ -101,10 +106,21 @@ class PackagesTable(QTableWidget):
 
         self.icon_cache = icon_cache
         self.lock_async_data = Lock()
-        self.setRowHeight(80, 80)
+        self.verticalHeader().setMinimumSectionSize(self.ROW_HEIGHT)
+        self.verticalHeader().setDefaultSectionSize(self.ROW_HEIGHT)
+        self.setAlternatingRowColors(True)
         self.cache_type_icon = {}
         self.cache_default_icon: Dict[str, QIcon] = dict()
         self.i18n = self.window.i18n
+
+        # Aviso de lista vacía. Lo decide la ventana (sabe si se buscó algo o si el filtro
+        # de actualizaciones está activo) y la tabla solo lo muestra cuando no hay filas.
+        self.empty_message: Optional[str] = None
+        self.label_empty = QLabel(self.viewport())
+        self.label_empty.setObjectName('table_empty')
+        self.label_empty.setAlignment(Qt.AlignCenter)
+        self.label_empty.setWordWrap(True)
+        self.label_empty.hide()
 
     def has_any_settings(self, pkg: PackageView):
         return pkg.model.has_history() or \
@@ -254,7 +270,7 @@ class PackagesTable(QTableWidget):
         if icon_data:
             for pkg in self.window.pkgs:
                 if pkg.table_index == table_idx:
-                    self._update_icon(self.cellWidget(table_idx, 0), icon_data['icon'])
+                    self._update_icon(self._icon_label(table_idx), icon_data['icon'], show_badge=True)
 
                     if pkg.model.supports_disk_cache() and pkg.model.get_disk_icon_path() and icon_data['bytes']:
                         if not icon_was_cached or not os.path.exists(pkg.model.get_disk_icon_path()):
@@ -264,6 +280,7 @@ class PackagesTable(QTableWidget):
     def update_packages(self, pkgs: List[PackageView], update_check_enabled: bool = True):
         self.setRowCount(0)  # removes the overwrite effect when updates the table
         self.setEnabled(True)
+        self._update_empty_label(show=not pkgs)
 
         if pkgs:
             self.setUpdatesEnabled(False)
@@ -296,9 +313,8 @@ class PackagesTable(QTableWidget):
         self._set_col_version(2, pkg, screen_width)
         self._set_col_description(3, pkg, screen_width)
         self._set_col_publisher(4, pkg, screen_width)
-        self._set_col_type(5, pkg)
-        self._set_col_installed(6, pkg)
-        self._set_col_actions(7, pkg)
+        self._set_col_installed(5, pkg)
+        self._set_col_actions(6, pkg)
 
         if change_update_col and update_check_enabled:
             if pkg.model.installed and not pkg.model.is_update_ignored() and pkg.model.update:
@@ -313,7 +329,7 @@ class PackagesTable(QTableWidget):
             else:
                 col_update = QLabel()
 
-            self.setCellWidget(pkg.table_index, 8, col_update)
+            self.setCellWidget(pkg.table_index, 7, col_update)
 
     def _gen_row_button(self, text: str, name: str, callback, tip: Optional[str] = None) -> QToolButton:
         col_bt = QToolButton()
@@ -359,22 +375,6 @@ class PackagesTable(QTableWidget):
         toolbar.add_space()
         self.setCellWidget(pkg.table_index, col, toolbar)
 
-    def _set_col_type(self, col: int, pkg: PackageView):
-        icon_data = self.cache_type_icon.get(pkg.model.get_type())
-
-        if icon_data is None:
-            icon = QIcon(pkg.model.get_type_icon_path())
-            pixmap = icon.pixmap(self._get_icon_size(icon))
-            icon_data = {'px': pixmap, 'tip': '{}: {}'.format(self.i18n['type'], pkg.get_type_label())}
-            self.cache_type_icon[pkg.model.get_type()] = icon_data
-
-        col_type_icon = QLabel()
-        col_type_icon.setProperty('icon', 'true')
-        col_type_icon.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Preferred)
-        col_type_icon.setPixmap(icon_data['px'])
-        col_type_icon.setToolTip(icon_data['tip'])
-        self.setCellWidget(pkg.table_index, col, col_type_icon)
-
     def _set_col_version(self, col: int, pkg: PackageView, screen_width: int):
         label_version = QLabel(str(pkg.model.version if pkg.model.version else '?'))
         label_version.setObjectName('app_version')
@@ -401,7 +401,7 @@ class PackagesTable(QTableWidget):
         if pkg.model.installed and pkg.model.update and not pkg.model.is_update_ignored() and pkg.model.version and pkg.model.latest_version and pkg.model.version != pkg.model.latest_version:
             tooltip = f"{tooltip} ({self.i18n['version.installed']}: {pkg.model.version}  |  " \
                       f"{self.i18n['version.latest']}: {pkg.model.latest_version})"
-            label_version.setText(f"{label_version.text()} > {pkg.model.latest_version}")
+            label_version.setText(f"{label_version.text()}  →  {pkg.model.latest_version}")
 
             if label_version.sizeHint().width() / screen_width > 0.22:
                 label_version.setText(pkg.model.latest_version)
@@ -450,11 +450,80 @@ class PackagesTable(QTableWidget):
             icon_data = self.icon_cache.get(pkg.model.icon_url)
             icon = icon_data['icon'] if icon_data else self._read_default_icon(pkg)
 
+        badge = self._type_badge(pkg)
         col_icon = QLabel()
-        col_icon.setProperty('icon', 'true')
-        col_icon.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Preferred)
-        self._update_icon(col_icon, icon)
-        self.setCellWidget(pkg.table_index, col, col_icon)
+        col_icon.setObjectName('app_icon')
+        col_icon.setScaledContents(True)
+        col_icon.setToolTip(badge['tip'])
+        col_icon.type_badge = badge['px']
+        is_default_icon = icon is self.cache_default_icon.get(pkg.model.get_default_icon_path())
+        self._update_icon(col_icon, icon, show_badge=not is_default_icon)
+        self.setCellWidget(pkg.table_index, col, self._centered(col_icon))
+
+    def _type_badge(self, pkg: PackageView) -> dict:
+        """Icono pequeño del tipo de paquete y su texto de ayuda, una vez por tipo."""
+        badge = self.cache_type_icon.get(pkg.model.get_type())
+
+        if badge is None:
+            side = self.TYPE_BADGE_SIZE
+            badge = {'px': QIcon(pkg.model.get_type_icon_path()).pixmap(QSize(side, side)),
+                     'tip': '{}: {}'.format(self.i18n['type'], pkg.get_type_label())}
+            self.cache_type_icon[pkg.model.get_type()] = badge
+
+        return badge
+
+    def _icon_pixmap(self, icon: QIcon, badge: Optional[QPixmap]) -> QPixmap:
+        """El icono de la app con la insignia del tipo en la esquina inferior derecha."""
+        size = self.DEFAULT_ICON_SIZE
+        pixmap = icon.pixmap(size)
+
+        if badge is None or badge.isNull():
+            return pixmap
+
+        canvas = QPixmap(size)
+        canvas.fill(Qt.transparent)
+        painter = QPainter(canvas)
+        painter.setRenderHint(QPainter.SmoothPixmapTransform)
+        painter.drawPixmap(QRect(QPoint(0, 0), size), pixmap)
+        side = self.TYPE_BADGE_SIZE
+        painter.drawPixmap(QRect(size.width() - side, size.height() - side, side, side), badge)
+        painter.end()
+        return canvas
+
+    @staticmethod
+    def _centered(label: QLabel) -> QWidget:
+        """Envuelve un icono para centrarlo en la celda.
+
+        Qt estira el widget de una celda a toda su altura y lo pega arriba: con las
+        filas altas el icono quedaba descolgado. El contenedor guarda la etiqueta en
+        'icon_label' para poder cambiar el icono cuando termina de descargarse.
+        """
+        container = QWidget()
+        container.setLayout(QHBoxLayout())
+        container.layout().setContentsMargins(0, 0, 0, 0)
+        container.layout().setAlignment(Qt.AlignCenter)
+        container.layout().addWidget(label)
+        container.icon_label = label
+        return container
+
+    def _icon_label(self, row: int) -> Optional[QLabel]:
+        cell = self.cellWidget(row, 0)
+        return getattr(cell, 'icon_label', cell)
+
+    def show_empty_message(self, message: Optional[str]):
+        """Fija el aviso para la próxima vez que la tabla se quede sin filas."""
+        self.empty_message = message
+        self._update_empty_label(show=self.rowCount() == 0)
+
+    def _update_empty_label(self, show: bool):
+        visible = show and bool(self.empty_message)
+        self.label_empty.setText(self.empty_message or '')
+        self.label_empty.setGeometry(self.viewport().rect())
+        self.label_empty.setVisible(visible)
+
+    def resizeEvent(self, event):
+        super(PackagesTable, self).resizeEvent(event)
+        self.label_empty.setGeometry(self.viewport().rect())
 
     def _set_col_name(self, col: int, pkg: PackageView, screen_width: int):
         col_name = QLabel()
@@ -480,8 +549,10 @@ class PackagesTable(QTableWidget):
 
         self.setCellWidget(pkg.table_index, col, col_name)
 
-    def _update_icon(self, label: QLabel, icon: QIcon):
-        label.setPixmap(icon.pixmap(self._get_icon_size(icon)))
+    def _update_icon(self, label: Optional[QLabel], icon: QIcon, show_badge: bool = False):
+        if label is not None:
+            badge = getattr(label, 'type_badge', None) if show_badge else None
+            label.setPixmap(self._icon_pixmap(icon, badge))
 
     def _get_icon_size(self, icon: QIcon) -> QSize:
         return self.DEFAULT_ICON_SIZE
@@ -586,26 +657,19 @@ class PackagesTable(QTableWidget):
             bt.setEnabled(bool(settings))
             toolbar.layout().addWidget(bt)
 
-        if not pkg.model.installed:
-            def show_screenshots():
-                self.window.begin_show_screenshots(pkg)
-
-            bt = IconButton(i18n=self.i18n, action=show_screenshots,
-                            tooltip=self.i18n['action.screenshots.tooltip'])
-            bt.setObjectName('app_screenshots')
-
-            if not pkg.model.has_screenshots():
-                bt.setEnabled(False)
-                bt.setProperty('_enabled', 'false')
-
-            toolbar.layout().addWidget(bt)
+        # Las capturas viven ahora dentro de la ficha de la app. Si un paquete tuviera capturas
+        # pero no ficha, este mismo botón abre directamente las capturas para no perderlas.
+        has_info, has_screenshots = bool(pkg.model.has_info()), bool(pkg.model.has_screenshots())
 
         def show_info():
-            self.window.begin_show_info(pkg)
+            if has_info:
+                self.window.begin_show_info(pkg)
+            else:
+                self.window.begin_show_screenshots(pkg)
 
         bt = IconButton(i18n=self.i18n, action=show_info, tooltip=self.i18n['action.info.tooltip'])
         bt.setObjectName('app_info')
-        bt.setEnabled(bool(pkg.model.has_info()))
+        bt.setEnabled(has_info or has_screenshots)
         toolbar.layout().addWidget(bt)
 
         self.setCellWidget(pkg.table_index, col, toolbar)

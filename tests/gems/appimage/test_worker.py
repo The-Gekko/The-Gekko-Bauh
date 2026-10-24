@@ -10,10 +10,8 @@ from bauh import __package_name__
 from bauh.gems.appimage import (
     URL_BAUH_FILES,
     URL_COMPRESSED_DATABASES,
-    URL_SUGGESTIONS_FILE,
 )
 from bauh.gems.appimage.worker import (
-    AppImageSuggestionsDownloader,
     DatabaseUpdater,
     extract_tar_safely,
     validate_tar_members,
@@ -152,42 +150,3 @@ class DatabaseUpdaterShouldUpdateTest(TestCase):
     def test_must_return_true_when_timestamp_is_invalid(self):
         self._write_databases('not-a-number')
         self.assertTrue(self.updater.should_update(self.config))
-
-
-class AppImageSuggestionsDownloaderShouldDownloadTest(TestCase):
-
-    def setUp(self):
-        self.tmp_dir = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp_dir.cleanup)
-
-        self.downloader = AppImageSuggestionsDownloader(logger=Mock(), http_client=Mock(), i18n={}, file_url=None)
-        self.downloader._cached_file_path = f'{self.tmp_dir.name}/suggestions.txt'
-        self.downloader._cached_ts_file_path = f'{self.tmp_dir.name}/suggestions.ts'
-        self.config = {'suggestions': {'expiration': 24}}  # horas
-
-    def _write_cache(self, timestamp):
-        with open(self.downloader.cached_file_path, 'w') as f:
-            f.write('5=firefox')
-
-        with open(self.downloader.cached_ts_file_path, 'w') as f:
-            f.write(str(timestamp))
-
-    def test_default_url__must_point_to_the_centralized_files_host(self):
-        self.assertEqual(URL_SUGGESTIONS_FILE, self.downloader._file_url)
-        self.assertTrue(URL_SUGGESTIONS_FILE.startswith(URL_BAUH_FILES))
-
-    def test_must_return_true_when_cache_files_are_missing(self):
-        self.assertTrue(self.downloader.should_download(self.config))
-
-    def test_must_return_false_when_cache_is_recent(self):
-        self._write_cache((datetime.now(timezone.utc) - timedelta(hours=23)).timestamp())
-        self.assertFalse(self.downloader.should_download(self.config))
-
-    def test_must_return_true_when_cache_has_expired(self):
-        self._write_cache((datetime.now(timezone.utc) - timedelta(hours=25)).timestamp())
-        self.assertTrue(self.downloader.should_download(self.config))
-
-    def test_must_return_false_when_a_local_file_is_mapped(self):
-        downloader = AppImageSuggestionsDownloader(logger=Mock(), http_client=Mock(), i18n={},
-                                                   file_url='/tmp/suggestions.txt')
-        self.assertFalse(downloader.should_download(self.config))

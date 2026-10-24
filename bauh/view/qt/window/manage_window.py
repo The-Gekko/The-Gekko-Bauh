@@ -1,7 +1,7 @@
 import logging
 import shutil
 from typing import List, Set, Optional, Dict, Any
-from PyQt5.QtCore import QEvent, Qt, pyqtSignal, QRect
+from PyQt5.QtCore import QEvent, Qt, pyqtSignal, QRect, QTimer
 from PyQt5.QtGui import QIcon, QWindowStateChangeEvent, QCursor, QCloseEvent, QShowEvent
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QCheckBox, QHeaderView, QToolBar, QLabel, QPlainTextEdit, QProgressBar, QPushButton, QComboBox, QApplication, QListView, QSizePolicy, QHBoxLayout, QFrame
 from bauh.api.abstract.cache import MemoryCache
@@ -11,6 +11,7 @@ from bauh.api.abstract.model import SoftwarePackage
 from bauh.api.abstract.view import MessageType
 from bauh.api.http import HttpClient
 from bauh.context import set_theme
+from bauh.stylesheet import dynamic_theme_kind, parse_gtk_matugen_colors
 from bauh.view.qt import commons, qt_utils
 from bauh.view.qt.apps_table import PackagesTable
 from bauh.view.qt.commons import sum_updates_displayed
@@ -18,13 +19,13 @@ from bauh.view.qt.components import new_spacer, IconButton, QtComponentsManager,
 from bauh.view.qt import dialog
 from bauh.view.qt.dialog import ConfirmationDialog
 from bauh.view.qt.qt_utils import get_current_screen_geometry
-from bauh.view.qt.thread import UpgradeSelected, RefreshApps, UninstallPackage, DowngradePackage, ShowPackageInfo, ShowPackageHistory, SearchPackages, InstallPackage, AnimateProgress, NotifyPackagesReady, FindSuggestions, ListWarnings, AsyncAction, LaunchPackage, ApplyFilters, ShowScreenshots, CustomAction, NotifyInstalledLoaded, IgnorePackageUpdates, SaveTheme, StartAsyncAction
+from bauh.view.qt.thread import UpgradeSelected, RefreshApps, UninstallPackage, DowngradePackage, ShowPackageInfo, ShowPackageHistory, SearchPackages, InstallPackage, AnimateProgress, NotifyPackagesReady, ListWarnings, AsyncAction, LaunchPackage, ApplyFilters, ShowScreenshots, CustomAction, NotifyInstalledLoaded, IgnorePackageUpdates, SaveTheme, StartAsyncAction
 from bauh.view.qt.view_index import add_to_index, new_package_index
 from bauh.view.qt.view_model import PackageView, PackageViewStatus
 from bauh.view.util.translation import I18n
 from bauh.view.qt.window.constants import DISPLAY_NAME, BLOCKING_ACTIONS, SEARCH_BAR, BT_INSTALLED, BT_REFRESH, \
-    BT_SUGGESTIONS, BT_UPGRADE, BT_MATUGEN, CHECK_INSTALLED, CHECK_UPDATES, CHECK_APPS, COMBO_TYPES, CHECK_VERIFIED, \
-    COMBO_CATEGORIES, INP_NAME, CHECK_DETAILS, BT_SETTINGS, BT_CUSTOM_ACTIONS, BT_ABOUT, BT_THEMES, GROUP_FILTERS, \
+    BT_UPGRADE, BT_MATUGEN, CHECK_INSTALLED, CHECK_UPDATES, CHECK_APPS, COMBO_TYPES, CHECK_VERIFIED, \
+    COMBO_CATEGORIES, CHECK_DETAILS, BT_SETTINGS, BT_CUSTOM_ACTIONS, BT_ABOUT, BT_THEMES, GROUP_FILTERS, \
     GROUP_VIEW_INSTALLED, GROUP_VIEW_SEARCH, GROUP_UPPER_BAR, GROUP_LOWER_BTS
 
 from bauh.view.qt.window.mixins.actions import WindowActionsMixin
@@ -37,7 +38,7 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
     signal_table_update = pyqtSignal()
     signal_stop_notifying = pyqtSignal()
 
-    def __init__(self, i18n: I18n, icon_cache: MemoryCache, manager: SoftwareManager, config: dict, context: ApplicationContext, http_client: HttpClient, logger: logging.Logger, icon: QIcon, force_suggestions: bool=False):
+    def __init__(self, i18n: I18n, icon_cache: MemoryCache, manager: SoftwareManager, config: dict, context: ApplicationContext, http_client: HttpClient, logger: logging.Logger, icon: QIcon):
         super(ManageWindow, self).__init__()
         self.setObjectName('manage_window')
         self.comp_manager = QtComponentsManager()
@@ -59,9 +60,6 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
         self.setWindowIcon(self.icon_app)
         self.setWindowTitle(DISPLAY_NAME)
         
-        custom_theme_config = self.config.get('custom_theme') or {}
-        opacity = custom_theme_config.get('opacity', 100)
-        self.setWindowOpacity(opacity / 100.0)
         self.layout = QVBoxLayout()
         self.layout.setContentsMargins(6, 4, 6, 4)
         self.layout.setSpacing(3)
@@ -82,6 +80,15 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
         self.search_bar.set_tooltip(i18n['window_manage.search_bar.tooltip'])
         self.search_bar.set_button_tooltip(i18n['window_manage.search_bar.button_tooltip'])
         self.comp_manager.register_component(SEARCH_BAR, self.search_bar, self.toolbar_status.addWidget(self.search_bar))
+        # Un solo buscador: al escribir filtra lo que ya se ve (con una pequeña espera para no
+        # filtrar en cada tecla) y con Intro busca en los repositorios. Antes había además un
+        # campo «Nombre…» en la barra de filtros, y la diferencia entre los dos no se entendía.
+        self._name_filter = ''
+        self._timer_name_filter = QTimer(self)
+        self._timer_name_filter.setSingleShot(True)
+        self._timer_name_filter.setInterval(self.NAME_FILTER_DELAY_MS)
+        self._timer_name_filter.timeout.connect(self._apply_live_name_filter)
+        self.search_bar.inp_search.textEdited.connect(self._handle_search_text_edited)
         self.toolbar_status.addWidget(new_spacer())
         self.layout.addWidget(self.toolbar_status)
         self.toolbar_filters = QWidget()
@@ -140,7 +147,7 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
         self.combo_filter_type.lineEdit().setReadOnly(True)
         self.combo_filter_type.lineEdit().setAlignment(Qt.AlignCenter)
         self.combo_filter_type.activated.connect(self._handle_type_filter)
-        self.combo_filter_type.addItem('--- {} ---'.format(self.i18n['type'].capitalize()), self.any_type_filter)
+        self.combo_filter_type.addItem(self.i18n['manage_window.filter.any_type'], self.any_type_filter)
         self.combo_filter_type.sizePolicy().setRetainSizeWhenHidden(True)
         self.toolbar_filters.layout().addWidget(self.combo_filter_type)
         self.comp_manager.register_component(COMBO_TYPES, self.combo_filter_type)
@@ -155,22 +162,13 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
         self.combo_categories.lineEdit().setAlignment(Qt.AlignCenter)
         self.combo_categories.activated.connect(self._handle_category_filter)
         self.combo_categories.sizePolicy().setRetainSizeWhenHidden(True)
-        self.combo_categories.addItem('--- {} ---'.format(self.i18n['category'].capitalize()), self.any_category_filter)
+        self.combo_categories.addItem(self.i18n['manage_window.filter.any_category'], self.any_category_filter)
         self.toolbar_filters.layout().addWidget(self.combo_categories)
         self.comp_manager.register_component(COMBO_CATEGORIES, self.combo_categories)
         sep2 = QFrame()
         sep2.setFrameShape(QFrame.VLine)
         sep2.setFrameShadow(QFrame.Sunken)
         self.toolbar_filters.layout().addWidget(sep2)
-        self.input_name = QSearchBar(search_callback=self.begin_apply_filters)
-        self.input_name.palette().swap(self.combo_categories.palette())
-        self.input_name.setObjectName('name_filter')
-        self.input_name.set_placeholder(self.i18n['manage_window.name_filter.placeholder'] + '...')
-        self.input_name.set_tooltip(self.i18n['manage_window.name_filter.tooltip'])
-        self.input_name.set_button_tooltip(self.i18n['manage_window.name_filter.button_tooltip'])
-        self.input_name.sizePolicy().setRetainSizeWhenHidden(True)
-        self.toolbar_filters.layout().addWidget(self.input_name)
-        self.comp_manager.register_component(INP_NAME, self.input_name)
         self.toolbar_filters.layout().addWidget(new_spacer())
         toolbar_bts = []
         bt_inst = QPushButton()
@@ -218,6 +216,8 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
         matugen_icon = QIcon.fromTheme('preferences-desktop-theme')
         if not matugen_icon.isNull():
             self.bt_matugen.setIcon(matugen_icon)
+        # interruptor: encendido = colores del fondo de pantalla; apagado = el tema de antes
+        self.bt_matugen.setCheckable(True)
         self.bt_matugen.clicked.connect(self._handle_matugen_toggle)
         self.bt_matugen.sizePolicy().setRetainSizeWhenHidden(True)
         toolbar_bts.append(self.bt_matugen)
@@ -234,6 +234,9 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
             if bt_biggest_size > bt_width:
                 bt.setFixedWidth(bt_biggest_size)
         self.layout.addWidget(self.toolbar_filters)
+        # tema al que vuelve el interruptor Matugen al apagarlo (solo se conoce durante la sesión)
+        self._theme_before_matugen: Optional[str] = None
+        self._sync_matugen_button()
         self.table_container = QWidget()
         self.table_container.setObjectName('table_container')
         self.table_container.setContentsMargins(0, 0, 0, 0)
@@ -292,7 +295,6 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
         self.thread_show_history = self._bind_async_action(ShowPackageHistory(self.manager, self.i18n), finished_call=self._finish_show_history)
         self.thread_search = self._bind_async_action(SearchPackages(i18n, self.manager), finished_call=self._finish_search, only_finished=True)
         self.thread_downgrade = self._bind_async_action(DowngradePackage(self.manager, self.i18n), finished_call=self._finish_downgrade)
-        self.thread_suggestions = self._bind_async_action(FindSuggestions(i18n=i18n, man=self.manager), finished_call=self._finish_load_suggestions, only_finished=True)
         self.thread_launch = self._bind_async_action(LaunchPackage(i18n, self.manager), finished_call=self._finish_launch_package, only_finished=False)
         self.thread_custom_action = self._bind_async_action(CustomAction(manager=self.manager, i18n=self.i18n), finished_call=self._finish_execute_custom_action)
         self.thread_screenshots = self._bind_async_action(ShowScreenshots(i18n, self.manager), finished_call=self._finish_show_screenshots)
@@ -318,13 +320,6 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
         self.container_bottom.setLayout(QHBoxLayout())
         self.container_bottom.layout().setContentsMargins(0, 0, 0, 0)
         self.container_bottom.layout().addWidget(new_spacer())
-        self.load_suggestions = force_suggestions or bool(config['suggestions']['enabled'])
-        self.suggestions_requested = False
-        if self.load_suggestions:
-            bt_sugs = IconButton(action=lambda: self.begin_load_suggestions(filter_installed=True), i18n=i18n, tooltip=self.i18n['manage_window.bt.suggestions.tooltip'])
-            bt_sugs.setObjectName('suggestions')
-            self.container_bottom.layout().addWidget(bt_sugs)
-            self.comp_manager.register_component(BT_SUGGESTIONS, bt_sugs)
         bt_themes = IconButton(self.show_themes, i18n=self.i18n, tooltip=self.i18n['manage_window.bt_themes.tip'])
         bt_themes.setObjectName('themes')
         self.container_bottom.layout().addWidget(bt_themes)
@@ -363,7 +358,6 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
         self._maximized = False
         self.progress_controll_enabled = True
         self.recent_uninstall = False
-        self.types_changed = False
         self.dialog_about = None
         self.first_refresh = True
         self.thread_warnings = ListWarnings(man=manager, i18n=i18n)
@@ -381,15 +375,15 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
         qt_utils.centralize(self)
 
     def _register_groups(self):
-        common_filters = (CHECK_APPS, CHECK_VERIFIED, CHECK_UPDATES, COMBO_CATEGORIES, COMBO_TYPES, INP_NAME)
+        common_filters = (CHECK_APPS, CHECK_VERIFIED, CHECK_UPDATES, COMBO_CATEGORIES, COMBO_TYPES)
         self.comp_manager.register_group(GROUP_FILTERS, False, CHECK_INSTALLED, *common_filters)
-        self.comp_manager.register_group(GROUP_VIEW_SEARCH, False, CHECK_INSTALLED, CHECK_VERIFIED, COMBO_CATEGORIES, COMBO_TYPES, INP_NAME, BT_INSTALLED, BT_SUGGESTIONS, BT_MATUGEN)
+        self.comp_manager.register_group(GROUP_VIEW_SEARCH, False, CHECK_INSTALLED, CHECK_VERIFIED, COMBO_CATEGORIES, COMBO_TYPES, BT_INSTALLED, BT_MATUGEN)
         self.comp_manager.register_group(GROUP_VIEW_INSTALLED, False, BT_REFRESH, BT_UPGRADE, BT_MATUGEN, *common_filters)
         self.comp_manager.register_group(GROUP_UPPER_BAR, False,
                                          CHECK_APPS, CHECK_VERIFIED, CHECK_UPDATES, CHECK_INSTALLED,  # checkboxes
-                                         COMBO_CATEGORIES, COMBO_TYPES, INP_NAME,  # filters
-                                         BT_INSTALLED, BT_SUGGESTIONS, BT_REFRESH, BT_UPGRADE, BT_MATUGEN)  # buttons
-        self.comp_manager.register_group(GROUP_LOWER_BTS, False, BT_SUGGESTIONS, BT_THEMES, BT_CUSTOM_ACTIONS, BT_SETTINGS, BT_ABOUT)
+                                         COMBO_CATEGORIES, COMBO_TYPES,  # filters
+                                         BT_INSTALLED, BT_REFRESH, BT_UPGRADE, BT_MATUGEN)  # buttons
+        self.comp_manager.register_group(GROUP_LOWER_BTS, False, BT_THEMES, BT_CUSTOM_ACTIONS, BT_SETTINGS, BT_ABOUT)
 
     def update_custom_actions(self):
         self.custom_actions = [a for a in self.manager.gen_custom_actions()]
@@ -426,15 +420,13 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
         if self.installed_loaded:
             self.table_apps.stop_file_downloader()
             self.search_bar.clear()
-            self.input_name.set_text('')
+            self._name_filter = ''
             self._begin_action(self.i18n['manage_window.status.installed'])
             self._handle_console_option(False)
             self.comp_manager.set_components_visible(False)
-            self.suggestions_requested = False
             self.search_performed = False
             self.thread_load_installed.start()
         else:
-            self.load_suggestions = False
             self.begin_refresh_packages()
 
     def _finish_loading_installed(self):
@@ -442,14 +434,13 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
         self.comp_manager.set_group_visible(GROUP_VIEW_INSTALLED, True)
         self.update_pkgs(new_pkgs=None, as_installed=True)
         self._hide_filters_no_packages()
-        self._update_bts_installed_and_suggestions()
+        self._update_bt_installed()
         self._set_lower_buttons_visible(True)
         self._reorganize()
 
-    def _update_bts_installed_and_suggestions(self):
+    def _update_bt_installed(self):
         available_types = len(self.manager.get_managed_types())
-        self.comp_manager.set_component_visible(BT_INSTALLED, available_types > 0 and any([self.suggestions_requested, self.search_performed]))
-        self.comp_manager.set_component_visible(BT_SUGGESTIONS, available_types > 0)
+        self.comp_manager.set_component_visible(BT_INSTALLED, available_types > 0 and self.search_performed)
 
     def _update_state_when_pkgs_ready(self):
         if self.progress_bar.isVisible():
@@ -521,6 +512,7 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
             update_check = sum_updates_displayed(pkgs_info) > 0
         else:
             update_check = False
+        self.table_apps.empty_message = self._empty_table_message()
         self.table_apps.update_packages(self.pkgs, update_check_enabled=update_check)
         if not self._maximized:
             self.label_displayed.show()
@@ -548,7 +540,7 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
 
     def update_bt_upgrade(self, pkgs_info: dict=None):
         show_bt_upgrade = False
-        if not any([self.suggestions_requested, self.search_performed]) and (not pkgs_info or pkgs_info['not_installed'] == 0):
+        if not self.search_performed and (not pkgs_info or pkgs_info['not_installed'] == 0):
             for pkg in pkgs_info['pkgs_displayed'] if pkgs_info else self.pkgs:
                 if not pkg.model.is_update_ignored() and pkg.update_checked:
                     show_bt_upgrade = True
@@ -573,7 +565,7 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
             self.comp_manager.set_component_visible(CHECK_UPDATES, False)
 
     def update_pkgs(self, new_pkgs: Optional[List[SoftwarePackage]], as_installed: bool, types: Optional[Set[type]]=None, ignore_updates: bool=False, keep_filters: bool=False) -> bool:
-        self.input_name.set_text('')
+        self._name_filter = ''
         pkgs_info = commons.new_pkgs_info()
         pkg_idx = new_package_index()
         filters = self._gen_filters(ignore_updates=ignore_updates)
@@ -598,14 +590,8 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
                 commons.update_info(pkgv, pkgs_info)
                 add_to_index(pkgv, pkg_idx)
                 commons.apply_filters(pkgv, filters, pkgs_info)
-        if pkgs_info['apps_count'] == 0 and (not self.suggestions_requested):
-            if self.load_suggestions or self.types_changed:
-                if as_installed:
-                    self.pkgs_installed = pkgs_info['pkgs']
-                self.begin_load_suggestions(filter_installed=True)
-                self.load_suggestions = False
-                return False
-            elif not keep_filters:
+        if pkgs_info['apps_count'] == 0:
+            if not keep_filters:
                 self._change_checkbox(self.check_apps, False, 'filter_only_apps', trigger=False)
                 self.check_apps.setCheckable(False)
         elif not keep_filters:
@@ -655,7 +641,6 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
     def _reload(self):
         self.update_custom_actions()
         self.verify_warnings()
-        self.types_changed = True
         self.begin_refresh_packages()
 
     def _blocking_threads(self) -> List[AsyncAction]:
@@ -731,16 +716,58 @@ class ManageWindow(QWidget, WindowActionsMixin, WindowFiltersMixin, WindowUIMixi
             self._can_open_urls = shutil.which('xdg-open')
         return self._can_open_urls
 
-    def _handle_matugen_toggle(self):
-        """Aplica el tema dinamico Matugen y lo persiste con el mismo mecanismo que el menu de temas."""
-        theme_key = 'matugen'
+    def _empty_table_message(self) -> str:
+        """Qué decir cuando la tabla se queda sin filas, según cómo se llegó a ella."""
+        if self.search_performed and self.searched_term:
+            return self.i18n['manage_window.table.empty.search'].format(self.searched_term)
 
+        if self.filter_updates:
+            return self.i18n['manage_window.table.empty.updates']
+
+        return self.i18n['manage_window.table.empty.filters']
+
+    # tema al que vuelve el interruptor Matugen si no se sabe cuál había antes
+    MATUGEN_FALLBACK_THEME = 'aurora'
+    # espera tras la última tecla antes de filtrar lo que se ve
+    NAME_FILTER_DELAY_MS = 300
+
+    def _is_matugen_theme(self, theme_key: Optional[str]) -> bool:
+        try:
+            return bool(theme_key) and dynamic_theme_kind(theme_key) == 'matugen'
+        except Exception:
+            return False
+
+    def _sync_matugen_button(self):
+        """Deja el interruptor encendido solo si el tema activo es Matugen (o hereda de él)."""
+        self.bt_matugen.setChecked(self._is_matugen_theme((self.config.get('ui') or {}).get('theme')))
+
+    def _switch_theme(self, theme_key: str) -> bool:
+        """Aplica un tema y lo persiste con el mismo mecanismo que el menú de temas."""
         try:
             set_theme(theme_key=theme_key, app=QApplication.instance(), logger=self.logger, app_config=self.config)
         except Exception:
             self.logger.warning(f"Could not apply the '{theme_key}' theme", exc_info=True)
-            return
+            self._sync_matugen_button()
+            return False
 
         self.config['ui']['theme'] = theme_key
         self.thread_save_theme.theme_key = theme_key
         self.thread_save_theme.start()
+        self._sync_matugen_button()
+        return True
+
+    def _handle_matugen_toggle(self):
+        """Interruptor Matugen: enciende los colores del fondo de pantalla o vuelve al tema anterior."""
+        current = self.config['ui'].get('theme')
+
+        if self._is_matugen_theme(current):
+            self._switch_theme(self._theme_before_matugen or self.MATUGEN_FALLBACK_THEME)
+            return
+
+        self._theme_before_matugen = current
+
+        if self._switch_theme('matugen') and not parse_gtk_matugen_colors(kind='matugen'):
+            # sin ningún color que leer el tema se ve igual que Aurora: se explica por qué
+            dialog.show_message(title=self.i18n['manage_window.matugen.no_colors.title'],
+                                body=self.i18n['manage_window.matugen.no_colors.body'],
+                                type_=MessageType.INFO)

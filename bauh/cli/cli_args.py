@@ -11,5 +11,8 @@ def read() -> Namespace:
     sub_parsers = parser.add_subparsers(dest='command', help='commands')
     updates_parser = sub_parsers.add_parser('updates', help='List available software updates')
     updates_parser.add_argument('-f', '--format', help='Command output format. Default: %(default)s', choices=['text', 'json'], default='text')
+    clean_parser = sub_parsers.add_parser('clean-web-apps',
+                                          help='Remove the web apps left by the retired Web gem (nativefier)')
+    clean_parser.add_argument('-y', '--yes', action='store_true', help='Do not ask for confirmation')
 
     return parser.parse_args()

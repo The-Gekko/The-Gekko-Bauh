@@ -222,8 +222,11 @@ class ThemeDiscoveryTest(TestCase):
         matugen = stylesheet.dynamic_color_sources('matugen')
         gtk = stylesheet.dynamic_color_sources('gtk')
 
-        self.assertEqual(1, len(matugen))
-        self.assertTrue(matugen[0].endswith('/.cache/matugen/colors-gtk.css'))
+        # primero la salida de la plantilla de bauh, luego la caché genérica de matugen y,
+        # como respaldo, los colores GTK (que el vigilante también tiene que seguir)
+        self.assertTrue(matugen[0].endswith('/.config/gekko-bauh/matugen-colors.css'))
+        self.assertTrue(matugen[1].endswith('/.cache/matugen/colors-gtk.css'))
+        self.assertEqual(gtk, matugen[2:])
         self.assertTrue(all('matugen' not in path for path in gtk))
         self.assertTrue(any(path.startswith('/etc/gtk-3.0/') for path in gtk))
         self.assertTrue(any('/.config/gtk-4.0/' in path for path in gtk))
@@ -330,14 +333,6 @@ class ColorUtilsTest(TestCase):
         self.assertEqual('#808080', stylesheet.blend_colors('white', '#000000', 0.5))
         self.assertEqual('var(--acento)', stylesheet.blend_colors('var(--acento)', '#000000', 0.5))
 
-    def test__valid_color__it_should_reject_expressions_that_break_the_stylesheet(self):
-        self.assertEqual('#161B22', stylesheet.valid_color('#161B22'))
-        self.assertEqual('rgba(0, 0, 0, 0.5)', stylesheet.valid_color('rgba(0, 0, 0, 0.5)'))
-        self.assertIsNone(stylesheet.valid_color('red; } QWidget { color: blue'))
-        self.assertIsNone(stylesheet.valid_color('#12'))
-        self.assertIsNone(stylesheet.valid_color(None))
-
-
 # colores GTK/Matugen de ejemplo (paleta clara) usados por los tests del mapeo dinámico
 DYNAMIC_COLORS = {
     'window_bg_color': '#FFFFFF',
@@ -414,46 +409,9 @@ class DynamicOverridesTest(TestCase):
             self.assertNotIn('@font.', processed[0], key)
 
 
-class CustomThemeCssTest(TestCase):
+class CustomThemeRemovedTest(TestCase):
 
-    def test__gen_custom_theme_css__it_should_return_nothing_when_disabled(self):
-        config = {'custom_theme': {'enabled': False, 'background_color': '#000000'}}
-
-        self.assertEqual('', stylesheet.gen_custom_theme_css(config))
-
-    def test__gen_custom_theme_css__it_should_apply_the_colors_when_enabled(self):
-        config = {'custom_theme': {'enabled': True, 'background_color': '#000000',
-                                   'text_color': '#FFFFFF', 'accent_color': '#FF4500'}}
-
-        css = stylesheet.gen_custom_theme_css(config)
-
-        self.assertIn('background-color: #000000', css)
-        self.assertIn('color: #FFFFFF', css)
-        self.assertIn('#FF4500', css)
-
-    def test__gen_custom_theme_css__it_should_discard_invalid_colors(self):
-        config = {'custom_theme': {'enabled': True,
-                                   'background_color': '#000000; } QWidget { color: red',
-                                   'text_color': '#FFFFFF'}}
-
-        css = stylesheet.gen_custom_theme_css(config)
-
-        self.assertNotIn('QWidget { color: red', css)
-        self.assertIn('color: #FFFFFF', css)
-
-    def test__gen_custom_theme_css__the_image_path_must_be_quoted(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            image = os.path.join(tmp, 'my picture (1).png')
-
-            with open(image, 'wb') as f:
-                f.write(b'x')
-
-            config = {'custom_theme': {'enabled': True, 'background_image': image}}
-            css = stylesheet.gen_custom_theme_css(config)
-
-        self.assertIn(f'url("{image}")', css)
-
-    def test__process_theme__the_custom_css_must_be_added_only_once(self):
+    def test__process_theme__an_old_custom_theme_config_is_ignored(self):
         themes = stylesheet.read_default_themes()
         metadata = stylesheet.read_theme_metada(key='aurora', file_path=themes['aurora'])
 
@@ -465,23 +423,8 @@ class CustomThemeCssTest(TestCase):
                                              metadata=metadata, available_themes=themes,
                                              app_config=config)
 
-        self.assertEqual(1, processed[0].count('/* Custom Theme Overrides */'))
-        self.assertTrue(processed[0].rstrip().endswith('}'))
-
-    def test__process_theme__it_should_not_add_the_custom_css_when_disabled(self):
-        themes = stylesheet.read_default_themes()
-        metadata = stylesheet.read_theme_metada(key='aurora', file_path=themes['aurora'])
-
-        with open(themes['aurora']) as f:
-            theme_str = f.read()
-
-        config = {'custom_theme': {'enabled': False, 'background_color': '#010203'}}
-        processed = stylesheet.process_theme(file_path=themes['aurora'], theme_str=theme_str,
-                                             metadata=metadata, available_themes=themes,
-                                             app_config=config)
-
-        self.assertNotIn('/* Custom Theme Overrides */', processed[0])
         self.assertNotIn('#010203', processed[0])
+        self.assertFalse(hasattr(stylesheet, 'gen_custom_theme_css'))
 
 
 class VarFileTest(TestCase):
@@ -747,3 +690,125 @@ class PrimaryButtonOverridesTest(TestCase):
 
         self.assertNotEqual(overrides['button_ok.background.color'],
                             overrides['button_ok.hover.background.color'])
+
+
+class MatugenColorFallbackTest(TestCase):
+    """El tema Matugen usa la primera fuente con colores y, sin ninguna, los colores GTK."""
+
+    def _write(self, directory: str, name: str, accent: str, extra: str = '') -> str:
+        path = os.path.join(directory, name)
+
+        with open(path, 'w') as f:
+            f.write(f'@define-color accent_color {accent};\n{extra}')
+
+        return path
+
+    def _parse(self, matugen_files, gtk_files):
+        with patch.object(stylesheet, 'MATUGEN_COLOR_FILES', tuple(matugen_files)), \
+                patch.object(stylesheet, 'GTK_COLOR_FILES', tuple(gtk_files)):
+            return stylesheet.parse_gtk_matugen_colors(kind='matugen')
+
+    def test__the_bauh_template_output_must_win_over_the_generic_cache(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bauh = self._write(tmp, 'bauh.css', '#111111')
+            cache = self._write(tmp, 'cache.css', '#222222')
+
+            colors = self._parse((bauh, cache), ())
+
+        self.assertEqual('#111111', colors['accent_color'])
+
+    def test__without_matugen_files_it_should_use_the_gtk_colors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            gtk = self._write(tmp, 'gtk.css', '#BEC4EE')
+
+            colors = self._parse((f'{tmp}/no-bauh.css', f'{tmp}/no-cache.css'), (gtk,))
+
+        self.assertEqual('#BEC4EE', colors['accent_color'])
+
+    def test__the_palettes_must_not_be_mixed(self):
+        """Si hay colores de matugen, los de GTK no rellenan sus huecos: serían de otra paleta."""
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = self._write(tmp, 'cache.css', '#222222')
+            gtk = self._write(tmp, 'gtk.css', '#BEC4EE', '@define-color window_bg_color #0D0E12;\n')
+
+            colors = self._parse((f'{tmp}/no-bauh.css', cache), (gtk,))
+
+        self.assertEqual('#222222', colors['accent_color'])
+        self.assertNotIn('window_bg_color', colors)
+
+    def test__without_any_file_there_are_no_colors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            colors = self._parse((f'{tmp}/a.css',), (f'{tmp}/b.css',))
+
+        self.assertEqual({}, colors)
+
+    def test__the_gtk_theme_must_never_read_matugen(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = self._write(tmp, 'cache.css', '#222222')
+
+            with patch.object(stylesheet, 'MATUGEN_COLOR_FILES', (cache,)), \
+                    patch.object(stylesheet, 'GTK_COLOR_FILES', (f'{tmp}/no-gtk.css',)):
+                colors = stylesheet.parse_gtk_matugen_colors(kind='gtk')
+
+        self.assertEqual({}, colors)
+
+
+# paleta como la que generan muchos escritorios a partir del fondo: todas las superficies iguales
+FLAT_COLORS = {
+    'accent_color': '#BEC4EE',
+    'accent_fg_color': '#383E61',
+    'window_bg_color': '#0D0E12',
+    'window_fg_color': '#E5E4F0',
+    'view_bg_color': '#0D0E12',
+    'card_bg_color': '#0D0E12',
+    'sidebar_bg_color': '#0D0E12',
+}
+
+
+class DynamicSurfaceContrastTest(TestCase):
+
+    def test__identical_surfaces_must_be_separated_from_the_background(self):
+        overrides = stylesheet.build_dynamic_var_overrides(FLAT_COLORS, fallbacks={})
+        bg = overrides['outer_widget.background.color']
+
+        for var in ('color.surface.light', 'color.surface.medium', 'pushbutton.border.color',
+                    'lineedit.border.color', 'combobox.border.color', 'table.border.color'):
+            self.assertGreaterEqual(stylesheet.contrast_ratio(overrides[var], bg), stylesheet.MIN_SURFACE_CONTRAST,
+                                    var)
+
+        # las tarjetas y bordes destacan más que la barra lateral
+        self.assertGreater(stylesheet.contrast_ratio(overrides['color.surface.light'], bg),
+                           stylesheet.contrast_ratio(overrides['color.surface.medium'], bg))
+
+    def test__distinct_surfaces_must_be_kept_as_they_are(self):
+        colors = dict(FLAT_COLORS, card_bg_color='#2A2B33', sidebar_bg_color='#1B1C21')
+        overrides = stylesheet.build_dynamic_var_overrides(colors, fallbacks={})
+
+        self.assertEqual('#2A2B33', overrides['color.surface.light'])
+        self.assertEqual('#1B1C21', overrides['color.surface.medium'])
+
+    def test__the_template_border_color_must_reach_every_border(self):
+        overrides = stylesheet.build_dynamic_var_overrides(dict(FLAT_COLORS, border_color='#46464F'),
+                                                           fallbacks={})
+
+        for var in ('pushbutton.border.color', 'lineedit.border.color', 'combobox.border.color',
+                    'table.border.color'):
+            self.assertEqual('#46464F', overrides[var], var)
+
+    def test__the_install_button_must_use_the_accent_and_its_foreground(self):
+        overrides = stylesheet.build_dynamic_var_overrides(FLAT_COLORS, fallbacks={})
+
+        self.assertEqual('#BEC4EE', overrides['color.primary'])
+        self.assertEqual('#383E61', overrides['table.bt_install.font.color'])
+        self.assertEqual('#BEC4EE', overrides['chip.checked.border.color'])
+
+    def test__an_active_filter_chip_must_be_filled_with_the_accent(self):
+        overrides = stylesheet.build_dynamic_var_overrides(FLAT_COLORS, fallbacks={})
+
+        self.assertEqual('#BEC4EE', overrides['chip.checked.background.color'])
+        self.assertEqual('#383E61', overrides['chip.checked.font.color'])
+
+    def test__contrast_ratio(self):
+        self.assertEqual(1.0, stylesheet.contrast_ratio('#123456', '#123456'))
+        self.assertGreater(stylesheet.contrast_ratio('#000000', '#FFFFFF'), 20)
+        self.assertIsNone(stylesheet.contrast_ratio('not-a-color', '#FFFFFF'))

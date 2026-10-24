@@ -167,10 +167,6 @@ class SettingsWindow(QWidget):
     def _reload_manage_panel(self):
         if self.window and self.window.isVisible():
             app_config = getattr(self.manager, 'config', None) or CoreConfigManager().get_config()
-            custom_theme_config = app_config.get('custom_theme') or {}
-            opacity = custom_theme_config.get('opacity', 100)
-            self.window.setWindowOpacity(opacity / 100.0)
-
             from bauh.context import set_theme
             set_theme(theme_key=app_config['ui']['theme'], app=QApplication.instance(),
                       logger=self.manager.logger, app_config=app_config)
